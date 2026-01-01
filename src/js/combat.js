@@ -4089,16 +4089,17 @@ export function getWeapons() {
 // ============================================
 // COMBAT INTENT SYSTEM
 // ============================================
-// Unified intent system for: basic attacks, weapon abilities, sense abilities
+// Intent system for: basic attacks, weapon abilities
+// Sense abilities (push/pull) execute immediately - no intent needed
 // Utility abilities (sprint/heal) NEVER create intents
 const INTENT_TIMEOUT_MS = 10000; // 10s - clear intent if no successful attack
 
 /**
  * Combat Intent Schema:
  * {
- *   type: 'basic' | 'weaponAbility' | 'senseAbility',
- *   slot?: number (1-6 for abilities),
- *   targetId: string | null (null for AoE abilities like push/pull),
+ *   type: 'basic' | 'weaponAbility',
+ *   slot: number (1-3 for abilities),
+ *   targetId: string,
  *   createdAt: number,
  *   retryAt: number,
  *   lastSuccessAt: number,
@@ -4160,27 +4161,8 @@ function setWeaponAbilityIntent(slot, target) {
   };
 }
 
-/**
- * Set sense ability intent (slots 4-6).
- * Sense abilities may or may not need a target (push/pull are AoE).
- * One-shot: clears after successful execution.
- */
-function setSenseAbilityIntent(slot, target = null) {
-  const ability = SENSE_ABILITIES[slot];
-  if (!ability) return;
-  
-  combatIntent = {
-    type: 'senseAbility',
-    slot,
-    targetId: target?.id || null,
-    createdAt: nowMs(),
-    retryAt: 0,
-    lastSuccessAt: 0,
-    expiresAt: nowMs() + INTENT_TIMEOUT_MS,
-    requiresLOS: false, // Sense abilities don't require LOS
-    requiredRange: ability.range || 6
-  };
-}
+// NOTE: Sense abilities (push/pull) don't use the intent system.
+// They are AoE and execute immediately via useSenseAbility().
 
 /**
  * Clear combat intent.
@@ -4245,9 +4227,7 @@ export function tryExecuteCombatIntent() {
     case 'weaponAbility':
       executeWeaponAbilityIntent(now);
       break;
-    case 'senseAbility':
-      executeSenseAbilityIntent(now);
-      break;
+    // NOTE: senseAbility intents are not used - sense abilities execute immediately
   }
 }
 
@@ -4401,46 +4381,6 @@ function executeWeaponAbilityIntent(now) {
 }
 
 /**
- * Execute sense ability intent (one-shot)
- * Sense abilities (push/pull) are AoE and execute immediately
- */
-function executeSenseAbilityIntent(now) {
-  const slot = combatIntent.slot;
-  const ability = SENSE_ABILITIES[slot];
-  
-  if (!ability) {
-    clearCombatIntent();
-    return;
-  }
-  
-  // Check cooldown
-  if (SENSE_COOLDOWNS[slot]?.current > 0) {
-    combatIntent.retryAt = now + 100;
-    return;
-  }
-  
-  // Check Sense resource
-  const player = currentState.player;
-  if (player.sense < ability.senseCost) {
-    logCombat(`Not enough Sense (need ${ability.senseCost})`);
-    clearCombatIntent();
-    return;
-  }
-  
-  // Clear intent FIRST (one-shot)
-  const wasAutoAttackEnabled = autoAttackEnabled;
-  clearCombatIntent();
-  
-  // Execute the sense ability
-  executeSenseAbilityDirect(slot);
-  
-  // Resume auto-attack if it was enabled
-  if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
-    setAutoAttackIntent(currentTarget);
-  }
-}
-
-/**
  * Direct execution of weapon ability (bypasses intent system)
  * Used by intent system after move-to-range completes
  */
@@ -4490,39 +4430,6 @@ function executeWeaponAbilityDirect(slot) {
   // Set cooldown
   actionCooldowns[slot] = ability.cooldownMs || 6000;
   actionMaxCooldowns[slot] = ability.cooldownMs || 6000;
-}
-
-/**
- * Direct execution of sense ability (bypasses intent system)
- * Used by intent system
- */
-function executeSenseAbilityDirect(slot) {
-  const ability = SENSE_ABILITIES[slot];
-  if (!ability) return;
-  
-  const player = currentState.player;
-  
-  // Execute ability
-  switch (ability.id) {
-    case 'push':
-      executePush(ability);
-      break;
-    case 'pull':
-      executePull(ability);
-      break;
-    default:
-      logCombat('Unknown sense ability');
-      return;
-  }
-  
-  // Spend Sense
-  player.sense = Math.max(0, player.sense - ability.senseCost);
-  updatePlayerSenseBar();
-  
-  // Set cooldown
-  SENSE_COOLDOWNS[slot].current = ability.cooldownMs;
-  SENSE_COOLDOWNS[slot].max = ability.cooldownMs;
-  updateSenseCooldownUI(slot);
 }
 
 // Debug helpers
