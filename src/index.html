@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vetuu — Drycross</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="game">
+    <!-- Viewport: visible window into the map -->
+    <section id="viewport" aria-label="Game world">
+      <div id="world">
+        <div id="ground-layer" class="layer"></div>
+        <div id="object-layer" class="layer"></div>
+        <div id="actor-layer" class="layer"></div>
+        <div id="fog-layer" class="layer"></div>
+      </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- MMO UI LAYOUT -->
+    <!-- ============================================ -->
+
+    <!-- Top Left: Player Stats HUD -->
+    <aside id="hud" aria-label="Player status">
+      <div id="hud-stats">
+        <div class="stat">
+          <span class="stat-label">HP</span>
+          <span class="stat-bar">
+            <span id="hp-fill" class="stat-fill" style="--pct: 100%"></span>
+          </span>
+          <span id="hp-text" class="stat-value">100/100</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Sense</span>
+          <span class="stat-bar sense-bar">
+            <span id="sense-fill" class="stat-fill" style="--pct: 100%"></span>
+          </span>
+          <span id="sense-text" class="stat-value">20/20</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-mini">ATK <strong id="atk-val">5</strong></span>
+          <span class="stat-mini">DEF <strong id="def-val">3</strong></span>
+          <span class="stat-mini">LCK <strong id="luck-val">1</strong></span>
+        </div>
+      </div>
+      <div id="hud-level">
+        <span id="level-badge">Lv. <strong id="level-val">1</strong></span>
+        <span class="xp-bar">
+          <span id="xp-fill" class="stat-fill" style="--pct: 0%"></span>
+        </span>
+        <span id="xp-text" class="stat-value">0/100</span>
+      </div>
+      <div id="hud-location">
+        <span id="location-name">Drycross</span>
+      </div>
+    </aside>
+
+    <!-- Top Right: Minimap -->
+    <aside id="minimap-container" aria-label="Minimap">
+      <div id="minimap">
+        <canvas id="minimap-canvas" width="150" height="100"></canvas>
+        <canvas id="minimap-fog" width="150" height="100"></canvas>
+        <div id="minimap-player"></div>
+      </div>
+      <div id="minimap-label">Drycross Region</div>
+    </aside>
+
+    <!-- Quest Tracker (below minimap) -->
+    <aside id="quest-tracker" aria-label="Active quests">
+      <h3>Quests</h3>
+      <ul id="quest-list"></ul>
+    </aside>
+
+    <!-- Combat Log (left side, above action bar) -->
+    <aside id="combat-log-container">
+      <div id="combat-log"></div>
+    </aside>
+
+    <!-- ============================================ -->
+    <!-- BOTTOM ACTION BAR AREA -->
+    <!-- ============================================ -->
+
+    <!-- Player Frame (left of action bar) -->
+    <div id="player-frame" class="unit-frame">
+      <div class="frame-portrait player-portrait">
+        <span class="portrait-icon">👤</span>
+      </div>
+      <div class="frame-info">
+        <div class="frame-name-row">
+          <span class="frame-name">Rex Kest</span>
+          <span class="frame-level">Lv.<span id="player-frame-level">1</span></span>
+        </div>
+        <div class="frame-bar hp-bar">
+          <span id="player-hp-fill" class="frame-hp-fill"></span>
+          <span id="player-hp-text" class="frame-bar-text">100/100</span>
+        </div>
+        <div class="frame-bar sense-bar">
+          <span id="player-sense-fill" class="frame-sense-fill"></span>
+          <span id="player-sense-text" class="frame-bar-text">20/20</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Bar (center bottom) -->
+    <nav id="action-bar" aria-label="Actions">
+      <!-- Current weapon display with cycle button -->
+      <div id="weapon-section">
+        <div id="weapon-display">
+          <span id="current-weapon-icon">🔫</span>
+          <span id="current-weapon-name">Laser Rifle</span>
+        </div>
+        <button id="weapon-cycle-btn" title="Cycle weapons (~)">
+          <span>⟳</span>
+        </button>
+      </div>
+      
+      <div class="bar-divider"></div>
+      
+      <!-- Action slots (weapon-specific actions) -->
+      <div id="action-slots">
+        <button class="action-slot" data-action-key="1" title="Primary attack">
+          <span class="slot-icon">⚡</span>
+          <span class="slot-label">Fire</span>
+          <span class="slot-key">1</span>
+        </button>
+        <button class="action-slot" data-action-key="2" title="Secondary action">
+          <span class="slot-icon">🎯</span>
+          <span class="slot-label">Aimed Shot</span>
+          <span class="slot-key">2</span>
+        </button>
+        <button class="action-slot special-slot" data-action-key="3" title="Special ability (uses Sense)">
+          <span class="slot-icon">✨</span>
+          <span class="slot-label">Power Shot</span>
+          <span class="slot-key">3</span>
+        </button>
+        
+        <div class="slot-divider"></div>
+        
+        <!-- Utility slots -->
+        <button class="action-slot utility-slot" data-action="inventory" data-key="I" title="Inventory">
+          <span class="slot-icon">🎒</span>
+          <span class="slot-key">I</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Target Frame (right of action bar) -->
+    <div id="target-frame" class="unit-frame hidden">
+      <div class="frame-info">
+        <div class="frame-name-row">
+          <span class="frame-name">Enemy</span>
+          <span class="frame-level">Lv.1</span>
+        </div>
+        <div class="frame-bar hp-bar">
+          <span class="frame-hp-fill"></span>
+          <span class="frame-hp-text">100/100</span>
+        </div>
+        <div class="frame-weakness">
+          <span class="weakness-label">Weak to:</span>
+          <span class="weakness-type">—</span>
+        </div>
+      </div>
+      <div class="frame-portrait enemy-portrait">
+        <span class="portrait-icon">👹</span>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- DIALOGS & OVERLAYS -->
+    <!-- ============================================ -->
+
+    <!-- Dialogue panel -->
+    <dialog id="dialogue-panel" aria-label="Dialogue">
+      <header id="dialogue-speaker"></header>
+      <p id="dialogue-text"></p>
+      <menu id="dialogue-choices"></menu>
+    </dialog>
+
+    <!-- Inventory panel -->
+    <dialog id="inventory-panel" aria-label="Inventory">
+      <header>
+        <h2>Inventory</h2>
+        <button id="inventory-close" aria-label="Close inventory">&times;</button>
+      </header>
+      <ul id="inventory-list"></ul>
+    </dialog>
+
+    <!-- Interaction prompt -->
+    <div id="interact-prompt" class="hidden">
+      <kbd>E</kbd> <span id="interact-label">Interact</span>
+    </div>
+
+    <!-- Combat panel (legacy, hidden) -->
+    <dialog id="combat-panel" aria-label="Combat"></dialog>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" aria-live="polite"></div>
+  </main>
+
+  <!-- Controls hint -->
+  <aside id="controls-hint">
+    <p><kbd>Click</kbd> Move / Interact</p>
+    <p><kbd>Tab</kbd> Cycle targets</p>
+    <p><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Actions</p>
+    <p><kbd>~</kbd> Cycle weapons</p>
+    <button id="reset-btn" title="Reset all game data">🔄 Reset</button>
+  </aside>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

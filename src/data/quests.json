@@ -1,0 +1,315 @@
+{
+  "quests": [
+    {
+      "id": "q_critter_cull",
+      "name": "Critter Cull",
+      "giver": "npc_dax_rowan",
+      "summary": "The critters around camp are getting bold. Thin their numbers.",
+      "objectives": [
+        {
+          "type": "kill",
+          "enemyType": "critter",
+          "amount": 5,
+          "label": "Critters"
+        },
+        {
+          "type": "return",
+          "toEntity": "npc_dax_rowan"
+        }
+      ],
+      "rewards": {
+        "xp": 100,
+        "items": [
+          {
+            "itemId": "itm_medkit_small",
+            "amount": 2
+          }
+        ]
+      },
+      "onComplete": [
+        {
+          "setFlag": "critters_culled"
+        }
+      ]
+    },
+    {
+      "id": "q_storm_prep",
+      "name": "Storm Prep",
+      "giver": "npc_dax_rowan",
+      "requires": {
+        "questComplete": "q_critter_cull"
+      },
+      "summary": "Gather supplies before the once-in-a-decade storm hits.",
+      "objectives": [
+        {
+          "type": "collect",
+          "itemId": "itm_scrap",
+          "amount": 3,
+          "track": "inventory"
+        },
+        {
+          "type": "collect",
+          "itemId": "itm_cloth",
+          "amount": 2,
+          "track": "inventory"
+        },
+        {
+          "type": "return",
+          "toEntity": "npc_dax_rowan"
+        }
+      ],
+      "rewards": {
+        "xp": 180,
+        "items": [
+          {
+            "itemId": "itm_charm_luck",
+            "amount": 1
+          }
+        ]
+      },
+      "onComplete": [
+        {
+          "setFlag": "storm_prepped"
+        }
+      ]
+    },
+    {
+      "id": "q_missing_runner",
+      "name": "Missing Runner",
+      "giver": "npc_dax_rowan",
+      "requires": {
+        "questComplete": "q_storm_prep"
+      },
+      "summary": "Find the missing runner on the north road.",
+      "objectives": [
+        {
+          "type": "reach",
+          "x": 56,
+          "y": 12,
+          "radius": 3,
+          "label": "North Road Marker"
+        },
+        {
+          "type": "encounter",
+          "spawnId": "sp_scavs_west",
+          "optional": true
+        },
+        {
+          "type": "return",
+          "toEntity": "npc_dax_rowan"
+        }
+      ],
+      "rewards": {
+        "xp": 240,
+        "items": [
+          {
+            "itemId": "itm_pistol_green",
+            "amount": 1
+          }
+        ]
+      },
+      "onComplete": [
+        {
+          "setFlag": "runner_found"
+        }
+      ]
+    },
+    {
+      "id": "q_scav_threat",
+      "name": "Scav Threat",
+      "giver": "npc_dax_rowan",
+      "requires": {
+        "questComplete": "q_missing_runner",
+        "level": 5
+      },
+      "summary": "The Scavs are getting organized. Hit them before they hit us.",
+      "objectives": [
+        {
+          "type": "kill",
+          "enemyType": "scav",
+          "amount": 8,
+          "label": "Scavengers"
+        },
+        {
+          "type": "kill",
+          "enemyType": "scav",
+          "amount": 2,
+          "label": "Scav Alphas",
+          "requireAlpha": true
+        },
+        {
+          "type": "return",
+          "toEntity": "npc_dax_rowan"
+        }
+      ],
+      "rewards": {
+        "xp": 350,
+        "items": [
+          {
+            "itemId": "itm_rifle_green",
+            "amount": 1
+          }
+        ],
+        "flags": ["scav_threat_handled"]
+      },
+      "onComplete": [
+        {
+          "setFlag": "scavs_pushed_back"
+        }
+      ]
+    },
+    {
+      "id": "q_ritual_trade",
+      "name": "Ritual Trade",
+      "giver": "npc_verdleg_trader",
+      "summary": "Deliver a token to the Trogs at the ritual flats.",
+      "objectives": [
+        {
+          "type": "giveItem",
+          "itemId": "itm_token_verdleg",
+          "amount": 1
+        },
+        {
+          "type": "talk",
+          "toEntity": "npc_trog_envoy"
+        }
+      ],
+      "rewards": {
+        "xp": 220,
+        "items": [
+          {
+            "itemId": "itm_armor_green",
+            "amount": 1
+          }
+        ]
+      },
+      "onStart": [
+        {
+          "giveItem": "itm_token_verdleg"
+        }
+      ],
+      "onComplete": [
+        {
+          "setFlag": "trog_allies"
+        }
+      ]
+    },
+    {
+      "id": "q_trog_hunters",
+      "name": "Trog Hunters",
+      "giver": "npc_trog_envoy",
+      "requires": {
+        "questComplete": "q_ritual_trade",
+        "level": 8
+      },
+      "summary": "The Trog war parties are raiding too close. Send a message.",
+      "objectives": [
+        {
+          "type": "kill",
+          "enemyType": "trog_warband",
+          "amount": 6,
+          "label": "Trog Warriors"
+        },
+        {
+          "type": "return",
+          "toEntity": "npc_trog_envoy"
+        }
+      ],
+      "rewards": {
+        "xp": 400,
+        "items": [
+          {
+            "itemId": "itm_trog_totem",
+            "amount": 1
+          }
+        ]
+      },
+      "onComplete": [
+        {
+          "setFlag": "trog_respect"
+        }
+      ]
+    },
+    {
+      "id": "q_karth_scouts",
+      "name": "Karth Scouts",
+      "giver": "npc_dax_rowan",
+      "requires": {
+        "flag": "scavs_pushed_back",
+        "level": 15
+      },
+      "summary": "Directorate scouts have been spotted. Find out what they're after.",
+      "objectives": [
+        {
+          "type": "kill",
+          "enemyType": "karth_grunt",
+          "amount": 4,
+          "label": "Karth Scouts"
+        },
+        {
+          "type": "reach",
+          "x": 78,
+          "y": 20,
+          "radius": 5,
+          "label": "Scout Camp"
+        },
+        {
+          "type": "return",
+          "toEntity": "npc_dax_rowan"
+        }
+      ],
+      "rewards": {
+        "xp": 500,
+        "flags": ["karth_presence_confirmed"]
+      },
+      "onComplete": [
+        {
+          "setFlag": "act2_karth_aware"
+        }
+      ]
+    },
+    {
+      "id": "q_reclamation_notice",
+      "name": "Reclamation Notice",
+      "giver": "npc_silas_morn",
+      "requires": {
+        "flag": "act3"
+      },
+      "summary": "The Directorate has arrived. The town shifts from uneasy to oppressive.",
+      "objectives": [
+        {
+          "type": "setFlag",
+          "flag": "dustVeilUnlocked",
+          "via": "interact",
+          "objectIdType": "dustVeilDoor",
+          "label": "Unlock Dust Veil passage"
+        },
+        {
+          "type": "reach",
+          "x": 104,
+          "y": 16,
+          "radius": 4,
+          "label": "Retriever Captain Arena"
+        },
+        {
+          "type": "boss",
+          "bossId": "boss_retriever_captain"
+        }
+      ],
+      "rewards": {
+        "xp": 800,
+        "items": [
+          {
+            "itemId": "itm_vibrosword_blue",
+            "amount": 1
+          }
+        ]
+      },
+      "onComplete": [
+        {
+          "setFlag": "alpha_complete"
+        }
+      ]
+    }
+  ]
+}

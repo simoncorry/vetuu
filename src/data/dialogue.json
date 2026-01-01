@@ -1,0 +1,518 @@
+{
+  "texts": {
+    "sign_drycross": "DRYCROSS\nTrade. Repairs. Shelter.\nIron Parish jurisdiction.",
+    "glyph_still_order": "A worn glyph. A circle cut by three lines.\nThe mark feels... familiar. Like a half-remembered dream."
+  },
+  "nodes": {
+    "dlg_dax_root": {
+      "speaker": "Captain Dax Rowan",
+      "text": "You\u2019re late, Cap. Storm\u2019s building and my people are jumpy.",
+      "choices": [
+        {
+          "text": "Give me the short version.",
+          "next": "dlg_dax_short"
+        },
+        {
+          "text": "Who\u2019s paying this time?",
+          "next": "dlg_dax_pay"
+        },
+        {
+          "text": "Need anything done?",
+          "next": "dlg_dax_quests"
+        }
+      ]
+    },
+    "dlg_dax_short": {
+      "speaker": "Captain Dax Rowan",
+      "text": "Town\u2019s stocked thin. Something\u2019s out there. And someone\u2019s hiding in plain sight.",
+      "choices": [
+        {
+          "text": "I\u2019ll keep my eyes open.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_pay": {
+      "speaker": "Captain Dax Rowan",
+      "text": "Iron Parish covers your tab. Don\u2019t make me regret it.",
+      "choices": [
+        {
+          "text": "No promises.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_quests": {
+      "speaker": "Captain Dax Rowan",
+      "text": "Always something. What can you handle?",
+      "choices": [
+        {
+          "text": "The critters are getting bold.",
+          "next": "dlg_dax_critters",
+          "requires": {
+            "questNotActive": "q_critter_cull",
+            "questNotComplete": "q_critter_cull"
+          }
+        },
+        {
+          "text": "What about storm prep?",
+          "next": "dlg_dax_storm",
+          "requires": {
+            "questComplete": "q_critter_cull",
+            "questNotActive": "q_storm_prep",
+            "questNotComplete": "q_storm_prep"
+          }
+        },
+        {
+          "text": "Missing runner?",
+          "next": "dlg_dax_runner_hint",
+          "requires": {
+            "questComplete": "q_storm_prep",
+            "questNotActive": "q_missing_runner",
+            "questNotComplete": "q_missing_runner"
+          }
+        },
+        {
+          "text": "What about the Scavs?",
+          "next": "dlg_dax_scav_threat",
+          "requires": {
+            "questComplete": "q_missing_runner",
+            "questNotActive": "q_scav_threat",
+            "questNotComplete": "q_scav_threat"
+          }
+        },
+        {
+          "text": "Heard about Karth scouts.",
+          "next": "dlg_dax_karth_scouts",
+          "requires": {
+            "flag": "scavs_pushed_back",
+            "questNotActive": "q_karth_scouts",
+            "questNotComplete": "q_karth_scouts"
+          }
+        },
+        {
+          "text": "Nothing right now.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_critters": {
+      "speaker": "Captain Dax Rowan",
+      "text": "The damn things are multiplying. Thin their numbers before they get braver. Kill five or so around the perimeter.",
+      "choices": [
+        {
+          "text": "Consider it done.",
+          "next": "END",
+          "effects": [
+            {
+              "giveQuest": "q_critter_cull"
+            }
+          ]
+        },
+        {
+          "text": "Maybe later.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_storm": {
+      "speaker": "Captain Dax Rowan",
+      "text": "Storm's building and we're running low. Need scrap and cloth for repairs. Scavenge what you can from dead critters or the wastes.",
+      "choices": [
+        {
+          "text": "I'll gather supplies.",
+          "next": "END",
+          "effects": [
+            {
+              "giveQuest": "q_storm_prep"
+            }
+          ]
+        },
+        {
+          "text": "Maybe later.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_runner_hint": {
+      "speaker": "Captain Dax Rowan",
+      "text": "Kid went north before the clouds rolled in. Find him. Alive is preferred.",
+      "choices": [
+        {
+          "text": "On it.",
+          "next": "END",
+          "effects": [
+            {
+              "giveQuest": "q_missing_runner"
+            }
+          ]
+        },
+        {
+          "text": "Maybe later.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_scav_threat": {
+      "speaker": "Captain Dax Rowan",
+      "text": "The Scavs are getting organized. Camps to the southwest and southeast. Hit them before they hit us. Take out their alphas if you can—cut the head off the snake.",
+      "choices": [
+        {
+          "text": "I'll handle it.",
+          "next": "END",
+          "effects": [
+            {
+              "giveQuest": "q_scav_threat"
+            }
+          ]
+        },
+        {
+          "text": "Maybe later.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_dax_karth_scouts": {
+      "speaker": "Captain Dax Rowan",
+      "text": "Directorate scouts. Far from home and too curious about our little town. Find out what they're after. Start with their camp northeast of here.",
+      "choices": [
+        {
+          "text": "I'll investigate.",
+          "next": "END",
+          "effects": [
+            {
+              "giveQuest": "q_karth_scouts"
+            }
+          ]
+        },
+        {
+          "text": "Maybe later.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_sela_root": {
+      "speaker": "Sela Marr",
+      "text": "You look like you\u2019ve been paid to not ask questions.",
+      "choices": [
+        {
+          "text": "I ask plenty. I just charge for answers.",
+          "next": "dlg_sela_charge"
+        },
+        {
+          "text": "You nervous?",
+          "next": "dlg_sela_nervous"
+        },
+        {
+          "text": "Goodbye.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_sela_charge": {
+      "speaker": "Sela Marr",
+      "text": "Then charge someone else. Some debts don\u2019t survive the truth.",
+      "choices": [
+        {
+          "text": "Not ominous at all.",
+          "next": "END",
+          "effects": [
+            {
+              "setFlag": "sela_suspected"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_sela_nervous": {
+      "speaker": "Sela Marr",
+      "text": "Storms make people honest. That\u2019s what scares me.",
+      "choices": [
+        {
+          "text": "We\u2019ll see.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_verdleg_trader": {
+      "speaker": "Verdleg Trader",
+      "text": "Parts, charms, stories. Pick two.",
+      "choices": [
+        {
+          "text": "Any work?",
+          "next": "dlg_verdleg_work"
+        },
+        {
+          "text": "Tell me about Trogs.",
+          "next": "dlg_verdleg_trogs"
+        },
+        {
+          "text": "Show me wares.",
+          "next": "END",
+          "effects": [
+            {
+              "openShop": "shop_verdleg_basic"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_verdleg_work": {
+      "speaker": "Verdleg Trader",
+      "text": "Deliver a token to the ritual flats. Don\u2019t point a gun first.",
+      "choices": [
+        {
+          "text": "Fine. I\u2019ll play nice.",
+          "next": "END",
+          "effects": [
+            {
+              "giveQuest": "q_ritual_trade"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_verdleg_trogs": {
+      "speaker": "Verdleg Trader",
+      "text": "Nomads. Rituals. Traders. Their war-bands are another story.",
+      "choices": [
+        {
+          "text": "Noted.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_verdleg_elder": {
+      "speaker": "Verdleg Elder",
+      "text": "Drycross is a knot in the wind. Every knot tightens eventually.",
+      "choices": [
+        {
+          "text": "What are you really saying?",
+          "next": "dlg_verdleg_elder_say"
+        },
+        {
+          "text": "Heard anything about a ship?",
+          "next": "dlg_verdleg_elder_ship"
+        },
+        {
+          "text": "Goodbye.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_verdleg_elder_say": {
+      "speaker": "Verdleg Elder",
+      "text": "That the storm is the least of your trouble.",
+      "choices": [
+        {
+          "text": "Perfect.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_verdleg_elder_ship": {
+      "speaker": "Verdleg Elder",
+      "text": "Metal birds circle when the desert smells blood.",
+      "choices": [
+        {
+          "text": "I\u2019ll watch the skies.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_trog_envoy": {
+      "speaker": "Trog Envoy",
+      "text": "Trade. Speak. Walk slow. No war today.",
+      "choices": [
+        {
+          "text": "I\u2019m here to deliver a token.",
+          "next": "dlg_trog_token",
+          "requires": {
+            "questActive": "q_ritual_trade"
+          }
+        },
+        {
+          "text": "What\u2019s with the glyph?",
+          "next": "dlg_trog_glyph"
+        },
+        {
+          "text": "Leave.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_trog_token": {
+      "speaker": "Trog Envoy",
+      "text": "Token accepted. Wind remembers.",
+      "choices": [
+        {
+          "text": "Great. I think.",
+          "next": "END",
+          "effects": [
+            {
+              "completeQuest": "q_ritual_trade"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_trog_glyph": {
+      "speaker": "Trog Envoy",
+      "text": "Old. Still. Order. Not for you.",
+      "choices": [
+        {
+          "text": "Fair.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_silas_root": {
+      "speaker": "Field Director Silas Morn",
+      "text": "By authority of the Karth Directorate, this settlement is under review.",
+      "choices": [
+        {
+          "text": "You lost?",
+          "next": "dlg_silas_lost"
+        },
+        {
+          "text": "Who are you here for?",
+          "next": "dlg_silas_for"
+        },
+        {
+          "text": "(Say nothing.)",
+          "next": "dlg_silas_silence"
+        }
+      ]
+    },
+    "dlg_silas_lost": {
+      "speaker": "Field Director Silas Morn",
+      "text": "No. But you might be.",
+      "choices": [
+        {
+          "text": "Cute.",
+          "next": "END",
+          "effects": [
+            {
+              "setFlag": "act3"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_silas_for": {
+      "speaker": "Field Director Silas Morn",
+      "text": "An asset that belongs to the Directorate. You\u2019ll know her by the fear.",
+      "choices": [
+        {
+          "text": "That narrows it down to everyone.",
+          "next": "END",
+          "effects": [
+            {
+              "setFlag": "act3"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_silas_silence": {
+      "speaker": "Field Director Silas Morn",
+      "text": "Good. Silence is efficient.",
+      "choices": [
+        {
+          "text": "END",
+          "next": "END",
+          "effects": [
+            {
+              "setFlag": "act3"
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_vela_root": {
+      "speaker": "Field Medic Vela",
+      "text": "Easy there, soldier. I patch up what the desert tears apart. Need something?",
+      "choices": [
+        {
+          "text": "Just checking in.",
+          "next": "dlg_vela_checkin"
+        },
+        {
+          "text": "What do you do here?",
+          "next": "dlg_vela_role"
+        },
+        {
+          "text": "I'm good.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_vela_checkin": {
+      "speaker": "Field Medic Vela",
+      "text": "You look like you've been holding together. Good. Try to stay that way—supplies aren't infinite.",
+      "choices": [
+        {
+          "text": "Will do.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_vela_role": {
+      "speaker": "Field Medic Vela",
+      "text": "Field medicine. When someone goes down out there, they end up here—if they're lucky. I've pulled a few back from the brink. The human body's stubborn.",
+      "choices": [
+        {
+          "text": "Thanks for your work.",
+          "next": "END"
+        }
+      ]
+    },
+    "dlg_vela_death": {
+      "speaker": "Field Medic Vela",
+      "text": "... Cap? Can you hear me? You're fading in and out. We've got you stabilized but you're not all here. Your body's in shock—your mind's somewhere between the light and the dark.",
+      "mandatory": true,
+      "choices": [
+        {
+          "text": "[Run to the light] Let go... wake up here.",
+          "next": "dlg_vela_light"
+        },
+        {
+          "text": "[Run from the light] Fight it. I need to get back to where I fell.",
+          "next": "dlg_vela_dark"
+        }
+      ]
+    },
+    "dlg_vela_light": {
+      "speaker": "Field Medic Vela",
+      "text": "Rest easy. Your body will heal. You'll wake up groggy, but whole. Just... try not to make this a habit.",
+      "mandatory": true,
+      "choices": [
+        {
+          "text": "...",
+          "next": "END",
+          "effects": [
+            {
+              "reviveAtBase": true
+            }
+          ]
+        }
+      ]
+    },
+    "dlg_vela_dark": {
+      "speaker": "Field Medic Vela",
+      "text": "Stubborn one. Fine—I'll keep your body stable. Your spirit can wander, but don't take too long. Find where you fell and pull yourself back together. You'll be a ghost out there... nothing can touch you, but you can't touch anything either.",
+      "mandatory": true,
+      "choices": [
+        {
+          "text": "I'll find my way back.",
+          "next": "END",
+          "effects": [
+            {
+              "corpseRun": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

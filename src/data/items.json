@@ -1,0 +1,133 @@
+{
+  "items": [
+    {
+      "id": "itm_scrap",
+      "name": "Scrap Metal",
+      "type": "material",
+      "rarity": "green",
+      "desc": "Useful for repairs and bracing."
+    },
+    {
+      "id": "itm_cloth",
+      "name": "Canvas Cloth",
+      "type": "material",
+      "rarity": "green",
+      "desc": "Windproof fabric scraps."
+    },
+    {
+      "id": "itm_token_verdleg",
+      "name": "Verdleg Token",
+      "type": "quest",
+      "rarity": "green",
+      "desc": "A stamped charm used for safe trade."
+    },
+    {
+      "id": "itm_charm_luck",
+      "name": "Charm Bracelet",
+      "type": "accessory",
+      "rarity": "blue",
+      "mods": {
+        "luck": 2
+      },
+      "desc": "A clinking bracelet that seems to 'nudge' outcomes."
+    },
+    {
+      "id": "itm_laser_rifle",
+      "name": "Laser Rifle",
+      "type": "weapon",
+      "weaponKey": "laser_rifle",
+      "rarity": "green",
+      "mods": {
+        "attack": 2
+      },
+      "desc": "Standard issue rifle. 8 tile range, reliable damage."
+    },
+    {
+      "id": "itm_pistol_green",
+      "name": "Laser Pistol",
+      "type": "weapon",
+      "weaponKey": "laser_pistol",
+      "rarity": "green",
+      "mods": {
+        "attack": 2
+      },
+      "desc": "A battered sidearm. 4 tile range, x2 damage."
+    },
+    {
+      "id": "itm_armor_green",
+      "name": "Dust Coat",
+      "type": "armor",
+      "rarity": "green",
+      "mods": {
+        "defense": 2
+      },
+      "desc": "A rugged coat with ballistic lining."
+    },
+    {
+      "id": "itm_vibrosword_blue",
+      "name": "Vibro Sword",
+      "type": "weapon",
+      "weaponKey": "vibro_sword",
+      "rarity": "blue",
+      "mods": {
+        "attack": 5
+      },
+      "desc": "A humming blade. 1 tile range, x3 damage."
+    },
+    {
+      "id": "itm_rifle_blue",
+      "name": "Karth Precision Rifle",
+      "type": "weapon",
+      "weaponKey": "laser_rifle",
+      "rarity": "blue",
+      "mods": {
+        "attack": 4
+      },
+      "desc": "Military-grade optics. 8 tile range, enhanced accuracy."
+    },
+    {
+      "id": "itm_medkit",
+      "name": "Field Medkit",
+      "type": "consumable",
+      "rarity": "green",
+      "effect": {
+        "heal": 30
+      },
+      "desc": "Restores 30 HP when used."
+    },
+    {
+      "id": "itm_sense_stim",
+      "name": "Sense Stimulant",
+      "type": "consumable",
+      "rarity": "blue",
+      "effect": {
+        "sense": 15
+      },
+      "desc": "Restores 15 Sense when used."
+    }
+  ],
+  "shops": [
+    {
+      "id": "shop_verdleg_basic",
+      "name": "Verdleg Stall",
+      "inventory": [
+        {
+          "itemId": "itm_pistol_green",
+          "price": 120
+        },
+        {
+          "itemId": "itm_armor_green",
+          "price": 120
+        },
+        {
+          "itemId": "itm_charm_luck",
+          "price": 260
+        },
+        {
+          "itemId": "itm_medkit",
+          "price": 50
+        }
+      ]
+    }
+  ]
+}

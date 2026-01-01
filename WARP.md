@@ -2,35 +2,76 @@
 
 This file provides guidance to WARP (warp.dev) when working with code in this repository.
 
-## Repository status
+## Repository Status
 
-As of now, this repository contains only the Git metadata directory (`.git`) and no tracked source files or configuration files (e.g., no `README.md`, package manifests, or build/test tooling).
+Vetuu Alpha is a tile-based HTML5 game teaser set in Drycross, a desert trade outpost. The game features exploration, dialogue, quests, and light combat.
 
-Future agents should re-scan the repository structure before making assumptions about tooling, frameworks, or architecture, as these will only become clear once project files are added.
+## Project Structure
+
+```
+/src
+├── index.html          # Main HTML entry point
+├── styles.css          # All styles (no frameworks, pure CSS)
+├── /data
+│   ├── map.json        # Ground tiles (base36 encoded), objects, regions
+│   ├── entities.json   # NPCs, enemy spawns, bosses, player start
+│   ├── dialogue.json   # Dialogue nodes and text snippets
+│   ├── quests.json     # Quest definitions with objectives/rewards
+│   └── items.json      # Item definitions and shop inventories
+└── /js
+    ├── game.js         # Main loop, state management, initialization
+    ├── render.js       # DOM-based tile rendering, camera control
+    ├── input.js        # Keyboard, mouse, touch input handling
+    ├── collision.js    # Movement validation, object/NPC lookup
+    ├── fog.js          # Fog of war with localStorage persistence
+    ├── dialogue.js     # Dialogue UI and choice handling
+    ├── quests.js       # Quest tracking and objective updates
+    ├── combat.js       # Turn-based combat system
+    └── save.js         # localStorage save/load, flags
+```
+
+## Tech Stack
+
+- **No frameworks**: Pure HTML5, CSS, vanilla JavaScript (ES modules)
+- **Rendering**: DOM-based with CSS transforms for camera
+- **Animations**: CSS `steps()` for tile movement
+- **Persistence**: localStorage for save data, fog mask, flags
 
 ## Commands
 
-No build, lint, or test tooling is currently discoverable in this repository (no `package.json`, `pyproject.toml`, `go.mod`, `Makefile`, or similar files).
+### Local Development
 
-Once tooling is added, agents should:
+```bash
+# Start a local server (any method works)
+npx serve src
+# or
+python3 -m http.server 8000 --directory src
+# or
+cd src && php -S localhost:8000
+```
 
-1. Inspect the root directory for language- or framework-specific manifests (for example: `package.json`, `requirements.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Makefile`, `docker-compose.yml`).
-2. Infer common commands from those manifests and CI workflows (e.g., `npm test`, `npm run lint`, `pytest`, `go test ./...`, `cargo test`).
-3. Update this `WARP.md` with concrete commands for:
-   - Full test suite
-   - Running a single test or test file
-   - Linting / formatting
-   - Local development server or application entrypoint
+Then open `http://localhost:8000` (or `:5000` for serve).
 
-## Architecture and structure
+### No Build Step
 
-The project structure is not yet defined (no application code, configuration, or documentation files are present beyond `.git`).
+This project has no build tooling. All files are served directly.
 
-When application code is added, agents should:
+## Architecture Notes
 
-1. Map the high-level layout (top-level directories like `src/`, `apps/`, `services/`, `backend/`, `frontend/`, etc.).
-2. Identify the primary entrypoints (for example: web server startup files, CLIs, or background workers).
-3. Summarize the main modules, how they interact, and any clear separation of concerns (e.g., API layer vs. domain logic vs. data access).
-4. Capture any framework-specific conventions (e.g., Next.js app routes, Django apps, Rails engines) that are evident from the file structure.
+### Map Encoding
+- Ground tiles are base36 encoded strings (one char per tile per row)
+- Decode: `parseInt(char, 36)` → lookup in `legend.tiles`
 
-After the codebase is initialized, this section should be rewritten to describe the actual architecture based on the concrete files and directories that exist.
+### State Management
+- Single source of truth in `game.js` → `state` object
+- Runtime state (enemies spawned, collected nodes) in `state.runtime`
+- Flags for story progression in `state.flags`
+
+### Collision Logic
+- `tile.walkable` + `object.solid` + conditional flags (`requires`/`flagNot`)
+- Act 3 blockers: solid until `dustVeilUnlocked` flag is set
+
+### Save System
+- Auto-saves to localStorage on significant events
+- Fog mask saved separately (compressed bitfield)
+- Export/import functions ready for cloud save integration
