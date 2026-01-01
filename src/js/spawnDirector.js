@@ -237,9 +237,10 @@ function initializeSpawners(state) {
   // Convert old enemy spawn data to new format, or use new spawner definitions
   if (state.spawnerDefs) {
     // New format - use directly
+    // Initialize lastSpawnAt to -Infinity so spawners are immediately eligible
     spawners = state.spawnerDefs.map(def => ({
       ...def,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0
     }));
   } else {
@@ -277,7 +278,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 3000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0,
       isNpeCritter: true
     });
@@ -305,7 +306,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 4000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0,
       conditions: [] // Will become aggressive in Act 3
     });
@@ -333,7 +334,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 4000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0
     });
   }
@@ -362,7 +363,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 4000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0,
       minDistanceToOtherPacks: 12
     });
@@ -390,7 +391,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 5000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0
     });
   }
@@ -420,7 +421,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 5000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0,
       minDistanceToOtherPacks: 14
     });
@@ -448,7 +449,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 5000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0
     });
   }
@@ -477,7 +478,7 @@ function generateDefaultSpawners() {
       deaggroTimeMs: 6000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
-      lastSpawnAt: 0,
+      lastSpawnAt: -Infinity,
       aliveCount: 0,
       minDistanceToOtherPacks: 16,
       requires: { flag: 'act3' }  // Only in Act 3
