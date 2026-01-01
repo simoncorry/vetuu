@@ -1639,9 +1639,6 @@ function isEnemyPassive(enemy) {
 export function provokeEnemy(enemy, t = nowMs(), reason = 'player_attack') {
   if (!enemy || enemy.hp <= 0) return;
   
-  // Mark combat activity (engagement counts as combat start)
-  markCombatEvent(t);
-  
   // Mark as provoked for 15 seconds
   provokedEnemies.add(enemy.id);
   enemy.provokedUntil = t + 15000;
@@ -2919,7 +2916,8 @@ export function getWeapons() {
 // COMBAT INTENT SYSTEM
 // ============================================
 // Persistent engagement: right-click commits to fighting until success/cancel
-let combatIntent = null; // { type:'autoAttack', targetId, createdAt, retryAt }
+const INTENT_TIMEOUT_MS = 10000; // 10s - clear intent if no successful attack
+let combatIntent = null; // { type:'autoAttack', targetId, createdAt, retryAt, lastSuccessAt }
 
 /**
  * Set auto-attack intent on a target.
@@ -2931,7 +2929,8 @@ function setAutoAttackIntent(target) {
     type: 'autoAttack',
     targetId: target.id,
     createdAt: nowMs(),
-    retryAt: 0
+    retryAt: 0,
+    lastSuccessAt: 0
   };
 }
 
@@ -2965,6 +2964,14 @@ export function tryExecuteCombatIntent() {
   if (!combatIntent || combatIntent.type !== 'autoAttack') return;
   
   const now = nowMs();
+  
+  // Timeout check - clear intent if no successful attack for INTENT_TIMEOUT_MS
+  const sinceSuccess = combatIntent.lastSuccessAt ? (now - combatIntent.lastSuccessAt) : (now - combatIntent.createdAt);
+  if (sinceSuccess > INTENT_TIMEOUT_MS) {
+    logCombat('Lost target.');
+    clearCombatIntent();
+    return;
+  }
   
   // Throttle retries (prevent spam when immune)
   if (combatIntent.retryAt && now < combatIntent.retryAt) return;
@@ -3013,12 +3020,29 @@ export function tryExecuteCombatIntent() {
   // Ready to attack
   if (actionCooldowns[1] <= 0) {
     playerAttack();
+    // Mark successful attack for timeout tracking
+    if (combatIntent) {
+      combatIntent.lastSuccessAt = now;
+    }
   }
 }
 
-// Debug helper
+// Debug helpers
 if (typeof window !== 'undefined') {
   window.VETUU_INTENT = () => combatIntent;
+  
+  window.VETUU_SENSE = () => {
+    const p = currentState?.player;
+    const now = nowMs();
+    return {
+      sense: p?.sense,
+      maxSense: p?.maxSense,
+      lastCombatEventAt,
+      msSinceCombat: lastCombatEventAt ? Math.round(now - lastCombatEventAt) : null,
+      regenMode: lastCombatEventAt && (now - lastCombatEventAt) <= COMBAT_TIMEOUT ? 'in_combat' : 'out_of_combat',
+      lastHitTime,
+    };
+  };
 }
 
 // ============================================
