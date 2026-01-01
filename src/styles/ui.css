@@ -354,15 +354,7 @@
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
 }
 
-.frame-weakness {
-  font-family: var(--font-display);
-  font-size: 0.6rem;
-  color: var(--text-muted);
-}
-
-.weakness-type {
-  color: var(--rarity-gold);
-}
+/* Weakness display removed - combat simplification */
 
 /* ============================================
    ACTION BAR
@@ -382,48 +374,7 @@
   z-index: 1200;
 }
 
-#weapon-section {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-#weapon-display {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-}
-
-#current-weapon-icon {
-  font-size: 1.4rem;
-}
-
-#current-weapon-name {
-  white-space: nowrap;
-}
-
-#weapon-cycle-btn {
-  width: 32px;
-  height: 32px;
-  background: var(--frame-inner);
-  border: 1px solid var(--frame-border);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-#weapon-cycle-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
+/* Old weapon section styles removed - replaced with weapon toggle slot */
 
 .bar-divider {
   width: 1px;
@@ -573,6 +524,69 @@
   border-color: var(--rarity-gold);
   background: rgba(214, 165, 90, 0.1);
   border-style: solid;
+}
+
+/* Action groups */
+.action-group {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+/* Weapon toggle slot */
+.weapon-slot {
+  border-color: var(--accent);
+  background: rgba(105, 210, 214, 0.05);
+}
+
+.weapon-slot:hover {
+  border-color: var(--accent);
+  background: rgba(105, 210, 214, 0.15);
+  box-shadow: 0 0 8px var(--accent-dim);
+}
+
+.weapon-slot .slot-icon {
+  font-size: 1.4rem;
+}
+
+/* Sense ability slots */
+.sense-slot {
+  border-color: var(--sense-color);
+}
+
+.sense-slot:hover:not(.on-cooldown):not(:disabled) {
+  border-color: var(--sense-color);
+  background: rgba(75, 156, 214, 0.15);
+  box-shadow: 0 0 6px var(--sense-color);
+}
+
+/* Locked slot (slot 6) */
+.locked-slot {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: var(--text-disabled);
+}
+
+.locked-slot:hover {
+  background: transparent;
+  border-color: var(--text-disabled);
+  box-shadow: none;
+}
+
+.locked-slot .slot-icon {
+  filter: grayscale(1);
+}
+
+/* Utility slots */
+.utility-slot {
+  border-color: var(--success);
+}
+
+.utility-slot:hover:not(.on-cooldown) {
+  border-color: var(--success);
+  background: rgba(93, 173, 93, 0.15);
+  box-shadow: 0 0 6px var(--success);
 }
 
 /* ============================================
