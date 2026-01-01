@@ -850,10 +850,24 @@ async function init() {
 
     gameLoop();
 
+    // Sync XP bar width with action bar
+    syncXpBarWidth();
+    window.addEventListener('resize', syncXpBarWidth);
+
     console.log('Vetuu initialized.');
   } catch (err) {
     console.error('Failed to initialize:', err);
     showToast('Failed to load game data', 'error');
+  }
+}
+
+// Sync XP bar width to match action bar
+function syncXpBarWidth() {
+  const actionBar = document.getElementById('action-bar');
+  const xpBarContainer = document.getElementById('xp-bar-container');
+  if (actionBar && xpBarContainer) {
+    const width = actionBar.offsetWidth;
+    xpBarContainer.style.setProperty('--action-bar-width', `${width}px`);
   }
 }
 
