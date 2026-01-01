@@ -2305,6 +2305,14 @@ function findTileInRange(fromX, fromY, targetX, targetY, range) {
 }
 
 export function checkPendingAttack() {
+  // If there's an active combat intent, let the intent system handle execution
+  // This prevents race conditions between the two systems
+  if (combatIntent) {
+    // Intent system will handle this via tryExecuteCombatIntent()
+    // Just ensure pendingAttack is synced
+    return;
+  }
+  
   if (!pendingAttack) {
     return;
   }
@@ -2326,24 +2334,38 @@ export function checkPendingAttack() {
     }
     
     if (hasLineOfSight(currentState, player.x, player.y, pendingAttack.target.x, pendingAttack.target.y)) {
-      const actionKey = pendingAttack.actionType;
-      const keyNum = parseInt(actionKey);
+      const actionType = pendingAttack.actionType;
       
-      // Handle basic attack (actionType === 'attack')
-      if (actionKey === 'attack') {
+      // Handle basic attack
+      if (actionType === 'basic' || actionType === 'attack') {
         if (actionCooldowns[1] <= 0) {
           pendingAttack = null;
-        executeAttack(weapon);
-      }
-    }
-      // Handle numbered action keys (1, 2, 3)
-      else if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 3) {
-        if (actionCooldowns[keyNum] <= 0) {
-          pendingAttack = null; // Clear first to prevent recursion
-          useAction(keyNum);
+          executeAttack(weapon);
         }
-      } else {
-    pendingAttack = null;
+      }
+      // Handle weapon ability (weaponAbility_1, weaponAbility_2, weaponAbility_3)
+      else if (actionType.startsWith('weaponAbility_')) {
+        const slot = parseInt(actionType.split('_')[1], 10);
+        if (!isNaN(slot) && actionCooldowns[slot] <= 0) {
+          pendingAttack = null;
+          executeWeaponAbilityDirect(slot);
+          // Resume auto-attack after ability
+          if (autoAttackEnabled && currentTarget && currentTarget.hp > 0) {
+            setAutoAttackIntent(currentTarget);
+          }
+        }
+      }
+      // Handle legacy numbered action keys (1, 2, 3)
+      else {
+        const keyNum = parseInt(actionType, 10);
+        if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 3) {
+          if (actionCooldowns[keyNum] <= 0) {
+            pendingAttack = null;
+            useAction(keyNum);
+          }
+        } else {
+          pendingAttack = null;
+        }
       }
     } else {
       // No LOS - will need to keep moving
@@ -2592,62 +2614,28 @@ export function useWeaponAbility(slot) {
   const player = currentState.player;
   const abilityRange = ability.range || weapon.range;
   const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
+  const needsLOS = weapon.combatType === 'ranged';
+  const hasLOS = !needsLOS || hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y);
   
-  // Move to range if needed
-  if (dist > abilityRange) {
-    moveToAttackRange(currentTarget, abilityRange, `ability_${slot}`);
+  // If out of range or no LOS, set intent and let intent system handle move-then-cast
+  if (dist > abilityRange || !hasLOS) {
+    // Enable combat flags immediately (we're engaging)
+    autoAttackEnabled = true;
+    inCombat = true;
+    
+    // Set weapon ability intent - will handle move-then-cast
+    setWeaponAbilityIntent(slot, currentTarget);
+    tryExecuteCombatIntent(); // Try immediately, will move if needed
     return;
   }
   
-  // Check LOS for ranged weapons
-  if (weapon.combatType === 'ranged') {
-    if (!hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y)) {
-      logCombat('No line of sight');
-      return;
-    }
-  }
-  
-  // Enable combat
+  // In range and LOS - execute immediately
   autoAttackEnabled = true;
   inCombat = true;
   provokeEnemy(currentTarget);
   
-  // Execute ability based on ID
-  switch (ability.id) {
-    // Rifle abilities
-    case 'rifle_burst':
-      executeRifleBurst(weapon, ability);
-      break;
-    case 'rifle_suppress':
-      executeRifleSuppress(weapon, ability);
-      break;
-    case 'rifle_overcharge':
-      executeRifleOvercharge(weapon, ability);
-      break;
-      
-    // Sword abilities
-    case 'sword_cleave':
-      executeSwordCleave(weapon, ability);
-      break;
-    case 'sword_lunge':
-      executeSwordLunge(weapon, ability);
-      break;
-    case 'sword_shockwave':
-      executeSwordShockwave(weapon, ability);
-      break;
-      
-    default:
-      // Fallback to enhanced attack
-      executeEnhancedAttack(weapon, { 
-        name: ability.name, 
-        damage: ability.damage || weapon.baseDamage,
-        onHit: ability.onHit
-      });
-  }
-  
-  // Set cooldown
-  actionCooldowns[slot] = ability.cooldownMs || 6000;
-  actionMaxCooldowns[slot] = ability.cooldownMs || 6000;
+  // Execute the ability directly
+  executeWeaponAbilityDirect(slot);
 }
 
 // ============================================
@@ -2977,6 +2965,10 @@ export function useSenseAbility(slot) {
     return;
   }
   
+  // Remember if auto-attack was enabled (to resume after ability)
+  const wasAutoAttackEnabled = autoAttackEnabled;
+  const previousTarget = currentTarget;
+  
   // Execute ability
   switch (ability.id) {
     case 'push':
@@ -2998,6 +2990,12 @@ export function useSenseAbility(slot) {
   SENSE_COOLDOWNS[slot].current = ability.cooldownMs;
   SENSE_COOLDOWNS[slot].max = ability.cooldownMs;
   updateSenseCooldownUI(slot);
+  
+  // Resume auto-attack if it was enabled and we have a valid target
+  if (wasAutoAttackEnabled && previousTarget && previousTarget.hp > 0) {
+    // Refresh the auto-attack intent
+    setAutoAttackIntent(previousTarget);
+  }
 }
 
 /**
@@ -3345,7 +3343,23 @@ const UTILITY_COOLDOWNS = {
   heal: { current: 0, max: 120000 }     // 120s cooldown
 };
 
+/**
+ * Use a utility ability (Sprint/Heal).
+ * 
+ * CRITICAL: Utilities MUST NEVER:
+ * - Set autoAttackEnabled
+ * - Set inCombat
+ * - Create combatIntent
+ * - Call provokeEnemy()
+ * - Auto-target enemies
+ * 
+ * Utilities can be used during combat but don't start or modify combat state.
+ */
 export function useUtilityAbility(id) {
+  // DEV-ONLY: Capture state before execution for assertion
+  const beforeAutoAttack = autoAttackEnabled;
+  const beforeIntent = combatIntent;
+  
   switch (id) {
     case 'sprint':
       executeSprint();
@@ -3355,6 +3369,15 @@ export function useUtilityAbility(id) {
       break;
     default:
       logCombat(`Unknown utility: ${id}`);
+      return;
+  }
+  
+  // DEV-ONLY: Assert utilities didn't modify combat state
+  if (autoAttackEnabled !== beforeAutoAttack) {
+    console.warn(`[VETUU BUG] Utility '${id}' modified autoAttackEnabled! This violates utility rules.`);
+  }
+  if (combatIntent !== beforeIntent && combatIntent !== null) {
+    console.warn(`[VETUU BUG] Utility '${id}' created a combatIntent! This violates utility rules.`);
   }
 }
 
@@ -4032,22 +4055,96 @@ export function getWeapons() {
 // ============================================
 // COMBAT INTENT SYSTEM
 // ============================================
-// Persistent engagement: right-click commits to fighting until success/cancel
+// Unified intent system for: basic attacks, weapon abilities, sense abilities
+// Utility abilities (sprint/heal) NEVER create intents
 const INTENT_TIMEOUT_MS = 10000; // 10s - clear intent if no successful attack
-let combatIntent = null; // { type:'autoAttack', targetId, createdAt, retryAt, lastSuccessAt }
 
 /**
- * Set auto-attack intent on a target.
- * Intent persists until target dies, player cancels, or target becomes permanently invalid.
+ * Combat Intent Schema:
+ * {
+ *   type: 'basic' | 'weaponAbility' | 'senseAbility',
+ *   slot?: number (1-6 for abilities),
+ *   targetId: string | null (null for AoE abilities like push/pull),
+ *   createdAt: number,
+ *   retryAt: number,
+ *   lastSuccessAt: number,
+ *   expiresAt: number,
+ *   requiresLOS: boolean,
+ *   requiredRange: number
+ * }
+ */
+let combatIntent = null;
+
+/**
+ * Set basic auto-attack intent on a target.
+ * Intent persists until target dies, player cancels, or timeout.
  */
 function setAutoAttackIntent(target) {
   if (!target || target.hp <= 0) return;
+  
+  const weapon = WEAPONS[currentWeapon];
+  const range = weapon?.range || 1;
+  const requiresLOS = weapon?.combatType === 'ranged';
+  
   combatIntent = {
-    type: 'autoAttack',
+    type: 'basic',
+    slot: 1,
     targetId: target.id,
     createdAt: nowMs(),
     retryAt: 0,
-    lastSuccessAt: 0
+    lastSuccessAt: 0,
+    expiresAt: nowMs() + INTENT_TIMEOUT_MS,
+    requiresLOS,
+    requiredRange: range
+  };
+}
+
+/**
+ * Set weapon ability intent (slots 1-3).
+ * One-shot: clears after successful execution.
+ */
+function setWeaponAbilityIntent(slot, target) {
+  if (!target || target.hp <= 0) return;
+  
+  const weapon = WEAPONS[currentWeapon];
+  const ability = weapon?.abilities?.[slot];
+  if (!ability) return;
+  
+  const range = ability.range || weapon.range;
+  const requiresLOS = weapon?.combatType === 'ranged';
+  
+  combatIntent = {
+    type: 'weaponAbility',
+    slot,
+    targetId: target.id,
+    createdAt: nowMs(),
+    retryAt: 0,
+    lastSuccessAt: 0,
+    expiresAt: nowMs() + INTENT_TIMEOUT_MS,
+    requiresLOS,
+    requiredRange: range
+  };
+}
+
+/**
+ * Set sense ability intent (slots 4-6).
+ * Sense abilities may or may not need a target (push/pull are AoE).
+ * One-shot: clears after successful execution.
+ */
+function setSenseAbilityIntent(slot, target = null) {
+  const ability = SENSE_ABILITIES[slot];
+  if (!ability) return;
+  
+  combatIntent = {
+    type: 'senseAbility',
+    slot,
+    targetId: target?.id || null,
+    createdAt: nowMs(),
+    retryAt: 0,
+    lastSuccessAt: 0,
+    expiresAt: nowMs() + INTENT_TIMEOUT_MS,
+    requiresLOS: false, // Sense abilities don't require LOS
+    requiredRange: ability.range || 6
   };
 }
 
@@ -4056,13 +4153,14 @@ function setAutoAttackIntent(target) {
  */
 function clearCombatIntent() {
   combatIntent = null;
+  pendingAttack = null; // Also clear pending attack when intent cleared
 }
 
 /**
  * Get the target from current intent (resolves by id).
  */
 function getIntentTarget() {
-  if (!combatIntent || !currentState?.runtime?.activeEnemies) return null;
+  if (!combatIntent?.targetId || !currentState?.runtime?.activeEnemies) return null;
   return currentState.runtime.activeEnemies.find(e => e.id === combatIntent.targetId);
 }
 
@@ -4070,21 +4168,28 @@ function getIntentTarget() {
  * Try to execute combat intent.
  * Called: after movement completes, in combat tick, on intent creation.
  * 
- * Rules:
- * - Resolve target by id
- * - Reselect if target changed/cleared
- * - If immune: set retryAt and return (no log spam)
- * - If out of range/LOS: moveToAttackRange and return
- * - Else: playerAttack()
+ * Unified flow:
+ * 1. Resolve target from intent.targetId if required
+ * 2. If target dead: reacquire or clear intent
+ * 3. If range/LOS not satisfied: moveToAttackRange and return
+ * 4. If player is moving: return
+ * 5. If cooldown/GCD blocks: schedule retryAt and return
+ * 6. Execute based on intent type
+ * 7. On success: update lastSuccessAt, clear if one-shot ability
  */
 export function tryExecuteCombatIntent() {
-  if (!combatIntent || combatIntent.type !== 'autoAttack') return;
+  if (!combatIntent) return;
+  
+  // Never process utility intents (should never exist, but safety check)
+  if (combatIntent.type === 'utility') {
+    clearCombatIntent();
+    return;
+  }
   
   const now = nowMs();
   
-  // Timeout check - clear intent if no successful attack for INTENT_TIMEOUT_MS
-  const sinceSuccess = combatIntent.lastSuccessAt ? (now - combatIntent.lastSuccessAt) : (now - combatIntent.createdAt);
-  if (sinceSuccess > INTENT_TIMEOUT_MS) {
+  // Timeout check - clear intent if expired
+  if (now > combatIntent.expiresAt) {
     logCombat('Lost target.');
     clearCombatIntent();
     return;
@@ -4093,12 +4198,44 @@ export function tryExecuteCombatIntent() {
   // Throttle retries (prevent spam when immune)
   if (combatIntent.retryAt && now < combatIntent.retryAt) return;
   
-  const target = getIntentTarget();
+  // Check if player is currently moving (import check)
+  // Movement module will call us again when move completes
+  const { isCurrentlyMoving } = window.__vetuuMovement || {};
+  if (isCurrentlyMoving?.()) return;
   
-  // Target invalid - clear intent
+  // Handle by intent type
+  switch (combatIntent.type) {
+    case 'basic':
+      executeBasicIntent(now);
+      break;
+    case 'weaponAbility':
+      executeWeaponAbilityIntent(now);
+      break;
+    case 'senseAbility':
+      executeSenseAbilityIntent(now);
+      break;
+  }
+}
+
+/**
+ * Execute basic auto-attack intent
+ */
+function executeBasicIntent(now) {
+  let target = getIntentTarget();
+  
+  // Target invalid - try to reacquire
   if (!target || target.hp <= 0) {
-    clearCombatIntent();
-    return;
+    const nextTarget = findNextCombatTarget();
+    if (nextTarget) {
+      combatIntent.targetId = nextTarget.id;
+      combatIntent.lastSuccessAt = 0; // Reset timeout
+      combatIntent.expiresAt = now + INTENT_TIMEOUT_MS;
+      target = nextTarget;
+      selectTarget(target);
+    } else {
+      clearCombatIntent();
+      return;
+    }
   }
   
   // Ensure target is selected
@@ -4108,7 +4245,7 @@ export function tryExecuteCombatIntent() {
   
   // Check spawn immunity - schedule retry
   if (hasSpawnImmunity(target)) {
-    combatIntent.retryAt = now + 200; // Check again in 200ms
+    combatIntent.retryAt = now + 200;
     return;
   }
   
@@ -4119,29 +4256,239 @@ export function tryExecuteCombatIntent() {
   const dist = distCoords(player.x, player.y, target.x, target.y);
   
   // Out of range - move to attack range
-  if (dist > weapon.range) {
+  if (dist > combatIntent.requiredRange) {
     if (!pendingAttack) {
-      moveToAttackRange(target, weapon.range, 'attack');
+      moveToAttackRange(target, combatIntent.requiredRange, 'basic');
     }
     return;
   }
   
-  // No LOS - move to attack range
-  if (!hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
+  // No LOS - move to attack range (for ranged weapons)
+  if (combatIntent.requiresLOS && !hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
     if (!pendingAttack) {
-      moveToAttackRange(target, weapon.range, 'attack');
+      moveToAttackRange(target, combatIntent.requiredRange, 'basic');
     }
+    return;
+  }
+  
+  // Check cooldown
+  if (actionCooldowns[1] > 0) {
+    combatIntent.retryAt = now + 100;
     return;
   }
   
   // Ready to attack
-  if (actionCooldowns[1] <= 0) {
-    playerAttack();
-    // Mark successful attack for timeout tracking
-    if (combatIntent) {
-      combatIntent.lastSuccessAt = now;
+  playerAttack();
+  combatIntent.lastSuccessAt = now;
+  combatIntent.expiresAt = now + INTENT_TIMEOUT_MS; // Refresh timeout on success
+}
+
+/**
+ * Execute weapon ability intent (one-shot)
+ */
+function executeWeaponAbilityIntent(now) {
+  let target = getIntentTarget();
+  
+  // Target invalid - try to acquire nearest
+  if (!target || target.hp <= 0) {
+    const nearestEnemy = findNearestEnemy();
+    if (nearestEnemy) {
+      combatIntent.targetId = nearestEnemy.id;
+      target = nearestEnemy;
+      selectTarget(target);
+    } else {
+      logCombat('No enemies nearby');
+      clearCombatIntent();
+      return;
     }
   }
+  
+  // Ensure target is selected
+  if (currentTarget?.id !== target.id) {
+    selectTarget(target);
+  }
+  
+  // Check spawn immunity - schedule retry
+  if (hasSpawnImmunity(target)) {
+    combatIntent.retryAt = now + 200;
+    return;
+  }
+  
+  const weapon = WEAPONS[currentWeapon];
+  if (!weapon) {
+    clearCombatIntent();
+    return;
+  }
+  
+  const slot = combatIntent.slot;
+  const ability = weapon.abilities?.[slot];
+  if (!ability) {
+    clearCombatIntent();
+    return;
+  }
+  
+  // Check cooldown
+  if (actionCooldowns[slot] > 0) {
+    combatIntent.retryAt = now + 100;
+    return;
+  }
+  
+  const player = currentState.player;
+  const dist = distCoords(player.x, player.y, target.x, target.y);
+  
+  // Out of range - move to attack range
+  if (dist > combatIntent.requiredRange) {
+    if (!pendingAttack) {
+      moveToAttackRange(target, combatIntent.requiredRange, `weaponAbility_${slot}`);
+    }
+    return;
+  }
+  
+  // No LOS - move to attack range (for ranged weapons)
+  if (combatIntent.requiresLOS && !hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
+    if (!pendingAttack) {
+      moveToAttackRange(target, combatIntent.requiredRange, `weaponAbility_${slot}`);
+    }
+    return;
+  }
+  
+  // Ready to execute ability - clear intent FIRST (one-shot)
+  const intentSlot = slot;
+  const wasAutoAttackEnabled = autoAttackEnabled;
+  clearCombatIntent();
+  
+  // Execute the ability
+  executeWeaponAbilityDirect(intentSlot);
+  
+  // Resume auto-attack if it was enabled (ability fired, now return to basic attacks)
+  if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
+    setAutoAttackIntent(currentTarget);
+  }
+}
+
+/**
+ * Execute sense ability intent (one-shot)
+ * Sense abilities (push/pull) are AoE and execute immediately
+ */
+function executeSenseAbilityIntent(now) {
+  const slot = combatIntent.slot;
+  const ability = SENSE_ABILITIES[slot];
+  
+  if (!ability) {
+    clearCombatIntent();
+    return;
+  }
+  
+  // Check cooldown
+  if (SENSE_COOLDOWNS[slot]?.current > 0) {
+    combatIntent.retryAt = now + 100;
+    return;
+  }
+  
+  // Check Sense resource
+  const player = currentState.player;
+  if (player.sense < ability.senseCost) {
+    logCombat(`Not enough Sense (need ${ability.senseCost})`);
+    clearCombatIntent();
+    return;
+  }
+  
+  // Clear intent FIRST (one-shot)
+  const wasAutoAttackEnabled = autoAttackEnabled;
+  clearCombatIntent();
+  
+  // Execute the sense ability
+  executeSenseAbilityDirect(slot);
+  
+  // Resume auto-attack if it was enabled
+  if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
+    setAutoAttackIntent(currentTarget);
+  }
+}
+
+/**
+ * Direct execution of weapon ability (bypasses intent system)
+ * Used by intent system after move-to-range completes
+ */
+function executeWeaponAbilityDirect(slot) {
+  const weapon = WEAPONS[currentWeapon];
+  if (!weapon) return;
+  
+  const ability = weapon.abilities?.[slot];
+  if (!ability) return;
+  
+  // Enable combat flags
+  autoAttackEnabled = true;
+  inCombat = true;
+  
+  if (currentTarget) {
+    provokeEnemy(currentTarget);
+  }
+  
+  // Execute ability based on ID
+  switch (ability.id) {
+    case 'rifle_burst':
+      executeRifleBurst(weapon, ability);
+      break;
+    case 'rifle_suppress':
+      executeRifleSuppress(weapon, ability);
+      break;
+    case 'rifle_overcharge':
+      executeRifleOvercharge(weapon, ability);
+      break;
+    case 'sword_cleave':
+      executeSwordCleave(weapon, ability);
+      break;
+    case 'sword_lunge':
+      executeSwordLunge(weapon, ability);
+      break;
+    case 'sword_shockwave':
+      executeSwordShockwave(weapon, ability);
+      break;
+    default:
+      executeEnhancedAttack(weapon, { 
+        name: ability.name, 
+        damage: ability.damage || weapon.baseDamage,
+        onHit: ability.onHit
+      });
+  }
+  
+  // Set cooldown
+  actionCooldowns[slot] = ability.cooldownMs || 6000;
+  actionMaxCooldowns[slot] = ability.cooldownMs || 6000;
+}
+
+/**
+ * Direct execution of sense ability (bypasses intent system)
+ * Used by intent system
+ */
+function executeSenseAbilityDirect(slot) {
+  const ability = SENSE_ABILITIES[slot];
+  if (!ability) return;
+  
+  const player = currentState.player;
+  
+  // Execute ability
+  switch (ability.id) {
+    case 'push':
+      executePush(ability);
+      break;
+    case 'pull':
+      executePull(ability);
+      break;
+    default:
+      logCombat('Unknown sense ability');
+      return;
+  }
+  
+  // Spend Sense
+  player.sense = Math.max(0, player.sense - ability.senseCost);
+  updatePlayerSenseBar();
+  
+  // Set cooldown
+  SENSE_COOLDOWNS[slot].current = ability.cooldownMs;
+  SENSE_COOLDOWNS[slot].max = ability.cooldownMs;
+  updateSenseCooldownUI(slot);
 }
 
 // Debug helpers

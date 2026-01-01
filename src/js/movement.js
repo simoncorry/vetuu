@@ -526,6 +526,13 @@ export function isCurrentlyMoving() {
   return isMoving;
 }
 
+// Expose to window for cross-module access (combat intent system)
+if (typeof window !== 'undefined') {
+  window.__vetuuMovement = {
+    isCurrentlyMoving: () => isMoving
+  };
+}
+
 export function hasActivePath() {
   return currentPath.length > 0;
 }

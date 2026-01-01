@@ -15,6 +15,10 @@ let secondaryCallback = null;
 
 const TILE_SIZE = 24;
 
+// Debounce for weapon toggle (prevents double-fire from multiple event paths)
+let lastWeaponToggleAt = 0;
+const WEAPON_TOGGLE_DEBOUNCE_MS = 150;
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -45,11 +49,20 @@ export function initInput(onInteract, onTarget, onSecondary) {
 // ACTION BAR CLICK HANDLERS
 // ============================================
 function initActionBarClicks() {
-  // Weapon toggle slot
+  // Weapon toggle slot - with debounce to prevent double-fire
   const weaponToggle = document.getElementById('weapon-toggle-slot');
   if (weaponToggle) {
     weaponToggle.addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      
+      // Debounce check using performance.now() as authoritative clock
+      const now = performance.now();
+      if (now - lastWeaponToggleAt < WEAPON_TOGGLE_DEBOUNCE_MS) {
+        return; // Ignore rapid duplicate clicks
+      }
+      lastWeaponToggleAt = now;
+      
       targetCallback('cycleWeapon');
     });
   }
@@ -107,11 +120,18 @@ function onKeyDown(e) {
   }
 
   // ============================================
-  // WEAPON TOGGLE (~ or Space)
+  // WEAPON TOGGLE (~ or Space) - with debounce
   // ============================================
   if (code === 'Backquote' || code === 'Space') {
     e.preventDefault();
     if (!dialogueOpen) {
+      // Debounce check using performance.now() as authoritative clock
+      const now = performance.now();
+      if (now - lastWeaponToggleAt < WEAPON_TOGGLE_DEBOUNCE_MS) {
+        return; // Ignore rapid duplicate triggers
+      }
+      lastWeaponToggleAt = now;
+      
       targetCallback('cycleWeapon');
     }
     return;
