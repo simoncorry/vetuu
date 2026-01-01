@@ -3027,8 +3027,8 @@ function executePush(ability) {
     // Provoke passive enemies
     provokeEnemy(enemy, nowMs(), 'push');
     
-    // Update visual position
-    updateEnemyPosition(enemy);
+    // Update visual position with animation
+    animateEnemyDisplacement(enemy);
   }
   
   logCombat(`Push: ${affected.length} enemies pushed away!`);
@@ -3068,8 +3068,8 @@ function executePull(ability) {
     // Provoke passive enemies
     provokeEnemy(enemy, nowMs(), 'pull');
     
-    // Update visual position
-    updateEnemyPosition(enemy);
+    // Update visual position with animation
+    animateEnemyDisplacement(enemy);
   }
   
   logCombat(`Pull: ${affected.length} enemies pulled in!`);
@@ -3159,10 +3159,10 @@ function pullEnemyToward(enemy, player, targetDist) {
 }
 
 /**
- * Update enemy's visual position after displacement
+ * Animate enemy's visual position after displacement (for Push/Pull)
  */
-function updateEnemyPosition(enemy) {
-  const enemyEl = document.getElementById(enemy.id);
+function animateEnemyDisplacement(enemy) {
+  const enemyEl = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (enemyEl) {
     enemyEl.style.transition = 'transform 0.2s ease-out';
     enemyEl.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
