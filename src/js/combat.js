@@ -896,6 +896,20 @@ function endCombat() {
   autoAttackEnabled = false;
   provokedEnemies.clear(); // Clear provoked enemies when combat ends
   pendingAttack = null;
+  
+  // Clear combat intent - prevents auto-reengaging when walking back
+  clearCombatIntent();
+  
+  // Clear target selection - player must explicitly re-target to fight again
+  // This is important for passive enemies that retreated
+  if (currentTarget) {
+    const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
+    if (el) el.classList.remove('targeted');
+    currentTarget = null;
+    updateTargetFrame();
+    updateActionBarState();
+  }
+  
   logCombat('Combat ended.');
 }
 
@@ -935,6 +949,7 @@ function findNearestEnemyInRange() {
 }
 
 // Find the nearest enemy (any distance) - used when no target and pressing action keys
+// Only returns enemies that are valid combat targets (engaged, provoked, or hostile)
 function findNearestEnemy() {
   const player = currentState.player;
   
@@ -949,18 +964,37 @@ function findNearestEnemy() {
     return engaged[0];
   }
   
-  // Fall back to any alive enemy
-  const enemies = currentState.runtime.activeEnemies.filter(e => e.hp > 0);
+  // Fall back to provoked enemies (player attacked them recently)
+  const provoked = currentState.runtime.activeEnemies.filter(e => 
+    e.hp > 0 && provokedEnemies.has(e.id)
+  );
+  if (provoked.length > 0) {
+    provoked.sort((a, b) => {
+      const distA = distCoords(a.x, a.y, player.x, player.y);
+      const distB = distCoords(b.x, b.y, player.x, player.y);
+      return distA - distB;
+    });
+    return provoked[0];
+  }
   
-  if (enemies.length === 0) return null;
+  // Fall back to hostile enemies only (not passive, not retreating)
+  // Passive enemies (critters under level 5) should not be auto-targeted
+  const hostile = currentState.runtime.activeEnemies.filter(e => 
+    e.hp > 0 && 
+    !e.isRetreating && 
+    !isEnemyPassive(e) &&
+    e.state !== 'UNAWARE'
+  );
   
-  enemies.sort((a, b) => {
+  if (hostile.length === 0) return null;
+  
+  hostile.sort((a, b) => {
     const distA = distCoords(a.x, a.y, player.x, player.y);
     const distB = distCoords(b.x, b.y, player.x, player.y);
     return distA - distB;
   });
   
-  return enemies[0];
+  return hostile[0];
 }
 
 // ============================================
