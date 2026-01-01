@@ -3516,8 +3516,10 @@ function executeSprint() {
     }, 150);
   }
   
-  // Update camera
-  updateCamera(currentState, 150);
+  // Update camera (dynamic import to avoid circular dependency)
+  import('./render.js').then(({ updateCamera }) => {
+    updateCamera(currentState, 150);
+  });
   
   // Set cooldown
   UTILITY_COOLDOWNS.sprint.current = UTILITY_COOLDOWNS.sprint.max;
