@@ -751,6 +751,9 @@ function startCombatTick() {
     
     // Update utility cooldowns (sprint, heal)
     tickUtilityCooldowns(100);
+    
+    // Update sense cooldowns (push, pull)
+    tickSenseCooldowns(100);
 
     // Try to execute combat intent (handles immunity expiry, movement completion)
     tryExecuteCombatIntent();
@@ -2887,22 +2890,375 @@ function executeSwordShockwave(weapon, ability) {
 }
 
 // ============================================
-// SENSE ABILITIES (slots 4-6) - Stub for later commit
-// Spends Sense resource
+// SENSE ABILITIES (slots 4-6) - Spends Sense resource
 // ============================================
+const SENSE_ABILITIES = {
+  4: {
+    id: 'push',
+    name: 'Push',
+    senseCost: 15,
+    cooldownMs: 8000,
+    radius: 2,           // Affects enemies within 2 tiles
+    pushToDistance: 8    // Push them to be at least 8 tiles away
+  },
+  5: {
+    id: 'pull',
+    name: 'Pull',
+    senseCost: 15,
+    cooldownMs: 8000,
+    radius: 6,           // Affects enemies within 6 tiles
+    pullToDistance: 2    // Pull them to within 2 tiles
+  },
+  6: {
+    id: 'locked',
+    name: 'Locked',
+    locked: true
+  }
+};
+
+const SENSE_COOLDOWNS = {
+  4: { current: 0, max: 8000 },
+  5: { current: 0, max: 8000 },
+  6: { current: 0, max: 0 }
+};
+
 export function useSenseAbility(slot) {
   if (isGhostMode) {
     logCombat('You are a spirit... find your corpse to revive.');
     return;
   }
   
-  if (slot === 6) {
+  if (playerImmunityActive) {
+    logCombat('Cannot use abilities during immunity');
+    return;
+  }
+  
+  const ability = SENSE_ABILITIES[slot];
+  if (!ability) {
+    logCombat('Invalid sense ability');
+    return;
+  }
+  
+  if (ability.locked) {
     logCombat('This ability is locked until Act 3');
     return;
   }
   
-  // TODO: Implement in Commit 7
-  logCombat(`Sense ability ${slot} not yet implemented`);
+  // Check cooldown
+  if (SENSE_COOLDOWNS[slot].current > 0) {
+    const remaining = (SENSE_COOLDOWNS[slot].current / 1000).toFixed(1);
+    logCombat(`${ability.name} on cooldown (${remaining}s)`);
+    return;
+  }
+  
+  // Check Sense resource
+  const player = currentState.player;
+  if (player.sense < ability.senseCost) {
+    logCombat(`Not enough Sense (need ${ability.senseCost})`);
+    return;
+  }
+  
+  // Execute ability
+  switch (ability.id) {
+    case 'push':
+      executePush(ability);
+      break;
+    case 'pull':
+      executePull(ability);
+      break;
+    default:
+      logCombat('Unknown sense ability');
+      return;
+  }
+  
+  // Spend Sense
+  player.sense = Math.max(0, player.sense - ability.senseCost);
+  updatePlayerSenseBar();
+  
+  // Set cooldown
+  SENSE_COOLDOWNS[slot].current = ability.cooldownMs;
+  SENSE_COOLDOWNS[slot].max = ability.cooldownMs;
+  updateSenseCooldownUI(slot);
+}
+
+/**
+ * Push: Pushes enemies within radius to be at least pushToDistance tiles away
+ * Collision-safe displacement
+ */
+function executePush(ability) {
+  const player = currentState.player;
+  const enemies = currentState.runtime.activeEnemies || [];
+  const affected = [];
+  
+  // Find enemies within push radius
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue;
+    const dist = distCoords(player.x, player.y, enemy.x, enemy.y);
+    if (dist <= ability.radius) {
+      affected.push(enemy);
+    }
+  }
+  
+  if (affected.length === 0) {
+    logCombat('No enemies in Push range');
+    // Still consume Sense and cooldown
+    return;
+  }
+  
+  // Visual effect - expanding ring
+  showPushEffect(player.x, player.y);
+  
+  // Push each enemy away
+  for (const enemy of affected) {
+    pushEnemyAway(enemy, player, ability.pushToDistance);
+    
+    // Provoke passive enemies
+    provokeEnemy(enemy, nowMs(), 'push');
+    
+    // Update visual position
+    updateEnemyPosition(enemy);
+  }
+  
+  logCombat(`Push: ${affected.length} enemies pushed away!`);
+}
+
+/**
+ * Pull: Pulls enemies within radius to within pullToDistance tiles
+ * Collision-safe displacement
+ */
+function executePull(ability) {
+  const player = currentState.player;
+  const enemies = currentState.runtime.activeEnemies || [];
+  const affected = [];
+  
+  // Find enemies within pull radius
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue;
+    const dist = distCoords(player.x, player.y, enemy.x, enemy.y);
+    if (dist <= ability.radius && dist > ability.pullToDistance) {
+      affected.push(enemy);
+    }
+  }
+  
+  if (affected.length === 0) {
+    logCombat('No enemies in Pull range');
+    // Still consume Sense and cooldown
+    return;
+  }
+  
+  // Visual effect - contracting ring
+  showPullEffect(player.x, player.y);
+  
+  // Pull each enemy toward player
+  for (const enemy of affected) {
+    pullEnemyToward(enemy, player, ability.pullToDistance);
+    
+    // Provoke passive enemies
+    provokeEnemy(enemy, nowMs(), 'pull');
+    
+    // Update visual position
+    updateEnemyPosition(enemy);
+  }
+  
+  logCombat(`Pull: ${affected.length} enemies pulled in!`);
+}
+
+/**
+ * Push enemy away from player until at least targetDist away
+ * Step-wise collision check
+ */
+function pushEnemyAway(enemy, player, targetDist) {
+  const dx = enemy.x - player.x;
+  const dy = enemy.y - player.y;
+  const currentDist = Math.hypot(dx, dy);
+  
+  if (currentDist >= targetDist || currentDist === 0) return;
+  
+  // Normalize direction
+  const nx = dx / currentDist;
+  const ny = dy / currentDist;
+  
+  // Push step by step until target distance or blocked
+  let newX = enemy.x;
+  let newY = enemy.y;
+  const maxSteps = Math.ceil(targetDist - currentDist) + 2;
+  
+  for (let i = 1; i <= maxSteps; i++) {
+    const testX = Math.round(enemy.x + nx * i);
+    const testY = Math.round(enemy.y + ny * i);
+    
+    if (canMoveTo(currentState, testX, testY)) {
+      newX = testX;
+      newY = testY;
+      
+      // Check if we've reached target distance
+      const newDist = distCoords(player.x, player.y, newX, newY);
+      if (newDist >= targetDist) break;
+    } else {
+      break; // Blocked
+    }
+  }
+  
+  enemy.x = newX;
+  enemy.y = newY;
+}
+
+/**
+ * Pull enemy toward player until within targetDist
+ * Step-wise collision check
+ */
+function pullEnemyToward(enemy, player, targetDist) {
+  const dx = player.x - enemy.x;
+  const dy = player.y - enemy.y;
+  const currentDist = Math.hypot(dx, dy);
+  
+  if (currentDist <= targetDist) return;
+  
+  // Normalize direction (toward player)
+  const nx = dx / currentDist;
+  const ny = dy / currentDist;
+  
+  // Pull step by step until target distance or blocked
+  let newX = enemy.x;
+  let newY = enemy.y;
+  const maxSteps = Math.ceil(currentDist - targetDist) + 2;
+  
+  for (let i = 1; i <= maxSteps; i++) {
+    const testX = Math.round(enemy.x + nx * i);
+    const testY = Math.round(enemy.y + ny * i);
+    
+    // Don't pull onto the player's tile
+    if (testX === player.x && testY === player.y) break;
+    
+    if (canMoveTo(currentState, testX, testY)) {
+      newX = testX;
+      newY = testY;
+      
+      // Check if we've reached target distance
+      const newDist = distCoords(player.x, player.y, newX, newY);
+      if (newDist <= targetDist) break;
+    } else {
+      break; // Blocked
+    }
+  }
+  
+  enemy.x = newX;
+  enemy.y = newY;
+}
+
+/**
+ * Update enemy's visual position after displacement
+ */
+function updateEnemyPosition(enemy) {
+  const enemyEl = document.getElementById(enemy.id);
+  if (enemyEl) {
+    enemyEl.style.transition = 'transform 0.2s ease-out';
+    enemyEl.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+    
+    // Reset transition after animation
+    setTimeout(() => {
+      enemyEl.style.transition = '';
+    }, 200);
+  }
+}
+
+/**
+ * Show push visual effect (expanding ring)
+ */
+function showPushEffect(x, y) {
+  const world = document.getElementById('world');
+  if (!world) return;
+  
+  const effect = document.createElement('div');
+  effect.className = 'push-effect';
+  effect.style.cssText = `
+    position: absolute;
+    left: ${x * 24 + 12}px;
+    top: ${y * 24 + 12}px;
+    width: 0;
+    height: 0;
+    border: 3px solid var(--sense-color);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 150;
+    animation: push-expand 0.4s ease-out forwards;
+    transform: translate(-50%, -50%);
+  `;
+  
+  world.appendChild(effect);
+  setTimeout(() => effect.remove(), 400);
+}
+
+/**
+ * Show pull visual effect (contracting ring)
+ */
+function showPullEffect(x, y) {
+  const world = document.getElementById('world');
+  if (!world) return;
+  
+  const effect = document.createElement('div');
+  effect.className = 'pull-effect';
+  effect.style.cssText = `
+    position: absolute;
+    left: ${x * 24 + 12}px;
+    top: ${y * 24 + 12}px;
+    width: ${6 * 24 * 2}px;
+    height: ${6 * 24 * 2}px;
+    border: 3px solid var(--sense-color);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 150;
+    animation: pull-contract 0.4s ease-in forwards;
+    transform: translate(-50%, -50%);
+  `;
+  
+  world.appendChild(effect);
+  setTimeout(() => effect.remove(), 400);
+}
+
+/**
+ * Update sense ability cooldown UI
+ */
+function updateSenseCooldownUI(slot) {
+  const slotEl = document.querySelector(`[data-slot="${slot}"][data-action-type="sense"]`);
+  if (!slotEl) return;
+  
+  const cooldown = SENSE_COOLDOWNS[slot];
+  if (!cooldown) return;
+  
+  const overlay = slotEl.querySelector('.cooldown-overlay');
+  const timer = slotEl.querySelector('.cooldown-timer');
+  
+  if (cooldown.current > 0) {
+    slotEl.classList.add('on-cooldown');
+    if (overlay) {
+      overlay.style.setProperty('--cooldown-pct', (cooldown.current / cooldown.max) * 100);
+    }
+    if (timer) {
+      timer.textContent = Math.ceil(cooldown.current / 1000);
+    }
+  } else {
+    slotEl.classList.remove('on-cooldown');
+    if (overlay) {
+      overlay.style.setProperty('--cooldown-pct', 0);
+    }
+    if (timer) {
+      timer.textContent = '';
+    }
+  }
+}
+
+/**
+ * Tick sense cooldowns - called from combat tick
+ */
+function tickSenseCooldowns(deltaMs) {
+  for (const slot of Object.keys(SENSE_COOLDOWNS)) {
+    const cooldown = SENSE_COOLDOWNS[slot];
+    if (cooldown.current > 0) {
+      cooldown.current = Math.max(0, cooldown.current - deltaMs);
+      updateSenseCooldownUI(parseInt(slot, 10));
+    }
+  }
 }
 
 // ============================================
