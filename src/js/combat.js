@@ -3580,9 +3580,8 @@ function executeHeal() {
   // Show heal number
   showHealNumber(player.x, player.y, actualHeal);
   
-  // Update UI
+  // Update UI (updatePlayerHealthBar handles frame, HUD, and sprite)
   updatePlayerHealthBar();
-  updatePlayerFrame();
   
   // Set cooldown
   UTILITY_COOLDOWNS.heal.current = UTILITY_COOLDOWNS.heal.max;
