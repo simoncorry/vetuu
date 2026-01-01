@@ -1,20 +1,21 @@
 /**
  * VETUU — Shared Utilities
  * Common helpers used across combat, spawning, and movement systems.
+ * 
+ * NOTE: Status effect CHECK functions (isImmune, isStunned, isRooted, canMove, canAct)
+ * are in aiUtils.js - they use the centralized time.js module.
+ * 
+ * This file contains:
+ * - Distance calculations
+ * - Status effect APPLICATION and TICKING (uses local now() for perf)
+ * - Array utilities
  */
+
+import { nowMs } from './time.js';
 
 // ============================================
 // DISTANCE
 // ============================================
-/**
- * Euclidean distance between two points
- * @param {{x: number, y: number}} a - First point
- * @param {{x: number, y: number}} b - Second point
- * @returns {number} - Distance in tiles
- */
-export function dist(a, b) {
-  return Math.hypot(b.x - a.x, b.y - a.y);
-}
 
 /**
  * Euclidean distance from coordinates
@@ -24,83 +25,24 @@ export function distCoords(x1, y1, x2, y2) {
 }
 
 // ============================================
-// TIMING
+// STATUS EFFECTS - APPLICATION & TICKING
 // ============================================
-export function now() {
-  return performance.now();
-}
-
-// ============================================
-// STATUS EFFECTS SYSTEM
-// ============================================
-// Minimal effects: stun, root, slow, vuln, immune
-// No stacks, no fancy dispels - just timers.
-
-/**
- * Initialize effects object on an entity
- */
-export function initEffects(entity) {
-  if (!entity.effects) {
-    entity.effects = {
-      stunUntil: 0,
-      rootUntil: 0,
-      slowUntil: 0,
-      slowMult: 1,
-      vulnUntil: 0,
-      vulnMult: 1,
-      immuneUntil: 0
-    };
-  }
-  return entity.effects;
-}
-
-/**
- * Check if entity is immune to damage and CC
- */
-export function isImmune(e) {
-  return (e.effects?.immuneUntil ?? 0) > now() || e.isImmune === true;
-}
-
-/**
- * Check if entity is stunned (can't move or attack)
- */
-export function isStunned(e) {
-  return (e.effects?.stunUntil ?? 0) > now();
-}
-
-/**
- * Check if entity is rooted (can't move, can attack)
- */
-export function isRooted(e) {
-  return (e.effects?.rootUntil ?? 0) > now();
-}
+// The CHECK functions (isSlowed, isVulnerable, etc.) that need to query
+// effect state are kept here since they're used by combat.js for damage calc.
+// The AI-focused checks (isImmune, isStunned, canMove) are in aiUtils.js.
 
 /**
  * Check if entity is slowed
  */
 export function isSlowed(e) {
-  return (e.effects?.slowUntil ?? 0) > now();
+  return (e.effects?.slowUntil ?? 0) > nowMs();
 }
 
 /**
  * Check if entity is vulnerable (takes extra damage)
  */
 export function isVulnerable(e) {
-  return (e.effects?.vulnUntil ?? 0) > now();
-}
-
-/**
- * Can entity move? (not stunned or rooted)
- */
-export function canMove(e) {
-  return !isStunned(e) && !isRooted(e);
-}
-
-/**
- * Can entity act/attack? (not stunned)
- */
-export function canAct(e) {
-  return !isStunned(e);
+  return (e.effects?.vulnUntil ?? 0) > nowMs();
 }
 
 /**
@@ -110,12 +52,26 @@ export function canAct(e) {
  */
 export function applyEffect(target, effect) {
   if (!target) return;
-  initEffects(target);
+  
+  // Ensure effects object exists
+  if (!target.effects) {
+    target.effects = {
+      stunUntil: 0,
+      rootUntil: 0,
+      slowUntil: 0,
+      slowMult: 1,
+      vulnUntil: 0,
+      vulnMult: 1,
+      immuneUntil: 0
+    };
+  }
   
   // Immune targets resist all effects
-  if (isImmune(target)) return;
+  if ((target.effects.immuneUntil ?? 0) > nowMs() || target.isImmune === true) {
+    return;
+  }
   
-  const t = now();
+  const t = nowMs();
   const dur = effect.durationMs ?? 0;
   
   switch (effect.type) {
@@ -149,7 +105,7 @@ export function applyEffect(target, effect) {
 export function tickEffects(entity) {
   if (!entity.effects) return;
   
-  const t = now();
+  const t = nowMs();
   
   // Reset slow multiplier when slow expires
   if (entity.effects.slowUntil <= t) {
@@ -180,41 +136,6 @@ export function getVulnMult(target) {
 }
 
 // ============================================
-// GCD & COOLDOWN SYSTEM
-// ============================================
-
-/**
- * Check if GCD is ready
- */
-export function gcdReady(player) {
-  return now() >= (player.cooldowns?.gcdUntil ?? 0);
-}
-
-/**
- * Check if a specific skill is ready
- */
-export function skillReady(player, skillId) {
-  return now() >= (player.cooldowns?.skills?.[skillId] ?? 0);
-}
-
-/**
- * Start GCD
- */
-export function startGCD(player, durationMs = 1500) {
-  if (!player.cooldowns) player.cooldowns = { gcdUntil: 0, skills: {} };
-  player.cooldowns.gcdUntil = now() + durationMs;
-}
-
-/**
- * Start skill cooldown
- */
-export function startSkillCD(player, skillId, durationMs) {
-  if (!player.cooldowns) player.cooldowns = { gcdUntil: 0, skills: {} };
-  if (!player.cooldowns.skills) player.cooldowns.skills = {};
-  player.cooldowns.skills[skillId] = now() + durationMs;
-}
-
-// ============================================
 // ARRAY UTILITIES
 // ============================================
 
@@ -236,4 +157,3 @@ export function shuffleArray(arr) {
 export function randomRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-

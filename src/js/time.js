@@ -87,3 +87,123 @@ export function remainingMs(expiresAt, t = nowMs()) {
   return Math.max(0, remaining);
 }
 
+// ============================================
+// GUARD RAILS - Prevent Timebase Regressions
+// ============================================
+
+// Track if we've already warned about each issue (once per session)
+const warnedTimers = new Set();
+
+/**
+ * Validate and normalize enemy timers.
+ * Logs warnings for suspicious values (Date.now leak or uninitialized garbage).
+ * 
+ * @param {object} enemy - Enemy entity to check
+ * @param {string} context - Where this is being called from (for logging)
+ */
+export function validateEnemyTimers(enemy, context = 'unknown') {
+  if (!enemy) return;
+  
+  const timerKeys = [
+    'cooldownUntil', 'moveCooldown', 'nextAttackAt', 'brokenOffUntil',
+    'spawnedAt', 'spawnImmunityUntil', 'provokedUntil', 'awareTime',
+    'retreatStartedAt', 'lastAggroAt', 'lastDamagedAt', 'lastRegenTick'
+  ];
+  
+  for (const key of timerKeys) {
+    const value = enemy[key];
+    if (value === undefined || value === null || value === 0 || value === -Infinity) {
+      continue; // Valid initial values
+    }
+    
+    // Check for Date.now() leak (value > 1e12)
+    if (value > WALL_CLOCK_THRESHOLD) {
+      const warnKey = `${enemy.id}_${key}_wallclock`;
+      if (!warnedTimers.has(warnKey)) {
+        warnedTimers.add(warnKey);
+        console.warn(
+          `[TIME] Date.now() leak detected! ${context}: enemy.${key} = ${value} (expected perf time). ` +
+          `Converting automatically, but this indicates a bug.`
+        );
+      }
+      // Auto-fix by converting
+      enemy[key] = toPerfTime(value);
+    }
+    
+    // Check for garbage/uninitialized value (very negative)
+    if (value < -1e9) {
+      const warnKey = `${enemy.id}_${key}_garbage`;
+      if (!warnedTimers.has(warnKey)) {
+        warnedTimers.add(warnKey);
+        console.warn(
+          `[TIME] Suspicious timer value: ${context}: enemy.${key} = ${value}. Clamping to 0.`
+        );
+      }
+      enemy[key] = 0;
+    }
+  }
+}
+
+/**
+ * Validate a single timer value (for guards, player, etc.)
+ * Returns the validated/converted value.
+ * 
+ * @param {number} value - Timer value to check
+ * @param {string} name - Name for logging
+ * @returns {number} - Validated value
+ */
+export function validateTimer(value, name = 'timer') {
+  if (value === undefined || value === null || value === 0 || value === -Infinity) {
+    return value;
+  }
+  
+  // Date.now() leak
+  if (value > WALL_CLOCK_THRESHOLD) {
+    const warnKey = `${name}_wallclock`;
+    if (!warnedTimers.has(warnKey)) {
+      warnedTimers.add(warnKey);
+      console.warn(`[TIME] Date.now() leak: ${name} = ${value}. Converting.`);
+    }
+    return toPerfTime(value);
+  }
+  
+  // Garbage value
+  if (value < -1e9) {
+    const warnKey = `${name}_garbage`;
+    if (!warnedTimers.has(warnKey)) {
+      warnedTimers.add(warnKey);
+      console.warn(`[TIME] Suspicious value: ${name} = ${value}. Clamping to 0.`);
+    }
+    return 0;
+  }
+  
+  return value;
+}
+
+// Expose debug tools
+if (typeof window !== 'undefined') {
+  /**
+   * Clear the warning deduplication set (for testing)
+   */
+  window.VETUU_RESET_TIME_WARNINGS = () => {
+    warnedTimers.clear();
+    console.log('Time warnings reset');
+  };
+  
+  /**
+   * Check time module health
+   */
+  window.VETUU_TIME_CHECK = () => {
+    const now = nowMs();
+    const wallNow = Date.now();
+    const offset = PERF_TO_WALL_OFFSET;
+    return {
+      perfNow: now,
+      wallNow,
+      offset,
+      offsetDrift: Math.abs((wallNow - now) - offset),
+      warningsIssued: warnedTimers.size
+    };
+  };
+}
+
