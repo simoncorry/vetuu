@@ -2248,8 +2248,8 @@ function executeAttack(weapon) {
   updateEnemyHealthBar(currentTarget);
   updateTargetFrame();
 
-  // Set cooldown from first action or default
-  const cooldown = weapon.actions?.[0]?.cooldown || 1500;
+  // Set cooldown from first ability or default (basic attack uses slot 1)
+  const cooldown = weapon.abilities?.[1]?.cooldownMs || 1500;
   actionCooldowns[1] = cooldown;
   actionMaxCooldowns[1] = cooldown;
 
@@ -3788,7 +3788,7 @@ function calculateDamage(weapon, target, actionDamage = null) {
   
   // Calculate skill multiplier with rifle min-range penalty
   let skillMult = weapon.multiplier || 1;
-  if (currentWeapon === 'rifle') {
+  if (currentWeapon === 'laser_rifle') {
     const d = distCoords(player.x, player.y, target.x, target.y);
     if (d <= 2) {
       skillMult *= 0.65; // -35% damage when rifle is too close
@@ -4874,19 +4874,34 @@ function updateActionBar() {
   const weapon = WEAPONS[currentWeapon];
   if (!weapon) return;
 
-  const weaponName = document.getElementById('current-weapon-name');
-  const weaponIcon = document.getElementById('current-weapon-icon');
+  // Update weapon toggle slot
+  const weaponLabel = document.getElementById('weapon-slot-label');
+  const weaponIcon = document.getElementById('weapon-slot-icon');
 
-  if (weaponName) weaponName.textContent = weapon.name;
-  if (weaponIcon) weaponIcon.textContent = weapon.icon;
+  if (weaponLabel) weaponLabel.textContent = weapon.name;
+  if (weaponIcon) weaponIcon.textContent = weapon.icon || (weapon.type === 'ranged' ? '🔫' : '⚔️');
 
-  if (weapon.actions) {
-    weapon.actions.forEach((action, index) => {
-      const slot = document.querySelector(`.action-slot[data-action-key="${index + 1}"]`);
-      if (slot) {
-        const label = slot.querySelector('.slot-label');
-        if (label) label.textContent = action.name;
-        slot.title = `${action.name} (${(action.cooldown / 1000).toFixed(1)}s cooldown)`;
+  // Update weapon ability slots (1-3) based on current weapon
+  if (weapon.abilities) {
+    [1, 2, 3].forEach(slotNum => {
+      const ability = weapon.abilities[slotNum];
+      if (ability) {
+        const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
+        if (slot) {
+          const label = slot.querySelector('.slot-label');
+          const icon = slot.querySelector('.slot-icon');
+          if (label) label.textContent = ability.name;
+          if (icon) {
+            // Set appropriate icon based on ability
+            if (ability.id?.includes('burst')) icon.textContent = '💥';
+            else if (ability.id?.includes('suppress')) icon.textContent = '🎯';
+            else if (ability.id?.includes('overcharge')) icon.textContent = '⚡';
+            else if (ability.id?.includes('cleave')) icon.textContent = '🗡️';
+            else if (ability.id?.includes('lunge')) icon.textContent = '🏃';
+            else if (ability.id?.includes('shockwave')) icon.textContent = '💫';
+          }
+          slot.title = `${ability.name}: ${ability.description || ''} (${(ability.cooldownMs / 1000).toFixed(0)}s CD)`;
+        }
       }
     });
   }
@@ -4924,12 +4939,13 @@ function updateCooldownUI() {
   const weapon = WEAPONS[currentWeapon];
   if (!weapon) return;
 
-  for (const key of ['1', '2', '3']) {
-    const slot = document.querySelector(`.action-slot[data-action-key="${key}"]`);
+  // Update weapon ability cooldowns (slots 1-3)
+  for (const slotNum of [1, 2, 3]) {
+    const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
     if (!slot) continue;
 
-    const cooldown = actionCooldowns[key];
-    const maxCooldown = actionMaxCooldowns[key] || 1500;
+    const cooldown = actionCooldowns[slotNum];
+    const maxCooldown = actionMaxCooldowns[slotNum] || 1500;
     const isOnCooldown = cooldown > 0;
 
     slot.classList.toggle('on-cooldown', isOnCooldown);
