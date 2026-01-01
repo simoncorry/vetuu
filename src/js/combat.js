@@ -33,15 +33,25 @@ import {
   retreatPack, initEnemyAI, ensureEffects
 } from './aiUtils.js';
 
-// Enemy type configurations
+// Enemy type configurations (Simplified - no weakness/resistance)
+// All enemies are either melee (range 2) or ranged (range 6)
 const ENEMY_CONFIGS = {
-  critter: { weapon: 'claws', aiType: 'melee', weakness: 'physical', resistance: 'energy', hp: 0.7 },
-  scav: { weapon: 'scav_pistol', aiType: 'ranged', weakness: 'energy', resistance: null, hp: 0.8 },
-  trog_warband: { weapon: 'trog_spear', aiType: 'melee', weakness: 'physical', resistance: 'energy', hp: 1.0 },
-  karth_grunt: { weapon: 'karth_rifle', aiType: 'ranged', weakness: 'energy', resistance: 'physical', hp: 1.2 },
-  retriever_captain: { weapon: 'boss_blade', aiType: 'aggressive', weakness: null, resistance: null, hp: 3.0 },
-  ironcross_guard: { weapon: 'guard_rifle', aiType: 'guard', weakness: null, resistance: null, hp: 2.0 }
+  critter: { weapon: 'melee_claws', aiType: 'melee', hp: 0.7 },
+  scav_melee: { weapon: 'melee_club', aiType: 'melee', hp: 0.9 },
+  scav_ranged: { weapon: 'ranged_rifle', aiType: 'ranged', hp: 0.8 },
+  trog_warrior: { weapon: 'melee_spear', aiType: 'melee', hp: 1.0 },
+  trog_shaman: { weapon: 'ranged_bolt', aiType: 'ranged', hp: 0.85 },
+  karth_grunt: { weapon: 'karth_laser', aiType: 'ranged', hp: 1.2 },
+  karth_officer: { weapon: 'melee_club', aiType: 'melee', hp: 1.3 },
+  retriever_captain: { weapon: 'boss_blade', aiType: 'aggressive', hp: 3.0 },
+  ironcross_guard: { weapon: 'guard_rifle', aiType: 'guard', hp: 2.0 }
 };
+
+// Legacy aliases for backward compatibility
+ENEMY_CONFIGS.scav = ENEMY_CONFIGS.scav_ranged;
+ENEMY_CONFIGS.scav_pistol = ENEMY_CONFIGS.scav_ranged;
+ENEMY_CONFIGS.scav_rifle = ENEMY_CONFIGS.scav_ranged;
+ENEMY_CONFIGS.trog_warband = ENEMY_CONFIGS.trog_warrior;
 
 // Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;
@@ -121,12 +131,10 @@ function levelDiffMult(attackerLevel, defenderLevel) {
 }
 
 /**
- * Type effectiveness multiplier (weakness/resistance).
+ * Type effectiveness multiplier (DISABLED - combat simplification)
+ * Weakness/resistance system removed. Always returns 1.
  */
 function typeMult(damageType, defenderConfig) {
-  if (!damageType || !defenderConfig) return 1;
-  if (defenderConfig.weakness === damageType) return 1.5;
-  if (defenderConfig.resistance === damageType) return 0.5;
   return 1;
 }
 
@@ -2873,35 +2881,65 @@ function showCleaveEffect(x, y) {
 }
 
 // ============================================
-// WEAPON CYCLING
+// WEAPON CYCLING (Simplified - only 2 weapons)
 // ============================================
 export function cycleWeapon() {
-  const weapons = ['laser_rifle', 'energy_pistol', 'vibro_sword'];
-  const idx = weapons.indexOf(currentWeapon);
-  currentWeapon = weapons[(idx + 1) % weapons.length];
+  // Toggle between rifle and sword only
+  if (currentWeapon === 'laser_rifle') {
+    currentWeapon = 'vibro_sword';
+  } else {
+    currentWeapon = 'laser_rifle';
+  }
 
   const weapon = WEAPONS[currentWeapon];
-  if (weapon && weapon.actions) {
-  weapon.actions.forEach((action, i) => {
-    actionMaxCooldowns[i + 1] = action.cooldown;
-  });
+  
+  // Update ability cooldowns from new abilities structure
+  if (weapon && weapon.abilities) {
+    Object.entries(weapon.abilities).forEach(([slot, ability]) => {
+      actionMaxCooldowns[parseInt(slot, 10)] = ability.cooldownMs || 6000;
+    });
   }
 
   logCombat(`Switched to ${weapon?.name || currentWeapon}`);
   updateActionBar();
+  updateWeaponToggleSlot();
 }
 
 export function setWeapon(weaponKey) {
+  // Only allow rifle or sword
+  if (weaponKey !== 'laser_rifle' && weaponKey !== 'vibro_sword') {
+    console.warn(`[Combat] Invalid weapon key: ${weaponKey}. Using rifle.`);
+    weaponKey = 'laser_rifle';
+  }
+  
   if (WEAPONS[weaponKey]) {
     currentWeapon = weaponKey;
     const weapon = WEAPONS[currentWeapon];
-    if (weapon?.actions) {
-    weapon.actions.forEach((action, i) => {
-        actionMaxCooldowns[i + 1] = action.cooldown || 1500;
-    });
+    
+    // Update ability cooldowns from new abilities structure
+    if (weapon?.abilities) {
+      Object.entries(weapon.abilities).forEach(([slot, ability]) => {
+        actionMaxCooldowns[parseInt(slot, 10)] = ability.cooldownMs || 6000;
+      });
     }
+    
     updateActionBar();
+    updateWeaponToggleSlot();
   }
+}
+
+/**
+ * Update the weapon toggle slot UI
+ */
+function updateWeaponToggleSlot() {
+  const weapon = WEAPONS[currentWeapon];
+  if (!weapon) return;
+  
+  const iconEl = document.getElementById('weapon-slot-icon');
+  const labelEl = document.getElementById('weapon-slot-label');
+  
+  if (iconEl) iconEl.textContent = weapon.icon || '🔫';
+  if (labelEl) labelEl.textContent = weapon.name || 'Weapon';
 }
 
 export function getCurrentWeapon() {
@@ -3753,20 +3791,12 @@ function updateTargetFrame() {
   const levelEl = frame.querySelector('.frame-level');
   const hpFill = frame.querySelector('.frame-hp-fill');
   const hpText = frame.querySelector('.frame-hp-text');
-  const weaknessType = frame.querySelector('.weakness-type');
 
   const targetMax = getMaxHP(currentTarget);
   if (nameEl) nameEl.textContent = currentTarget.name;
   if (levelEl) levelEl.textContent = `Lv.${currentTarget.level}`;
   if (hpFill) hpFill.style.setProperty('--hp-pct', getHPPercent(currentTarget));
   if (hpText) hpText.textContent = `${Math.max(0, currentTarget.hp)}/${targetMax}`;
-
-  const config = ENEMY_CONFIGS[currentTarget.type];
-  if (weaknessType && config?.weakness) {
-    weaknessType.textContent = config.weakness;
-  } else if (weaknessType) {
-    weaknessType.textContent = '—';
-  }
     return;
   }
 
@@ -3780,7 +3810,6 @@ function updateTargetFrame() {
     const levelEl = frame.querySelector('.frame-level');
     const hpFill = frame.querySelector('.frame-hp-fill');
     const hpText = frame.querySelector('.frame-hp-text');
-    const weaknessType = frame.querySelector('.weakness-type');
 
     if (nameEl) nameEl.textContent = currentNpcTarget.name;
     
@@ -3804,8 +3833,6 @@ function updateTargetFrame() {
       if (hpFill) hpFill.style.setProperty('--hp-pct', 100);
       if (hpText) hpText.textContent = '—';
     }
-
-    if (weaknessType) weaknessType.textContent = '—';
     return;
   }
 

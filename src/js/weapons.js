@@ -1,357 +1,257 @@
 /**
- * VETUU — Weapon Definitions
- * Sharp weapon identities with distinct playstyles.
+ * VETUU — Weapon Definitions (Simplified)
  * 
- * Rifle: Long range control, slow, penalized up close
- * Pistol: Mobile mid-range, fast, can fire while moving
- * Sword: High melee DPS, gap close, crowd control
- * 
- * BACKWARD COMPATIBLE: Includes legacy `baseDamage`, `multiplier`, `actions[]`
- * for existing combat.js code while also having new `skills` structure.
+ * Combat Simplified Rewrite:
+ * - Player has exactly 2 weapons: Rifle (ranged) and Sword (melee)
+ * - Standardized ranges: Ranged = 6 tiles, Melee = 2 tiles
+ * - No pistols, no casters, no damage types, no weaknesses/resistances
+ * - Melee: hits harder and faster, moves faster
+ * - Ranged: hits softer, can kite if played well
  */
 
+// ============================================
+// PLAYER WEAPONS (only 2)
+// ============================================
 export const WEAPONS = {
   // ============================================
-  // RIFLE - Long Range Control
+  // RIFLE - Ranged Combat (6 tile range)
   // ============================================
   laser_rifle: {
-    name: 'Laser Rifle',
+    name: 'Rifle',
     type: 'ranged',
-    damageType: 'energy',
-    range: 10,
-    baseDamage: 12,
+    combatType: 'ranged',
+    range: 6, // Standardized ranged range
+    baseDamage: 10,
     multiplier: 1.0,
-    minRangePenalty: { within: 2, damageMult: 0.65 }, // -35% inside 2 tiles
-    moveSpeed: 550, // Slower movement
+    moveSpeed: 450,
     projectileColor: '#00FF88',
+    icon: '🔫',
     
-    // Legacy actions array for backward compat
-    actions: [
-      { name: 'Aimed Shot', type: 'attack', cooldown: 1500, damage: 12 },
-      { name: 'Suppressing Fire', type: 'aimed', cooldown: 5000, damage: 8, shots: 3 },
-      { name: 'Piercing Beam', type: 'special', cooldown: 20000, damage: 35, senseCost: 30, pierce: 2 }
-    ],
-    
-    // New skill system
-    skills: {
-      auto: {
-        id: 'rifle_1',
-        name: 'Aimed Shot',
-        key: 1,
-        type: 'attack',
-        gcdMs: 1500,
-        cdMs: 0,
-        range: 10,
-        damage: 12,
-        windupMs: 120,
-        description: 'Precise energy bolt'
-      },
-      mid: {
-        id: 'rifle_2',
-        name: 'Suppressing Fire',
-        key: 2,
-        type: 'aimed',
-        gcdMs: 1500,
-        cdMs: 5000,
-        range: 10,
-        damage: 8,
+    // Weapon abilities (1-3) - no Sense cost
+    abilities: {
+      1: {
+        id: 'rifle_burst',
+        name: 'Burst',
+        description: '3 shots reduced damage',
+        cooldownMs: 6000,
         shots: 3,
-        shotDelayMs: 150,
-        windupMs: 120,
-        onHit: [{ type: 'slow', durationMs: 2000, mult: 1.25 }],
-        description: 'Three quick shots that slow the target'
+        damagePerShot: 6,
+        range: 6
       },
-      heavy: {
-        id: 'rifle_3',
-        name: 'Piercing Beam',
-        key: 3,
-        type: 'special',
-        gcdMs: 1500,
-        cdMs: 20000,
-        senseCost: 30,
-        range: 10,
-        damage: 35,
-        windupMs: 320,
-        pierce: 2, // Hits up to 2 units in line
-        bonusVs: { tag: 'alpha', damageMult: 1.2 },
-        description: 'Devastating beam that pierces through enemies'
+      2: {
+        id: 'rifle_suppress',
+        name: 'Suppress',
+        description: 'Shot + slow',
+        cooldownMs: 10000,
+        damage: 10,
+        range: 6,
+        onHit: [{ type: 'slow', durationMs: 2000, mult: 1.5 }]
+      },
+      3: {
+        id: 'rifle_overcharge',
+        name: 'Overcharge',
+        description: 'Heavy shot',
+        cooldownMs: 20000,
+        damage: 30,
+        range: 6
       }
     }
   },
 
   // ============================================
-  // PISTOL - Mobile Mid-Range
-  // ============================================
-  energy_pistol: {
-    name: 'Energy Pistol',
-    type: 'ranged',
-    damageType: 'energy',
-    range: 6,
-    baseDamage: 9,
-    multiplier: 1.0,
-    moveSpeed: 350, // Fast movement
-    canFireWhileMoving: true,
-    projectileColor: '#00FFFF',
-    
-    // Legacy actions array
-    actions: [
-      { name: 'Quick Shot', type: 'attack', cooldown: 1500, damage: 9 },
-      { name: 'Double Tap', type: 'double', cooldown: 5000, damage: 14, extraShot: { damage: 10, delayMs: 120 } },
-      { name: 'Stun Blast', type: 'special', cooldown: 20000, damage: 18, senseCost: 25, onHit: [{ type: 'stun', durationMs: 800 }] }
-    ],
-    
-    // New skill system
-    skills: {
-      auto: {
-        id: 'pistol_1',
-        name: 'Quick Shot',
-        key: 1,
-        type: 'attack',
-        gcdMs: 1500,
-        cdMs: 0,
-        range: 6,
-        damage: 9,
-        windupMs: 80,
-        description: 'Fast energy blast'
-      },
-      mid: {
-        id: 'pistol_2',
-        name: 'Double Tap',
-        key: 2,
-        type: 'double',
-        gcdMs: 1500,
-        cdMs: 5000,
-        range: 6,
-        damage: 14,
-        windupMs: 60,
-        extraShot: { damage: 10, delayMs: 120 },
-        description: 'Two rapid shots in quick succession'
-      },
-      heavy: {
-        id: 'pistol_3',
-        name: 'Stun Blast',
-        key: 3,
-        type: 'special',
-        gcdMs: 1500,
-        cdMs: 20000,
-        senseCost: 25,
-        range: 6,
-        damage: 18,
-        windupMs: 180,
-        onHit: [{ type: 'stun', durationMs: 800 }],
-        description: 'Concussive blast that stuns the target'
-      }
-    }
-  },
-
-  // ============================================
-  // SWORD - Melee Commitment
+  // SWORD - Melee Combat (2 tile range)
   // ============================================
   vibro_sword: {
-    name: 'Vibro Sword',
+    name: 'Sword',
     type: 'melee',
-    damageType: 'physical',
-    range: 1.5, // Euclidean: adjacent including diagonal (~1.41)
+    combatType: 'melee',
+    range: 2, // Standardized melee range
     baseDamage: 14,
     multiplier: 1.0,
-    moveSpeed: 420,
-    projectileColor: '#FF00FF', // For visual effects
+    moveSpeed: 350, // Faster movement for melee
+    projectileColor: '#FF00FF',
+    icon: '⚔️',
     
-    // Legacy actions array
-    actions: [
-      { name: 'Slash', type: 'attack', cooldown: 1500, damage: 14, cleave: { maxTargets: 2, splashMult: 0.5 } },
-      { name: 'Lunge', type: 'dash', cooldown: 5000, damage: 18, dashTiles: 2, range: 3.0, onHit: [{ type: 'root', durationMs: 600 }] },
-      { name: 'Whirlwind', type: 'cleave', cooldown: 20000, damage: 22, senseCost: 35, aoe: { radius: 1.5, maxTargets: 4 }, knockbackTiles: 1 }
-    ],
-    
-    // New skill system
-    skills: {
-      auto: {
-        id: 'sword_1',
-        name: 'Slash',
-        key: 1,
-        type: 'attack',
-        gcdMs: 1500,
-        cdMs: 0,
-        range: 1.5,
-        damage: 14,
-        windupMs: 90,
-        cleave: { maxTargets: 2, splashMult: 0.5 },
-        description: 'Powerful slash that can hit nearby enemies'
+    // Weapon abilities (1-3) - no Sense cost
+    abilities: {
+      1: {
+        id: 'sword_cleave',
+        name: 'Cleave',
+        description: 'Small AoE',
+        cooldownMs: 6000,
+        damage: 12,
+        range: 2,
+        aoe: { radius: 1.5, maxTargets: 3 }
       },
-      mid: {
-        id: 'sword_2',
+      2: {
+        id: 'sword_lunge',
         name: 'Lunge',
-        key: 2,
-        type: 'dash',
-        gcdMs: 1500,
-        cdMs: 5000,
-        range: 3.0, // Lunge reach
-        dashTiles: 2, // Move Rex 2 tiles toward target
-        damage: 18,
-        windupMs: 120,
-        onHit: [{ type: 'root', durationMs: 600 }],
-        description: 'Dash forward and root the target in place'
+        description: 'Close then strike (target within 4)',
+        cooldownMs: 10000,
+        damage: 16,
+        range: 4, // Can lunge from further away
+        dashTiles: 2
       },
-      heavy: {
-        id: 'sword_3',
-        name: 'Whirlwind',
-        key: 3,
-        type: 'cleave',
-        gcdMs: 1500,
-        cdMs: 20000,
-        senseCost: 35,
-        range: 1.5,
-        damage: 22,
-        windupMs: 220,
-        aoe: { radius: 1.5, maxTargets: 4 },
-        onHit: [{ type: 'slow', durationMs: 2500, mult: 1.35 }],
-        knockbackTiles: 1,
-        description: 'Spinning attack that slows and knocks back enemies'
+      3: {
+        id: 'sword_shockwave',
+        name: 'Shockwave',
+        description: 'AoE + small knockback',
+        cooldownMs: 20000,
+        damage: 20,
+        range: 2,
+        aoe: { radius: 2, maxTargets: 5 },
+        knockbackTiles: 1
       }
     }
   }
 };
 
-// Aliases for old key names
+// Aliases for compatibility
 WEAPONS.rifle = WEAPONS.laser_rifle;
-WEAPONS.pistol = WEAPONS.energy_pistol;
 WEAPONS.sword = WEAPONS.vibro_sword;
 
 // ============================================
-// ENEMY WEAPONS (simpler, no skills)
+// ENEMY WEAPONS (simplified - melee or ranged only)
 // ============================================
 export const ENEMY_WEAPONS = {
-  // Critters
-  claws: {
+  // Melee weapons (range = 2)
+  melee_claws: {
     name: 'Claws',
     type: 'melee',
-    range: 1.5,
+    combatType: 'melee',
+    range: 2,
     baseDamage: 4,
     cooldown: 1200,
-    moveSpeed: 400,
+    moveSpeed: 350, // Melee moves faster
     projectileColor: '#6B5B4F'
   },
   melee_bite: {
     name: 'Bite',
     type: 'melee',
-    range: 1.5,
+    combatType: 'melee',
+    range: 2,
     baseDamage: 5,
     cooldown: 1000,
-    moveSpeed: 380,
+    moveSpeed: 320, // Fast melee
     projectileColor: '#6B5B4F'
-  },
-  
-  // Scavs
-  scav_pistol: {
-    name: 'Scav Pistol',
-    type: 'ranged',
-    range: 5,
-    baseDamage: 7,
-    cooldown: 1400,
-    moveSpeed: 380,
-    projectileColor: '#9B59B6' // Purple for Verdleg/Scavs
-  },
-  scav_rifle: {
-    name: 'Scav Rifle',
-    type: 'ranged',
-    range: 7,
-    baseDamage: 10,
-    cooldown: 1800,
-    moveSpeed: 500,
-    projectileColor: '#9B59B6'
   },
   melee_club: {
     name: 'Club',
     type: 'melee',
-    range: 1.5,
+    combatType: 'melee',
+    range: 2,
     baseDamage: 9,
     cooldown: 1300,
-    moveSpeed: 420,
+    moveSpeed: 380, // Melee moves faster
     projectileColor: '#9B59B6'
   },
-  
-  // Trogs
-  trog_spear: {
-    name: 'Trog Spear',
+  melee_spear: {
+    name: 'Spear',
     type: 'melee',
-    range: 1.5,
+    combatType: 'melee',
+    range: 2,
     baseDamage: 11,
     cooldown: 1100,
-    moveSpeed: 360,
-    projectileColor: '#2ECC71' // Green for Ironcross
+    moveSpeed: 320, // Fast melee
+    projectileColor: '#2ECC71'
   },
-  ritual_bolt: {
-    name: 'Ritual Bolt',
+  boss_blade: {
+    name: 'Captain\'s Blade',
+    type: 'melee',
+    combatType: 'melee',
+    range: 2,
+    baseDamage: 20,
+    cooldown: 1000,
+    moveSpeed: 320,
+    projectileColor: '#8B45D6'
+  },
+
+  // Ranged weapons (range = 6)
+  ranged_rifle: {
+    name: 'Rifle',
     type: 'ranged',
+    combatType: 'ranged',
+    range: 6,
+    baseDamage: 10,
+    cooldown: 1600,
+    moveSpeed: 450,
+    projectileColor: '#9B59B6'
+  },
+  ranged_bolt: {
+    name: 'Bolt',
+    type: 'ranged',
+    combatType: 'ranged',
     range: 6,
     baseDamage: 13,
     cooldown: 2000,
     moveSpeed: 480,
     projectileColor: '#2ECC71'
   },
-  
-  // Karth
-  karth_rifle: {
+  karth_laser: {
     name: 'Karth Laser',
     type: 'ranged',
-    range: 8,
+    combatType: 'ranged',
+    range: 6,
     baseDamage: 14,
     cooldown: 1600,
-    moveSpeed: 450,
-    projectileColor: '#E74C3C' // Red for Karth
-  },
-  karth_pistol: {
-    name: 'Karth Sidearm',
-    type: 'ranged',
-    range: 5,
-    baseDamage: 10,
-    cooldown: 1200,
-    moveSpeed: 380,
+    moveSpeed: 420,
     projectileColor: '#E74C3C'
   },
-  
-  // Guards
   guard_rifle: {
     name: 'Guard Rifle',
     type: 'ranged',
+    combatType: 'ranged',
     range: 6,
     baseDamage: 18,
     cooldown: 1400,
     moveSpeed: 400,
-    projectileColor: '#3498DB' // Blue for friendlies
-  },
-  
-  // Boss
-  boss_blade: {
-    name: 'Captain\'s Blade',
-    type: 'melee',
-    range: 2,
-    baseDamage: 20,
-    cooldown: 1000,
-    moveSpeed: 350,
-    projectileColor: '#8B45D6'
+    projectileColor: '#3498DB'
   }
 };
 
+// Legacy aliases for backward compatibility
+ENEMY_WEAPONS.claws = ENEMY_WEAPONS.melee_claws;
+ENEMY_WEAPONS.melee_bite = ENEMY_WEAPONS.melee_bite;
+ENEMY_WEAPONS.trog_spear = ENEMY_WEAPONS.melee_spear;
+ENEMY_WEAPONS.ritual_bolt = ENEMY_WEAPONS.ranged_bolt;
+ENEMY_WEAPONS.scav_pistol = ENEMY_WEAPONS.ranged_rifle;
+ENEMY_WEAPONS.scav_rifle = ENEMY_WEAPONS.ranged_rifle;
+ENEMY_WEAPONS.laser_rifle = ENEMY_WEAPONS.ranged_rifle;
+ENEMY_WEAPONS.laser_pistol = ENEMY_WEAPONS.ranged_rifle;
+ENEMY_WEAPONS.karth_rifle = ENEMY_WEAPONS.karth_laser;
+ENEMY_WEAPONS.karth_pistol = ENEMY_WEAPONS.karth_laser;
+
 // ============================================
-// HELPER: Get skill by key
+// HELPER: Get weapon ability by slot
 // ============================================
-export function getSkillByKey(weaponId, key) {
+export function getWeaponAbility(weaponId, slot) {
   const weapon = WEAPONS[weaponId];
-  if (!weapon || !weapon.skills) return null;
-  
-  for (const skill of Object.values(weapon.skills)) {
-    if (skill.key === key) return skill;
-  }
-  return null;
+  if (!weapon || !weapon.abilities) return null;
+  return weapon.abilities[slot] || null;
 }
 
 // ============================================
-// HELPER: Get all skills as array
+// HELPER: Get all abilities for a weapon
 // ============================================
-export function getWeaponSkills(weaponId) {
+export function getWeaponAbilities(weaponId) {
   const weapon = WEAPONS[weaponId];
-  if (!weapon || !weapon.skills) return [];
-  return Object.values(weapon.skills);
+  if (!weapon || !weapon.abilities) return [];
+  return Object.entries(weapon.abilities).map(([slot, ability]) => ({
+    slot: parseInt(slot, 10),
+    ...ability
+  }));
+}
+
+// ============================================
+// HELPER: Get weapon info for UI
+// ============================================
+export function getWeaponInfo(weaponId) {
+  const weapon = WEAPONS[weaponId];
+  if (!weapon) return null;
+  return {
+    name: weapon.name,
+    icon: weapon.icon,
+    type: weapon.combatType,
+    range: weapon.range
+  };
 }

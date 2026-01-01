@@ -79,126 +79,128 @@ let lastPickedSpawnerId = null;
 let spawnTickInterval = null;
 
 // ============================================
-// ENEMY TYPE DEFINITIONS
+// ENEMY TYPE DEFINITIONS (Simplified Combat)
 // ============================================
+// All enemies are either melee or ranged
+// - Melee: range = 2, faster movement (320-380ms)
+// - Ranged: range = 6, slower movement (420-480ms)
 const ENEMY_TYPES = {
-  // Critters (passive, low level)
+  // Critters (passive, melee)
   critter: {
     name: 'Critter',
     baseHp: 20,
     baseAtk: 3,
     baseDef: 1,
     color: '#6B5B4F',
+    combatType: 'melee',
     weapon: 'melee_bite',
-    moveSpeed: 450,
+    moveSpeed: 320, // Fast melee
     defaultAggroType: 'passive',
     defaultAggroRadius: 2,
     defaultLeashRadius: 10,
     defaultDeaggroMs: 3000
   },
   
-  // Scavengers (mixed behavior)
-  scav_pistol: {
-    name: 'Scav Pistoleer',
-    baseHp: 35,
-    baseAtk: 8,
-    baseDef: 3,
+  // Scavengers - ranged variant
+  scav_ranged: {
+    name: 'Scav Shooter',
+    baseHp: 30,
+    baseAtk: 10,
+    baseDef: 2,
     color: '#8B4513',
-    weapon: 'pistol',
+    combatType: 'ranged',
+    weapon: 'ranged_rifle',
     projectileColor: '#9B59B6',
-    moveSpeed: 400,
+    moveSpeed: 450,
     defaultAggroType: 'conditional',
     defaultAggroRadius: 6,
     defaultLeashRadius: 14,
     defaultDeaggroMs: 4000
   },
-  scav_rifle: {
-    name: 'Scav Rifleman',
-    baseHp: 30,
-    baseAtk: 12,
-    baseDef: 2,
-    color: '#A0522D',
-    weapon: 'rifle',
-    projectileColor: '#9B59B6',
-    moveSpeed: 350,
-    defaultAggroType: 'conditional',
-    defaultAggroRadius: 8,
-    defaultLeashRadius: 16,
-    defaultDeaggroMs: 4000
-  },
+  // Scavengers - melee variant  
   scav_melee: {
     name: 'Scav Brawler',
     baseHp: 45,
-    baseAtk: 10,
+    baseAtk: 12,
     baseDef: 4,
     color: '#8B5A2B',
+    combatType: 'melee',
     weapon: 'melee_club',
-    moveSpeed: 380,
+    moveSpeed: 350, // Fast melee
     defaultAggroType: 'conditional',
     defaultAggroRadius: 5,
     defaultLeashRadius: 12,
     defaultDeaggroMs: 4000
   },
   
-  // Trog Warband (aggressive nomads)
+  // Trog Warband - melee warrior
   trog_warrior: {
     name: 'Trog Warrior',
     baseHp: 50,
     baseAtk: 14,
     baseDef: 5,
     color: '#556B2F',
+    combatType: 'melee',
     weapon: 'melee_spear',
-    moveSpeed: 360,
+    moveSpeed: 320, // Fast melee
     defaultAggroType: 'aggressive',
     defaultAggroRadius: 8,
     defaultLeashRadius: 18,
     defaultDeaggroMs: 5000
   },
+  // Trog Warband - ranged shaman
   trog_shaman: {
     name: 'Trog Shaman',
     baseHp: 35,
     baseAtk: 18,
     baseDef: 3,
     color: '#6B8E23',
-    weapon: 'ritual_bolt',
-    projectileColor: '#9B59B6',
-    moveSpeed: 320,
+    combatType: 'ranged',
+    weapon: 'ranged_bolt',
+    projectileColor: '#2ECC71',
+    moveSpeed: 480,
     defaultAggroType: 'aggressive',
     defaultAggroRadius: 10,
     defaultLeashRadius: 16,
     defaultDeaggroMs: 5000
   },
   
-  // Karth Directorate (military, aggressive)
+  // Karth Directorate - ranged soldier
   karth_grunt: {
     name: 'Karth Soldier',
     baseHp: 55,
     baseAtk: 16,
     baseDef: 6,
     color: '#4A4A4A',
-    weapon: 'laser_rifle',
+    combatType: 'ranged',
+    weapon: 'karth_laser',
     projectileColor: '#E74C3C',
-    moveSpeed: 380,
+    moveSpeed: 420,
     defaultAggroType: 'aggressive',
     defaultAggroRadius: 10,
     defaultLeashRadius: 20,
     defaultDeaggroMs: 6000
   },
+  // Karth Directorate - melee officer
   karth_officer: {
     name: 'Karth Officer',
     baseHp: 70,
     baseAtk: 20,
     baseDef: 8,
     color: '#2F2F2F',
-    weapon: 'laser_pistol',
-    projectileColor: '#E74C3C',
-    moveSpeed: 350,
+    combatType: 'melee',
+    weapon: 'melee_club',
+    moveSpeed: 350, // Fast melee
     defaultAggroType: 'aggressive',
-    defaultAggroRadius: 12,
-    defaultLeashRadius: 22,
+    defaultAggroRadius: 8,
+    defaultLeashRadius: 18,
     defaultDeaggroMs: 6000
   }
 };
+
+// Legacy aliases for spawner compatibility
+ENEMY_TYPES.scav_pistol = ENEMY_TYPES.scav_ranged;
+ENEMY_TYPES.scav_rifle = ENEMY_TYPES.scav_ranged;
 
 // ============================================
 // INITIALIZATION
