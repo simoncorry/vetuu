@@ -10,7 +10,7 @@ import { canMoveTo, getObjectAt, getNpcAt } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue, isDialogueOpen } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
-import { initCombat, handleTargeting, renderEnemies, playerSpecial, cycleWeapon, getCurrentWeapon, getWeapons, useAction, useWeaponAbility, useSenseAbility, useUtilityAbility, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
+import { initCombat, handleTargeting, renderEnemies, playerSpecial, cycleWeapon, useAction, useWeaponAbility, useSenseAbility, useUtilityAbility, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
 import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap, toExpandedCoords, BASE_CENTER } from './mapGenerator.js';
@@ -698,48 +698,9 @@ function initActionBar() {
     }
   });
 
-  updateActionBarHighlight();
-}
-
-function updateActionBarHighlight() {
-  const current = getCurrentWeapon();
-  const weapons = getWeapons();
-  const weapon = weapons[current];
-
-  // Update weapon toggle slot display
-  const weaponLabel = document.getElementById('weapon-slot-label');
-  const weaponIcon = document.getElementById('weapon-slot-icon');
-
-  if (weaponLabel && weapon) weaponLabel.textContent = weapon.name;
-  if (weaponIcon && weapon) {
-    // Use appropriate icon based on weapon type
-    weaponIcon.textContent = weapon.icon || (weapon.type === 'ranged' ? '🔫' : '⚔️');
-  }
-
-  // Update weapon ability slot labels based on current weapon
-  if (weapon?.abilities) {
-    [1, 2, 3].forEach(slotNum => {
-      const ability = weapon.abilities[slotNum];
-      if (ability) {
-        const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
-        if (slot) {
-          const label = slot.querySelector('.slot-label');
-          const icon = slot.querySelector('.slot-icon');
-          if (label) label.textContent = ability.name;
-          if (icon) {
-            // Set appropriate icon based on ability
-            if (ability.id?.includes('burst')) icon.textContent = '💥';
-            else if (ability.id?.includes('suppress')) icon.textContent = '🎯';
-            else if (ability.id?.includes('overcharge')) icon.textContent = '⚡';
-            else if (ability.id?.includes('cleave')) icon.textContent = '🗡️';
-            else if (ability.id?.includes('lunge')) icon.textContent = '🏃';
-            else if (ability.id?.includes('shockwave')) icon.textContent = '💫';
-          }
-          slot.title = `${ability.name}: ${ability.description || ''}`;
-        }
-      }
-    });
-  }
+  // NOTE: Action bar UI is already initialized by combat.js updateActionBar()
+  // which is called during initCombat() before initActionBar().
+  // No need for duplicate updateActionBarHighlight() here.
 }
 
 // ============================================
