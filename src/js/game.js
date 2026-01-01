@@ -679,21 +679,14 @@ function handleSecondaryAction() {
 // ACTION BAR SETUP
 // ============================================
 function initActionBar() {
-  // Action slots (1, 2, 3)
-  document.querySelectorAll('.action-slot[data-action-key]').forEach(slot => {
-    slot.addEventListener('click', () => {
-      const key = slot.dataset.actionKey;
-      if (key) {
-        useAction(key);
-      }
-    });
-  });
-
-  // Weapon cycle button
-  document.getElementById('weapon-cycle-btn')?.addEventListener('click', () => {
+  // Weapon toggle slot
+  document.getElementById('weapon-toggle-slot')?.addEventListener('click', () => {
     cycleWeapon();
     updateActionBarHighlight();
   });
+
+  // Note: Other action slots (weapon/sense/utility abilities) are handled by input.js
+  // via initActionBarClicks() which reads data-slot and data-action-type attributes
 
   // Inventory button
   document.querySelector('[data-action="inventory"]')?.addEventListener('click', () => {
@@ -716,21 +709,37 @@ function updateActionBarHighlight() {
   const weapons = getWeapons();
   const weapon = weapons[current];
 
-  // Update weapon display
-  const weaponName = document.getElementById('current-weapon-name');
-  const weaponIcon = document.getElementById('current-weapon-icon');
+  // Update weapon toggle slot display
+  const weaponLabel = document.getElementById('weapon-slot-label');
+  const weaponIcon = document.getElementById('weapon-slot-icon');
 
-  if (weaponName && weapon) weaponName.textContent = weapon.name;
-  if (weaponIcon && weapon) weaponIcon.textContent = weapon.icon;
+  if (weaponLabel && weapon) weaponLabel.textContent = weapon.name;
+  if (weaponIcon && weapon) {
+    // Use appropriate icon based on weapon type
+    weaponIcon.textContent = weapon.icon || (weapon.type === 'ranged' ? '🔫' : '⚔️');
+  }
 
-  // Update action slot labels based on current weapon
-  if (weapon?.actions) {
-    weapon.actions.forEach((action, index) => {
-      const slot = document.querySelector(`.action-slot[data-action-key="${index + 1}"]`);
-      if (slot) {
-        const label = slot.querySelector('.slot-label');
-        if (label) label.textContent = action.name;
-        slot.title = action.name;
+  // Update weapon ability slot labels based on current weapon
+  if (weapon?.abilities) {
+    [1, 2, 3].forEach(slotNum => {
+      const ability = weapon.abilities[slotNum];
+      if (ability) {
+        const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
+        if (slot) {
+          const label = slot.querySelector('.slot-label');
+          const icon = slot.querySelector('.slot-icon');
+          if (label) label.textContent = ability.name;
+          if (icon) {
+            // Set appropriate icon based on ability
+            if (ability.id?.includes('burst')) icon.textContent = '💥';
+            else if (ability.id?.includes('suppress')) icon.textContent = '🎯';
+            else if (ability.id?.includes('overcharge')) icon.textContent = '⚡';
+            else if (ability.id?.includes('cleave')) icon.textContent = '🗡️';
+            else if (ability.id?.includes('lunge')) icon.textContent = '🏃';
+            else if (ability.id?.includes('shockwave')) icon.textContent = '💫';
+          }
+          slot.title = `${ability.name}: ${ability.description || ''}`;
+        }
       }
     });
   }
