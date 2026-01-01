@@ -56,6 +56,21 @@ ENEMY_CONFIGS.trog_warband = ENEMY_CONFIGS.trog_warrior;
 // Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;
 
+// ============================================
+// COMBAT SIMPLIFIED CONSTANTS
+// ============================================
+// Standardized ranges (all enemies use these)
+const MELEE_RANGE = 2;
+const RANGED_RANGE = 6;
+
+// Ranged AI distance band (maintain 3-6 tiles from player)
+const RANGED_MIN_DISTANCE = 3;
+const RANGED_MAX_DISTANCE = 6;
+const RANGED_PREFERRED_DISTANCE = 4;
+
+// Melee AI movement speed bonus (melee moves faster)
+const MELEE_SPEED_BONUS = 0.8; // 20% faster movement
+
 // Drycross center for player respawn
 let DRYCROSS_CENTER = { x: 56, y: 42 };
 
@@ -1848,16 +1863,18 @@ function moveToFlankPosition(enemy) {
 // ============================================
 function aiRanged(enemy, weapon, dist, hasLOS, t, inSettle = false) {
   const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
+  const attackRange = weapon.range || RANGED_RANGE;
   
-  // If player is too close, retreat (always try to escape melee)
-  if (dist <= 2 && isExpired(enemy.moveCooldown, t)) {
-        moveAwayFromPlayer(enemy);
+  // If player is too close (within melee range), retreat immediately
+  // This is critical for ranged enemies to maintain their distance band
+  if (dist < RANGED_MIN_DISTANCE && isExpired(enemy.moveCooldown, t)) {
+    moveAwayFromPlayer(enemy);
     enemy.moveCooldown = t + moveCD;
     return;
   }
   
-  // In range with LOS - check if we can engage (max 2 attackers)
-  if (dist <= weapon.range && hasLOS) {
+  // In attack range with LOS - check if we can engage (max 2 attackers)
+  if (dist <= attackRange && dist >= RANGED_MIN_DISTANCE && hasLOS) {
     if (canEnemyEngage(enemy, t)) {
       // Spawn settle blocks attacks
       if (inSettle) {
@@ -1885,9 +1902,9 @@ function aiRanged(enemy, weapon, dist, hasLOS, t, inSettle = false) {
     return;
   }
   
-  // Out of range with LOS - advance cautiously
-  if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.6) {
-      moveTowardPlayerRanged(enemy, weapon.range);
+  // Out of range with LOS - advance to preferred distance
+  if (dist > attackRange && isExpired(enemy.moveCooldown, t) && Math.random() < 0.6) {
+    moveTowardPlayerRanged(enemy, attackRange);
     enemy.moveCooldown = t + moveCD;
   }
 }
