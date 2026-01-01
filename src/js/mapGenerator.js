@@ -4,10 +4,6 @@
  * Drycross base centered at (240, 168) in expanded map
  */
 
-// Base map center (original coordinates)
-const ORIGINAL_BASE_CENTER = { x: 56, y: 42 };
-const SCALE_FACTOR = 4;
-
 // New map center (scaled)
 export const BASE_CENTER = { 
   x: Math.floor(120 * 2), // 240 - center of 480 width

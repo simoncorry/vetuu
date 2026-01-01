@@ -25,7 +25,6 @@ let playerEl = null;
 
 // Movement state
 let isMoving = false;
-let moveQueue = []; // Queue of { x, y } destinations
 let currentTween = null;
 
 // Keyboard state
@@ -81,7 +80,6 @@ export function initMovement(gameState, callbacks = {}) {
 // MAIN MOVEMENT TICK
 // ============================================
 let lastTickTime = null;
-let tickRunning = false;
 
 function movementTick(timestamp) {
   // Initialize lastTickTime on first frame

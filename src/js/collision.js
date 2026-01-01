@@ -142,7 +142,6 @@ function isLOSBlocked(state, x, y) {
   // Check for solid objects that block LOS (walls, etc.)
   const obj = getObjectAt(state, x, y);
   if (obj) {
-    const objDef = state.map.legend.objects[obj.type];
     // Walls block LOS, other solid objects might not
     if (obj.type === 'wall' || obj.type === 'act3_blocker') {
       // Check if blocker is active

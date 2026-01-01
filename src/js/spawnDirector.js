@@ -13,7 +13,6 @@ import { canMoveTo } from './collision.js';
 import { hasFlag } from './save.js';
 import { distCoords, randomRange } from './utils.js';
 import { AI } from './aiConstants.js';
-import { initEnemyAI } from './aiUtils.js';
 import { nowMs } from './time.js';
 import { normalizeHealthKeys, clampHP } from './entityCompat.js';
 
@@ -38,11 +37,9 @@ const SPAWN_TICK_MS = 500;          // How often to check spawns
 const MAX_STRAYS = 6;
 const MAX_PACKS = 2;
 const MAX_TOTAL_ENEMIES = 12;
-const MAX_ELITES = 1;
 
 // NPE (New Player Experience) critter guarantees
 const NPE_CRITTER_MIN = 2;
-const NPE_CRITTER_MAX = 4;
 const NPE_CRITTER_ZONE_MIN = 8;     // Min distance from base for NPE critters
 const NPE_CRITTER_ZONE_MAX = 16;    // Max distance from base for NPE critters
 
@@ -74,7 +71,6 @@ let baseCenter = { x: 236, y: 162 };  // Will be set from map offset
 let baseBounds = null;
 let baseBuffer = 4;
 let spawners = [];
-let lastSpawnTick = 0;
 let lastPickedSpawnerId = null;
 let spawnTickInterval = null;
 
@@ -655,7 +651,7 @@ function isSpawnerEligible(spawner, now, counts) {
       packs.set(e.packId, { x: e.homeCenter?.x || e.x, y: e.homeCenter?.y || e.y });
     }
     
-    for (const [packId, center] of packs) {
+    for (const [_packId, center] of packs) {
       const dist = distCoords(spawner.center.x, spawner.center.y, center.x, center.y);
       if (dist < spawner.minDistanceToOtherPacks) return false;
     }
@@ -671,7 +667,7 @@ function isSpawnerEligible(spawner, now, counts) {
 // ============================================
 // WEIGHTED SPAWNER SELECTION
 // ============================================
-function chooseSpawner(eligible, counts) {
+function chooseSpawner(eligible, _counts) {
   if (eligible.length === 0) return null;
   
   const isAct3 = hasFlag(currentState, 'act3');

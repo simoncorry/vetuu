@@ -18,19 +18,19 @@ import { hasLineOfSight, canMoveTo } from './collision.js';
 import { WEAPONS, ENEMY_WEAPONS } from './weapons.js';
 import { 
   distCoords, shuffleArray, applyEffect, tickEffects,
-  isSlowed, isVulnerable, getEffectiveMoveSpeed, getVulnMult
+  isSlowed, isVulnerable
 } from './utils.js';
 import { AI } from './aiConstants.js';
-import { getMaxHP, getHPPercent, normalizeHealthKeys, clampHP } from './entityCompat.js';
-import { nowMs, toPerfTime, isExpired, remainingMs } from './time.js';
+import { getMaxHP, getHPPercent } from './entityCompat.js';
+import { nowMs, toPerfTime, isExpired } from './time.js';
 import {
-  isImmune, hasSpawnImmunity, isStunned, isRooted, canMove, canAct,
+  isImmune, hasSpawnImmunity, isStunned, isRooted,
   isBrokenOff, isInSpawnSettle, canAggro,
   getSpawnImmunityRemaining, getSpawnSettleRemaining,
-  getLeashRadius, getAggroRadius, computeDeaggroRadius,
-  startRetreat, processRetreat, finishResetAtHome,
+  getAggroRadius,
+  startRetreat,
   shouldBreakOffFromGuards, checkLeashAndDeaggro,
-  retreatPack, initEnemyAI, ensureEffects
+  retreatPack, ensureEffects
 } from './aiUtils.js';
 
 // Enemy type configurations (Simplified - no weakness/resistance)
@@ -55,16 +55,10 @@ const DEFAULT_MOVE_COOLDOWN = 400;
 // COMBAT SIMPLIFIED CONSTANTS
 // ============================================
 // Standardized ranges (all enemies use these)
-const MELEE_RANGE = 2;
 const RANGED_RANGE = 6;
 
 // Ranged AI distance band (maintain 3-6 tiles from player)
 const RANGED_MIN_DISTANCE = 3;
-const RANGED_MAX_DISTANCE = 6;
-const RANGED_PREFERRED_DISTANCE = 4;
-
-// Melee AI movement speed bonus (melee moves faster)
-const MELEE_SPEED_BONUS = 0.8; // 20% faster movement
 
 // Drycross center for player respawn
 let DRYCROSS_CENTER = { x: 56, y: 42 };
@@ -144,7 +138,7 @@ function levelDiffMult(attackerLevel, defenderLevel) {
  * Type effectiveness multiplier (DISABLED - combat simplification)
  * Weakness/resistance system removed. Always returns 1.
  */
-function typeMult(damageType, defenderConfig) {
+function typeMult(_damageType, _defenderConfig) {
   return 1;
 }
 
@@ -431,7 +425,6 @@ function markCombatEvent(t = nowMs()) {
 }
 
 // Melee turn tracker - which enemy attacked last, rotate through
-let meleeAttackQueue = [];
 let lastMeleeAttacker = null;
 
 // ============================================
@@ -911,41 +904,6 @@ function endCombat() {
   }
   
   logCombat('Combat ended.');
-}
-
-function findNearestEnemyInRange() {
-  const weapon = WEAPONS[currentWeapon];
-  if (!weapon) return null;
-  
-  const player = currentState.player;
-  
-  // Prioritize engaged enemies first
-  const engaged = getEngagedEnemies();
-  if (engaged.length > 0) {
-    engaged.sort((a, b) => {
-      const distA = distCoords(a.x, a.y, player.x, player.y);
-      const distB = distCoords(b.x, b.y, player.x, player.y);
-      return distA - distB;
-    });
-    return engaged[0];
-  }
-  
-  // Fall back to any nearby enemy within weapon range
-  const enemies = currentState.runtime.activeEnemies.filter(e => {
-    if (e.hp <= 0) return false;
-    const d = distCoords(e.x, e.y, player.x, player.y);
-    return d <= weapon.range;
-  });
-  
-  if (enemies.length === 0) return null;
-  
-  enemies.sort((a, b) => {
-    const distA = distCoords(a.x, a.y, player.x, player.y);
-    const distB = distCoords(b.x, b.y, player.x, player.y);
-    return distA - distB;
-  });
-  
-  return enemies[0];
 }
 
 // Find the nearest enemy (any distance) - used when no target and pressing action keys
@@ -2104,11 +2062,6 @@ function updateEnemyPosition(enemy, x, y, forceMove = false) {
   if (el) {
     el.style.transform = `translate3d(${x * 24}px, ${y * 24}px, 0)`;
   }
-}
-
-// Get enemy's effective move cooldown (factoring in slow)
-function getEnemyMoveCooldown(enemy, baseMoveCD) {
-  return getEffectiveMoveSpeed(enemy, baseMoveCD);
 }
 
 // ============================================
@@ -4612,18 +4565,6 @@ export function spawnBoss(state, bossDef) {
 function calculateEnemyHP(level) { return 20 + level * 8; }
 function calculateEnemyAtk(level) { return 3 + Math.floor(level * 0.8); }
 function calculateEnemyDef(level) { return 2 + Math.floor(level * 0.5); }
-
-function getEnemyColor(type) {
-  const colors = {
-    critter: '#6B5B4F',
-    scav: '#8B6B4F',
-    trog_warband: '#8B5A2B',
-    karth_grunt: '#2E343B',
-    retriever_captain: '#8B45D6',
-    ironcross_guard: '#22B6B8'
-  };
-  return colors[type] || '#D64545';
-}
 
 // ============================================
 // DEATH HANDLING

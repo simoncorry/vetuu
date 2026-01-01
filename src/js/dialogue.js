@@ -11,7 +11,6 @@ let textEl = null;
 let choicesEl = null;
 
 let currentState = null;
-let currentNpc = null;
 let currentNodeId = null;
 let rootNodeId = null; // The starting node of the conversation
 let isOpen = false;
@@ -164,7 +163,6 @@ function handleDialogueKey(e) {
       return; // Can't escape mandatory dialogues
     }
     hideDialogue();
-    return;
   }
 }
 
@@ -211,9 +209,8 @@ function setSelectedIndex(index) {
 // ============================================
 // SHOW DIALOGUE
 // ============================================
-export function showDialogue(state, nodeId, npc = null, simpleText = null) {
+export function showDialogue(state, nodeId, _npc = null, simpleText = null) {
   currentState = state;
-  currentNpc = npc;
   currentNodeId = nodeId;
   rootNodeId = nodeId; // Remember the root for returning later
   dialogueHistory = []; // Clear history when starting new dialogue
@@ -426,17 +423,6 @@ function updateChoiceKeys() {
       keyEl.textContent = index + 1;
     }
   });
-}
-
-function goBack() {
-  if (dialogueHistory.length === 0) return;
-  
-  const previousNodeId = dialogueHistory.pop();
-  const previousNode = currentState.dialogue.nodes[previousNodeId];
-  
-  if (previousNode) {
-    renderNode(previousNode, previousNodeId, false); // false = don't add to history
-  }
 }
 
 function returnToRoot() {
@@ -665,7 +651,6 @@ export function hideDialogue() {
     dialoguePanel.close();
   }
   isOpen = false;
-  currentNpc = null;
   choiceButtons = [];
   selectedIndex = 0;
 }

@@ -12,7 +12,6 @@
 import { saveGame } from './save.js';
 import { renderActors } from './render.js';
 
-let currentState = null;
 let questList = null;
 
 // ============================================
@@ -153,7 +152,6 @@ function isQuestReadyToComplete(state, questId) {
 // INITIALIZATION
 // ============================================
 export function initQuests(state) {
-  currentState = state;
   questList = document.getElementById('quest-list');
   
   // Initial render

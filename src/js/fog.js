@@ -142,7 +142,7 @@ export function getFogMask() {
 // ============================================
 // FOG RENDERING (Canvas-based)
 // ============================================
-export function renderFog(state) {
+export function renderFog(_state) {
   if (!fogCtx || !fogMask) return;
 
   // Clear canvas

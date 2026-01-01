@@ -294,7 +294,7 @@ export function finishResetAtHome(enemy, t = nowMs()) {
 /**
  * Check if enemy should break off due to nearby guards
  */
-export function shouldBreakOffFromGuards(enemy, guards, t = nowMs()) {
+export function shouldBreakOffFromGuards(enemy, guards, _t = nowMs()) {
   if (!guards || guards.length === 0) return false;
   
   const enemyLevel = enemy.level ?? 1;

@@ -9,9 +9,7 @@ import { createPathTo, cancelPath } from './movement.js';
 // ============================================
 // STATE
 // ============================================
-let interactCallback = null;
 let targetCallback = null;
-let secondaryCallback = null;
 
 const TILE_SIZE = 24;
 
@@ -22,10 +20,8 @@ const WEAPON_TOGGLE_DEBOUNCE_MS = 150;
 // ============================================
 // INITIALIZATION
 // ============================================
-export function initInput(onInteract, onTarget, onSecondary) {
-  interactCallback = onInteract;
+export function initInput(_onInteract, onTarget, _onSecondary) {
   targetCallback = onTarget || (() => {});
-  secondaryCallback = onSecondary || (() => {});
 
   // Non-movement keyboard
   document.addEventListener('keydown', onKeyDown);

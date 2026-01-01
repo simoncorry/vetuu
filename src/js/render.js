@@ -8,7 +8,7 @@
  */
 
 import { hasFlag } from './save.js';
-import { getNpcQuestMarker, getAvailableQuestsForNpc, getCompletableQuestsForNpc } from './quests.js';
+import { getNpcQuestMarker } from './quests.js';
 
 let viewport = null;
 let world = null;
@@ -59,7 +59,7 @@ export function initRenderer(state) {
 // GROUND RENDERING (Canvas-based)
 // ============================================
 export function renderWorld(state) {
-  const { ground, legend, meta } = state.map;
+  const { ground, legend } = state.map;
 
   if (!groundCtx) return;
 

@@ -6,14 +6,14 @@
 import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects } from './render.js';
 import { initInput } from './input.js';
 import { initMovement, createPathTo } from './movement.js';
-import { canMoveTo, getObjectAt, getNpcAt } from './collision.js';
+import { getObjectAt, getNpcAt } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
-import { initDialogue, showDialogue, isDialogueOpen } from './dialogue.js';
+import { initDialogue, showDialogue } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
-import { initCombat, handleTargeting, renderEnemies, playerSpecial, cycleWeapon, useAction, useWeaponAbility, useSenseAbility, useUtilityAbility, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
+import { initCombat, handleTargeting, renderEnemies, playerSpecial, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
 import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
-import { expandMap, toExpandedCoords, BASE_CENTER } from './mapGenerator.js';
+import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
 
 // ============================================
@@ -577,7 +577,7 @@ function handleRead(obj) {
   if (text) showDialogue(state, null, null, text);
 }
 
-function handleLoot(obj) {
+function handleLoot(_obj) {
   showToast('Searched... nothing useful', 'item');
 }
 
@@ -753,7 +753,7 @@ async function init() {
       } else {
         // Old save with invalid coordinates - keep stats but reset position
         console.log('Detected old save format, resetting position to new map');
-        const { x, y, ...otherStats } = saved.player;
+        const { x: _x, y: _y, ...otherStats } = saved.player;
         Object.assign(state.player, otherStats);
         Object.assign(state.flags, saved.flags);
         Object.assign(state.quests, saved.quests);
