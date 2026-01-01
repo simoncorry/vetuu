@@ -679,11 +679,8 @@ function handleSecondaryAction() {
 // ACTION BAR SETUP
 // ============================================
 function initActionBar() {
-  // Weapon toggle slot
-  document.getElementById('weapon-toggle-slot')?.addEventListener('click', () => {
-    cycleWeapon();
-    updateActionBarHighlight();
-  });
+  // Weapon toggle slot is handled by input.js via initActionBarClicks()
+  // cycleWeapon() in combat.js already calls updateWeaponToggleSlot() for UI updates
 
   // Note: Other action slots (weapon/sense/utility abilities) are handled by input.js
   // via initActionBarClicks() which reads data-slot and data-action-type attributes
