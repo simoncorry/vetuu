@@ -7,6 +7,8 @@
  * Always use translate3d() for transforms, never translate().
  */
 
+import { tryExecuteCombatIntent } from './combat.js';
+
 // ============================================
 // CONSTANTS
 // ============================================
@@ -221,6 +223,9 @@ function completeMove() {
   
   // Notify completion
   onMoveComplete(targetX, targetY);
+  
+  // Try to execute combat intent (attack after arriving in range)
+  tryExecuteCombatIntent();
   
   // Check if path complete and should interact
   if (currentPath.length === 0 && interactOnArrival) {

@@ -400,6 +400,18 @@ let combatTickInterval = null;
 let lastHitTime = 0;
 let lastRegenTick = 0;
 
+// Combat activity marker - tracks actual damage events for regen gating
+// Fixes: "any engaged enemy" detection keeping player in combat forever
+let lastCombatEventAt = 0;
+
+/**
+ * Mark that a combat event (damage dealt/taken) occurred.
+ * Used for reliable "in combat" detection for regen gating.
+ */
+function markCombatEvent(t = nowMs()) {
+  lastCombatEventAt = t;
+}
+
 // Melee turn tracker - which enemy attacked last, rotate through
 let meleeAttackQueue = [];
 let lastMeleeAttacker = null;
@@ -729,6 +741,9 @@ function startCombatTick() {
     }
     updateCooldownUI();
 
+    // Try to execute combat intent (handles immunity expiry, movement completion)
+    tryExecuteCombatIntent();
+
     // Process auto-attack
     processAutoAttack();
 
@@ -930,7 +945,10 @@ function findNearestEnemy() {
 function processRegeneration(now) {
   const player = currentState.player;
   const timeSinceHit = now - lastHitTime;
-  const isInCombat = currentState.runtime.activeEnemies.some(e => e.hp > 0 && e.isEngaged);
+  
+  // Use lastCombatEventAt for reliable combat detection
+  // This fixes: "any engaged enemy" keeping player in combat forever (stuck sense)
+  const isInCombat = (now - lastCombatEventAt) <= COMBAT_TIMEOUT;
 
   if (!isInCombat || timeSinceHit > COMBAT_TIMEOUT) {
     if (now - lastRegenTick >= REGEN_OUT_OF_COMBAT_INTERVAL) {
@@ -1615,6 +1633,9 @@ function isEnemyPassive(enemy) {
 export function provokeEnemy(enemy, t = nowMs(), reason = 'player_attack') {
   if (!enemy || enemy.hp <= 0) return;
   
+  // Mark combat activity (engagement counts as combat start)
+  markCombatEvent(t);
+  
   // Mark as provoked for 15 seconds
   provokedEnemies.add(enemy.id);
   enemy.provokedUntil = t + 15000;
@@ -2087,6 +2108,7 @@ function enemyAttack(enemy, weapon, t = nowMs()) {
 
   player.hp -= damage;
   lastHitTime = t;
+  markCombatEvent(t); // Track combat activity for regen gating
 
   showDamageNumber(player.x, player.y, damage, false, true);
   logCombat(`${enemy.name} hits you for ${damage}!`);
@@ -2186,6 +2208,7 @@ function executeAttack(weapon) {
   }
 
   currentTarget.hp -= damage;
+  markCombatEvent(); // Track combat activity for regen gating
   
   // Use crit flag from calculateDamage instead of heuristic
   const isCrit = !!weapon.__lastCrit;
@@ -2440,6 +2463,12 @@ export function useAction(actionKey) {
       autoAttackEnabled = true;
       inCombat = true;
       
+      // Spend sense before executing (consistent with other actions)
+      if (action.senseCost) {
+        player.sense = Math.max(0, player.sense - action.senseCost);
+        updatePlayerSenseBar();
+      }
+      
       executeCleave(weapon, action);
       actionCooldowns[keyNum] = action.cooldown;
       actionMaxCooldowns[keyNum] = action.cooldown;
@@ -2513,6 +2542,7 @@ function executeEnhancedAttack(weapon, action) {
   }
 
   currentTarget.hp -= damage;
+  markCombatEvent(); // Track combat activity for regen gating
   showDamageNumber(currentTarget.x, currentTarget.y, damage, true);
   logCombat(`${action.name || 'Enhanced Attack'}: ${damage} damage!`);
 
@@ -2543,6 +2573,7 @@ function executeDoubleAttack(weapon, action) {
   const damage1 = calculateDamage(weapon, target, action.damage);
   showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
   target.hp -= damage1;
+  markCombatEvent(); // Track combat activity
   showDamageNumber(target.x, target.y, damage1, false);
   updateEnemyHealthBar(target);
   updateTargetFrame();
@@ -2563,6 +2594,7 @@ function executeDoubleAttack(weapon, action) {
     const damage2 = calculateDamage(weapon, target, extraDamage);
     showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
     target.hp -= damage2;
+    markCombatEvent(); // Track combat activity
     showDamageNumber(target.x, target.y, damage2, false);
     updateEnemyHealthBar(target);
       updateTargetFrame();
@@ -2596,6 +2628,7 @@ function executeRapidFire(weapon, action) {
       const damage = calculateDamage(weapon, target, action.damage);
       showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
       target.hp -= damage;
+      markCombatEvent(); // Track combat activity
       showDamageNumber(target.x, target.y, damage, false);
       updateEnemyHealthBar(target);
       updateTargetFrame();
@@ -2626,17 +2659,14 @@ function executeCleave(weapon, action) {
     return;
   }
 
-  if (action.senseCost) {
-  player.sense -= action.senseCost;
-  updatePlayerSenseBar();
-  }
-
+  // Sense is now spent in useAction() case handler before calling this
   showCleaveEffect(player.x, player.y);
 
   for (const enemy of adjacent) {
     provokeEnemy(enemy);
     let damage = calculateDamage(weapon, enemy, action.multiplier || 1);
     enemy.hp -= damage;
+    markCombatEvent(); // Track combat activity for regen gating
     showDamageNumber(enemy.x, enemy.y, damage, true);
     updateEnemyHealthBar(enemy);
     
@@ -2880,6 +2910,112 @@ export function getWeapons() {
 }
 
 // ============================================
+// COMBAT INTENT SYSTEM
+// ============================================
+// Persistent engagement: right-click commits to fighting until success/cancel
+let combatIntent = null; // { type:'autoAttack', targetId, createdAt, retryAt }
+
+/**
+ * Set auto-attack intent on a target.
+ * Intent persists until target dies, player cancels, or target becomes permanently invalid.
+ */
+function setAutoAttackIntent(target) {
+  if (!target || target.hp <= 0) return;
+  combatIntent = {
+    type: 'autoAttack',
+    targetId: target.id,
+    createdAt: nowMs(),
+    retryAt: 0
+  };
+}
+
+/**
+ * Clear combat intent.
+ */
+function clearCombatIntent() {
+  combatIntent = null;
+}
+
+/**
+ * Get the target from current intent (resolves by id).
+ */
+function getIntentTarget() {
+  if (!combatIntent || !currentState?.runtime?.activeEnemies) return null;
+  return currentState.runtime.activeEnemies.find(e => e.id === combatIntent.targetId);
+}
+
+/**
+ * Try to execute combat intent.
+ * Called: after movement completes, in combat tick, on intent creation.
+ * 
+ * Rules:
+ * - Resolve target by id
+ * - Reselect if target changed/cleared
+ * - If immune: set retryAt and return (no log spam)
+ * - If out of range/LOS: moveToAttackRange and return
+ * - Else: playerAttack()
+ */
+export function tryExecuteCombatIntent() {
+  if (!combatIntent || combatIntent.type !== 'autoAttack') return;
+  
+  const now = nowMs();
+  
+  // Throttle retries (prevent spam when immune)
+  if (combatIntent.retryAt && now < combatIntent.retryAt) return;
+  
+  const target = getIntentTarget();
+  
+  // Target invalid - clear intent
+  if (!target || target.hp <= 0) {
+    clearCombatIntent();
+    return;
+  }
+  
+  // Ensure target is selected
+  if (currentTarget?.id !== target.id) {
+    selectTarget(target);
+  }
+  
+  // Check spawn immunity - schedule retry
+  if (hasSpawnImmunity(target)) {
+    combatIntent.retryAt = now + 200; // Check again in 200ms
+    return;
+  }
+  
+  const weapon = WEAPONS[currentWeapon];
+  if (!weapon) return;
+  
+  const player = currentState.player;
+  const dist = distCoords(player.x, player.y, target.x, target.y);
+  
+  // Out of range - move to attack range
+  if (dist > weapon.range) {
+    if (!pendingAttack) {
+      moveToAttackRange(target, weapon.range, 'attack');
+    }
+    return;
+  }
+  
+  // No LOS - move to attack range
+  if (!hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
+    if (!pendingAttack) {
+      moveToAttackRange(target, weapon.range, 'attack');
+    }
+    return;
+  }
+  
+  // Ready to attack
+  if (actionCooldowns[1] <= 0) {
+    playerAttack();
+  }
+}
+
+// Debug helper
+if (typeof window !== 'undefined') {
+  window.VETUU_INTENT = () => combatIntent;
+}
+
+// ============================================
 // TARGETING
 // ============================================
 export function handleTargeting(action, data) {
@@ -2896,7 +3032,9 @@ export function handleTargeting(action, data) {
       if (currentTarget) {
         autoAttackEnabled = true;
         inCombat = true;
-        playerAttack(); 
+        // Set persistent combat intent and try to execute
+        setAutoAttackIntent(currentTarget);
+        tryExecuteCombatIntent();
       }
       break;
     case 'special': playerSpecial(); break;
@@ -2975,6 +3113,9 @@ function clearTarget() {
     if (el) el.classList.remove('targeted');
   }
   currentTarget = null;
+  
+  // Clear combat intent when target is cleared
+  clearCombatIntent();
   
   // Don't end combat here - let processAutoAttack handle combat state
   // It will check for engaged/provoked enemies and end combat when appropriate
