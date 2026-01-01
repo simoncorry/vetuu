@@ -2518,6 +2518,403 @@ export function useAction(actionKey) {
   }
 }
 
+// ============================================
+// NEW WEAPON ABILITY SYSTEM (slots 1-3)
+// No Sense cost - cooldowns only
+// ============================================
+export function useWeaponAbility(slot) {
+  if (isGhostMode) {
+    logCombat('You are a spirit... find your corpse to revive.');
+    return;
+  }
+  
+  if (playerImmunityActive) {
+    logCombat('Recovering... actions disabled during immunity.');
+    return;
+  }
+  
+  const weapon = WEAPONS[currentWeapon];
+  if (!weapon) {
+    logCombat('No weapon equipped');
+    return;
+  }
+  
+  const ability = weapon.abilities?.[slot];
+  if (!ability) {
+    logCombat(`Ability ${slot} not available for ${weapon.name}`);
+    return;
+  }
+  
+  // Check cooldown
+  if (actionCooldowns[slot] > 0) {
+    const remaining = (actionCooldowns[slot] / 1000).toFixed(1);
+    logCombat(`${ability.name} on cooldown (${remaining}s)`);
+    return;
+  }
+  
+  // If no target, find nearest enemy
+  if (!currentTarget || currentTarget.hp <= 0) {
+    const nearbyEnemy = findNearestEnemy();
+    if (nearbyEnemy) {
+      selectTarget(nearbyEnemy);
+      logCombat(`Targeting ${nearbyEnemy.name}`);
+    } else {
+      logCombat('No enemies nearby');
+      return;
+    }
+  }
+  
+  const player = currentState.player;
+  const abilityRange = ability.range || weapon.range;
+  const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
+  
+  // Move to range if needed
+  if (dist > abilityRange) {
+    moveToAttackRange(currentTarget, abilityRange, `ability_${slot}`);
+    return;
+  }
+  
+  // Check LOS for ranged weapons
+  if (weapon.combatType === 'ranged') {
+    if (!hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y)) {
+      logCombat('No line of sight');
+      return;
+    }
+  }
+  
+  // Enable combat
+  autoAttackEnabled = true;
+  inCombat = true;
+  provokeEnemy(currentTarget);
+  
+  // Execute ability based on ID
+  switch (ability.id) {
+    // Rifle abilities
+    case 'rifle_burst':
+      executeRifleBurst(weapon, ability);
+      break;
+    case 'rifle_suppress':
+      executeRifleSuppress(weapon, ability);
+      break;
+    case 'rifle_overcharge':
+      executeRifleOvercharge(weapon, ability);
+      break;
+      
+    // Sword abilities
+    case 'sword_cleave':
+      executeSwordCleave(weapon, ability);
+      break;
+    case 'sword_lunge':
+      executeSwordLunge(weapon, ability);
+      break;
+    case 'sword_shockwave':
+      executeSwordShockwave(weapon, ability);
+      break;
+      
+    default:
+      // Fallback to enhanced attack
+      executeEnhancedAttack(weapon, { 
+        name: ability.name, 
+        damage: ability.damage || weapon.baseDamage,
+        onHit: ability.onHit
+      });
+  }
+  
+  // Set cooldown
+  actionCooldowns[slot] = ability.cooldownMs || 6000;
+  actionMaxCooldowns[slot] = ability.cooldownMs || 6000;
+}
+
+// ============================================
+// RIFLE ABILITY IMPLEMENTATIONS
+// ============================================
+function executeRifleBurst(weapon, ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const target = currentTarget;
+  const shots = ability.shots || 3;
+  const damagePerShot = ability.damagePerShot || 6;
+  
+  // Fire 3 rapid shots
+  for (let i = 0; i < shots; i++) {
+    setTimeout(() => {
+      if (!target || target.hp <= 0) return;
+      
+      const damage = calculateDamage(weapon, target, damagePerShot);
+      showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FF88');
+      
+      target.hp -= damage;
+      markCombatEvent();
+      showDamageNumber(target.x, target.y, damage, false);
+      
+      updateEnemyHealthBar(target);
+      updateTargetFrame();
+      
+      if (target.hp <= 0 && i === 0) {
+        handleEnemyDeath(target);
+      }
+    }, i * 150); // 150ms between shots
+  }
+  
+  logCombat(`Burst: ${shots} shots fired!`);
+}
+
+function executeRifleSuppress(weapon, ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const damage = calculateDamage(weapon, currentTarget, ability.damage || 10);
+  
+  showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, '#FFAA00', true);
+  
+  currentTarget.hp -= damage;
+  markCombatEvent();
+  showDamageNumber(currentTarget.x, currentTarget.y, damage, false);
+  
+  // Apply slow effect
+  if (ability.onHit) {
+    for (const effect of ability.onHit) {
+      applyEffect(currentTarget, effect);
+    }
+  }
+  
+  logCombat(`Suppress: ${damage} damage + slow!`);
+  
+  updateEnemyHealthBar(currentTarget);
+  updateTargetFrame();
+  
+  if (currentTarget.hp <= 0) {
+    handleEnemyDeath(currentTarget);
+  }
+}
+
+function executeRifleOvercharge(weapon, ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const damage = calculateDamage(weapon, currentTarget, ability.damage || 30);
+  
+  // Big enhanced projectile
+  showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, '#FF4444', true);
+  
+  currentTarget.hp -= damage;
+  markCombatEvent();
+  showDamageNumber(currentTarget.x, currentTarget.y, damage, true); // Show as crit for impact
+  
+  logCombat(`Overcharge: ${damage} heavy damage!`);
+  
+  updateEnemyHealthBar(currentTarget);
+  updateTargetFrame();
+  
+  if (currentTarget.hp <= 0) {
+    handleEnemyDeath(currentTarget);
+  }
+}
+
+// ============================================
+// SWORD ABILITY IMPLEMENTATIONS
+// ============================================
+function executeSwordCleave(weapon, ability) {
+  const player = currentState.player;
+  const aoe = ability.aoe || { radius: 1.5, maxTargets: 3 };
+  const damage = ability.damage || 12;
+  
+  // Find enemies in AoE
+  const enemies = currentState.runtime.activeEnemies || [];
+  const targets = [];
+  
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue;
+    const dist = distCoords(player.x, player.y, enemy.x, enemy.y);
+    if (dist <= aoe.radius) {
+      targets.push(enemy);
+      if (targets.length >= aoe.maxTargets) break;
+    }
+  }
+  
+  if (targets.length === 0) {
+    logCombat('No enemies in range');
+    return;
+  }
+  
+  // Show cleave effect
+  showCleaveEffect(player.x, player.y);
+  
+  // Damage all targets
+  let totalDamage = 0;
+  for (const target of targets) {
+    const dmg = calculateDamage(weapon, target, damage);
+    target.hp -= dmg;
+    totalDamage += dmg;
+    markCombatEvent();
+    showDamageNumber(target.x, target.y, dmg, false);
+    provokeEnemy(target);
+    updateEnemyHealthBar(target);
+    
+    if (target.hp <= 0) {
+      handleEnemyDeath(target);
+    }
+  }
+  
+  logCombat(`Cleave: ${totalDamage} damage to ${targets.length} enemies!`);
+  updateTargetFrame();
+}
+
+function executeSwordLunge(weapon, ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const dashTiles = ability.dashTiles || 2;
+  
+  // Calculate position to dash to (adjacent to target)
+  const dx = currentTarget.x - player.x;
+  const dy = currentTarget.y - player.y;
+  const dist = Math.hypot(dx, dy);
+  
+  if (dist > 0) {
+    // Move toward target
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const moveX = Math.round(player.x + nx * Math.min(dashTiles, dist - 1));
+    const moveY = Math.round(player.y + ny * Math.min(dashTiles, dist - 1));
+    
+    // Check if we can move there
+    if (canMoveTo(currentState, moveX, moveY)) {
+      player.x = moveX;
+      player.y = moveY;
+      
+      // Update player position visually
+      const playerEl = document.getElementById('player');
+      if (playerEl) {
+        playerEl.style.transform = `translate3d(${player.x * 24}px, ${player.y * 24}px, 0)`;
+      }
+    }
+  }
+  
+  // Perform the strike
+  const damage = calculateDamage(weapon, currentTarget, ability.damage || 16);
+  
+  showMeleeSwipe(player.x, player.y, currentTarget.x, currentTarget.y, '#00FFFF', true);
+  
+  currentTarget.hp -= damage;
+  markCombatEvent();
+  showDamageNumber(currentTarget.x, currentTarget.y, damage, true);
+  
+  logCombat(`Lunge: ${damage} damage!`);
+  
+  updateEnemyHealthBar(currentTarget);
+  updateTargetFrame();
+  
+  if (currentTarget.hp <= 0) {
+    handleEnemyDeath(currentTarget);
+  }
+}
+
+function executeSwordShockwave(weapon, ability) {
+  const player = currentState.player;
+  const aoe = ability.aoe || { radius: 2, maxTargets: 5 };
+  const damage = ability.damage || 20;
+  const knockback = ability.knockbackTiles || 1;
+  
+  // Find enemies in AoE
+  const enemies = currentState.runtime.activeEnemies || [];
+  const targets = [];
+  
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue;
+    const dist = distCoords(player.x, player.y, enemy.x, enemy.y);
+    if (dist <= aoe.radius) {
+      targets.push(enemy);
+      if (targets.length >= aoe.maxTargets) break;
+    }
+  }
+  
+  if (targets.length === 0) {
+    logCombat('No enemies in range');
+    return;
+  }
+  
+  // Show shockwave effect (use cleave visual for now)
+  showCleaveEffect(player.x, player.y);
+  
+  // Damage and knockback all targets
+  let totalDamage = 0;
+  for (const target of targets) {
+    const dmg = calculateDamage(weapon, target, damage);
+    target.hp -= dmg;
+    totalDamage += dmg;
+    markCombatEvent();
+    showDamageNumber(target.x, target.y, dmg, false);
+    provokeEnemy(target);
+    
+    // Knockback
+    if (knockback > 0 && target.hp > 0) {
+      const dx = target.x - player.x;
+      const dy = target.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const newX = Math.round(target.x + nx * knockback);
+        const newY = Math.round(target.y + ny * knockback);
+        
+        if (canMoveTo(currentState, newX, newY)) {
+          target.x = newX;
+          target.y = newY;
+          
+          // Update enemy position visually
+          const enemyEl = document.getElementById(target.id);
+          if (enemyEl) {
+            enemyEl.style.transform = `translate3d(${target.x * 24}px, ${target.y * 24}px, 0)`;
+          }
+        }
+      }
+    }
+    
+    updateEnemyHealthBar(target);
+    
+    if (target.hp <= 0) {
+      handleEnemyDeath(target);
+    }
+  }
+  
+  logCombat(`Shockwave: ${totalDamage} damage to ${targets.length} enemies + knockback!`);
+  updateTargetFrame();
+}
+
+// ============================================
+// SENSE ABILITIES (slots 4-6) - Stub for later commit
+// Spends Sense resource
+// ============================================
+export function useSenseAbility(slot) {
+  if (isGhostMode) {
+    logCombat('You are a spirit... find your corpse to revive.');
+    return;
+  }
+  
+  if (slot === 6) {
+    logCombat('This ability is locked until Act 3');
+    return;
+  }
+  
+  // TODO: Implement in Commit 7
+  logCombat(`Sense ability ${slot} not yet implemented`);
+}
+
+// ============================================
+// UTILITY ABILITIES (Sprint, Heal) - Stub for later commit
+// ============================================
+export function useUtilityAbility(id) {
+  if (isGhostMode && id === 'heal') {
+    logCombat('You are a spirit... find your corpse to revive.');
+    return;
+  }
+  
+  // TODO: Implement in Commit 6
+  logCombat(`Utility ability '${id}' not yet implemented`);
+}
+
 function checkRangeAndLOS(weapon, actionType = null) {
   const player = currentState.player;
   const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
@@ -3107,7 +3504,24 @@ export function handleTargeting(action, data) {
       break;
     case 'special': playerSpecial(); break;
     case 'cycleWeapon': cycleWeapon(); break;
+    
+    // Legacy action handler (still works with old format)
     case 'action': useAction(data); break;
+    
+    // NEW: Weapon abilities (slots 1-3, no Sense cost)
+    case 'weaponAbility': 
+      useWeaponAbility(data); 
+      break;
+    
+    // NEW: Sense abilities (slots 4-6, spends Sense)
+    case 'senseAbility':
+      useSenseAbility(data);
+      break;
+    
+    // NEW: Utility abilities (sprint, heal)
+    case 'utility':
+      useUtilityAbility(data);
+      break;
   }
 }
 

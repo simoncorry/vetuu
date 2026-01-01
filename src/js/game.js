@@ -10,7 +10,7 @@ import { canMoveTo, getObjectAt, getNpcAt } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue, isDialogueOpen } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
-import { initCombat, handleTargeting, renderEnemies, playerSpecial, cycleWeapon, getCurrentWeapon, getWeapons, useAction, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
+import { initCombat, handleTargeting, renderEnemies, playerSpecial, cycleWeapon, getCurrentWeapon, getWeapons, useAction, useWeaponAbility, useSenseAbility, useUtilityAbility, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
 import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap, toExpandedCoords, BASE_CENTER } from './mapGenerator.js';
