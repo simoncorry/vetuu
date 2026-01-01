@@ -35,14 +35,69 @@ export function initInput(onInteract, onTarget, onSecondary) {
     viewport.addEventListener('touchend', onTouchEnd);
   }
 
+  // Action bar click handlers
+  initActionBarClicks();
+
   console.log('Input system initialized');
+}
+
+// ============================================
+// ACTION BAR CLICK HANDLERS
+// ============================================
+function initActionBarClicks() {
+  // Weapon toggle slot
+  const weaponToggle = document.getElementById('weapon-toggle-slot');
+  if (weaponToggle) {
+    weaponToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      targetCallback('cycleWeapon');
+    });
+  }
+
+  // Weapon ability slots (1-3)
+  document.querySelectorAll('[data-action-type="weapon"]').forEach(slot => {
+    slot.addEventListener('click', (e) => {
+      e.preventDefault();
+      const slotNum = parseInt(slot.dataset.slot, 10);
+      if (!isNaN(slotNum)) {
+        targetCallback('weaponAbility', slotNum);
+      }
+    });
+  });
+
+  // Sense ability slots (4-6)
+  document.querySelectorAll('[data-action-type="sense"]').forEach(slot => {
+    slot.addEventListener('click', (e) => {
+      e.preventDefault();
+      const slotNum = parseInt(slot.dataset.slot, 10);
+      if (!isNaN(slotNum) && !slot.disabled) {
+        targetCallback('senseAbility', slotNum);
+      }
+    });
+  });
+
+  // Utility slots (sprint, heal)
+  document.querySelectorAll('[data-action-type="utility"]').forEach(slot => {
+    slot.addEventListener('click', (e) => {
+      e.preventDefault();
+      const utilityId = slot.dataset.slot;
+      if (utilityId) {
+        targetCallback('utility', utilityId);
+      }
+    });
+  });
 }
 
 // ============================================
 // KEYBOARD INPUT (Non-movement keys)
 // ============================================
 function onKeyDown(e) {
+  // Skip if typing in input fields or dialogs are open
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  
+  // Check if dialogue panel is open (for dialogue-specific keys)
+  const dialoguePanel = document.getElementById('dialogue-panel');
+  const dialogueOpen = dialoguePanel && dialoguePanel.open;
 
   const code = e.code;
 
@@ -51,28 +106,83 @@ function onKeyDown(e) {
     return; // Let movement.js handle these
   }
 
-  // Interact
-  if (code === 'KeyE' || code === 'Space') {
+  // ============================================
+  // WEAPON TOGGLE (~ or Space)
+  // ============================================
+  if (code === 'Backquote' || code === 'Space') {
     e.preventDefault();
-    if (interactCallback) interactCallback();
+    if (!dialogueOpen) {
+      targetCallback('cycleWeapon');
+    }
     return;
   }
 
-  // Tab target
+  // ============================================
+  // WEAPON ABILITIES (1, 2, 3) - no Sense cost
+  // ============================================
+  if (code === 'Digit1') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('weaponAbility', 1); 
+    return; 
+  }
+  if (code === 'Digit2') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('weaponAbility', 2); 
+    return; 
+  }
+  if (code === 'Digit3') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('weaponAbility', 3); 
+    return; 
+  }
+
+  // ============================================
+  // SENSE ABILITIES (4, 5, 6) - spends Sense
+  // ============================================
+  if (code === 'Digit4') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('senseAbility', 4); // Push
+    return; 
+  }
+  if (code === 'Digit5') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('senseAbility', 5); // Pull
+    return; 
+  }
+  if (code === 'Digit6') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('senseAbility', 6); // Locked until Act 3
+    return; 
+  }
+
+  // ============================================
+  // UTILITY ABILITIES
+  // ============================================
+  // Sprint (9 primary, E secondary)
+  if (code === 'Digit9' || code === 'KeyE') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('utility', 'sprint'); 
+    return; 
+  }
+  // Heal (0 primary, Q secondary)
+  if (code === 'Digit0' || code === 'KeyQ') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('utility', 'heal'); 
+    return; 
+  }
+
+  // ============================================
+  // TAB TARGET
+  // ============================================
   if (code === 'Tab') {
     e.preventDefault();
     if (targetCallback) targetCallback('cycle');
     return;
   }
 
-  // Action keys (1, 2, 3 for weapon actions)
-  if (code === 'Digit1') { e.preventDefault(); targetCallback('action', '1'); return; }
-  if (code === 'Digit2') { e.preventDefault(); targetCallback('action', '2'); return; }
-  if (code === 'Digit3') { e.preventDefault(); targetCallback('action', '3'); return; }
-  if (code === 'KeyQ') { e.preventDefault(); targetCallback('special'); return; }
-  if (code === 'Backquote') { e.preventDefault(); targetCallback('cycleWeapon'); return; }
-
-  // Inventory
+  // ============================================
+  // INVENTORY
+  // ============================================
   if (code === 'KeyI') {
     e.preventDefault();
     const panel = document.getElementById('inventory-panel');
@@ -80,7 +190,9 @@ function onKeyDown(e) {
     return;
   }
 
-  // Escape
+  // ============================================
+  // ESCAPE - Cancel / Close
+  // ============================================
   if (code === 'Escape') {
     cancelPath();
     targetCallback('clear');
