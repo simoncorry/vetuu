@@ -1,0 +1,134 @@
+/* ============================================
+   VETUU — Combat Styles
+   Projectiles, melee swipes, damage numbers
+   ============================================ */
+
+/* ---------- Weapon Effects ---------- */
+
+/* Projectile (laser bolt) */
+.projectile {
+  position: absolute;
+  width: 16px;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, var(--color, #00FFFF), var(--color, #00FFFF));
+  box-shadow: 0 0 8px var(--color, #00FFFF), 0 0 16px var(--color, #00FFFF);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 150;
+  transform-origin: left center;
+  animation: projectile-fly 0.2s linear forwards;
+  will-change: transform, opacity;
+}
+
+.projectile.enhanced {
+  width: 24px;
+  height: 6px;
+  box-shadow: 0 0 12px var(--color, #00FFFF), 0 0 24px var(--color, #00FFFF);
+}
+
+@keyframes projectile-fly {
+  from {
+    opacity: 1;
+    transform: rotate3d(0, 0, 1, var(--angle, 0deg)) translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0.5;
+    transform: rotate3d(0, 0, 1, var(--angle, 0deg)) translate3d(var(--dx, 0), var(--dy, 0), 0);
+  }
+}
+
+/* Melee swipe */
+.melee-swipe {
+  position: absolute;
+  width: calc(var(--tile-size) * 2);
+  height: calc(var(--tile-size) * 2);
+  pointer-events: none;
+  z-index: 150;
+  transform: translate3d(-50%, -50%, 0) rotate3d(0, 0, 1, var(--angle, 0deg));
+  animation: swipe-arc 0.25s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.melee-swipe::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 20%, var(--color, #00FFFF) 50%, var(--color, #00FFFF));
+  box-shadow: 0 0 8px var(--color, #00FFFF);
+  transform-origin: left center;
+  transform: translate3d(0, -50%, 0);
+  animation: swipe-slash 0.2s ease-out forwards;
+}
+
+.melee-swipe.enhanced::before {
+  height: 5px;
+  box-shadow: 0 0 12px var(--color, #FFD700), 0 0 24px var(--color, #FFD700);
+}
+
+@keyframes swipe-arc {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes swipe-slash {
+  0% { transform: translate3d(0, -50%, 0) scale3d(0.3, 1, 1) rotate3d(0, 0, 1, -30deg); }
+  50% { transform: translate3d(0, -50%, 0) scale3d(1, 1, 1) rotate3d(0, 0, 1, 0deg); }
+  100% { transform: translate3d(0, -50%, 0) scale3d(0.3, 1, 1) rotate3d(0, 0, 1, 30deg); opacity: 0; }
+}
+
+/* Cleave effect */
+.cleave-effect {
+  position: absolute;
+  width: calc(var(--tile-size) * 3);
+  height: calc(var(--tile-size) * 3);
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 150;
+  animation: cleave-expand 0.3s ease-out forwards;
+  box-shadow: 0 0 20px var(--accent), inset 0 0 20px rgba(105, 210, 214, 0.3);
+  will-change: transform, opacity;
+}
+
+@keyframes cleave-expand {
+  from { 
+    transform: scale3d(0.3, 0.3, 1);
+    opacity: 1;
+  }
+  to { 
+    transform: scale3d(1.5, 1.5, 1);
+    opacity: 0;
+  }
+}
+
+/* ---------- Damage Numbers ---------- */
+.damage-number {
+  position: absolute;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--rarity-gold);
+  text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 200;
+  animation: damage-float 1s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.damage-number.crit {
+  font-size: 1.4rem;
+  color: #FF6B6B;
+}
+
+.damage-number.player-damage {
+  color: var(--danger);
+}
+
+@keyframes damage-float {
+  0% { opacity: 1; transform: translate3d(0, 0, 0) scale3d(1, 1, 1); }
+  100% { opacity: 0; transform: translate3d(0, -40px, 0) scale3d(0.8, 0.8, 1); }
+}
+

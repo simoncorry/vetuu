@@ -1,0 +1,164 @@
+/* ============================================
+   VETUU — Map & World Styles
+   Viewport, tiles, fog, minimap, path markers
+   ============================================ */
+
+/* ---------- Viewport & World ---------- */
+#viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#world {
+  position: absolute;
+  width: calc(var(--map-width) * var(--tile-size));
+  height: calc(var(--map-height) * var(--tile-size));
+  /* Linear for smooth continuous movement - matches player */
+  transition: transform var(--move-duration) linear;
+  will-change: transform;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#actor-layer { pointer-events: auto; z-index: 10; }
+#fog-layer { z-index: 20; }
+#object-layer { z-index: 5; }
+
+/* ---------- Tiles ---------- */
+.tile {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background-color: var(--tile-color, var(--sand));
+}
+
+/* ---------- Objects ---------- */
+.object {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background-color: var(--obj-color, #444);
+  border-radius: 2px;
+}
+
+.object[data-interactable] { cursor: pointer; }
+.object.node-collected { opacity: 0.3; }
+
+/* ---------- Fog ---------- */
+.fog-tile {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background: rgba(13, 15, 17, 1);
+  transition: background 0.3s ease;
+}
+
+.fog-tile.revealed {
+  background: transparent;
+  pointer-events: none;
+}
+
+/* ---------- Minimap ---------- */
+#minimap-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  z-index: 1000;
+}
+
+#minimap {
+  position: relative;
+  width: 150px;
+  height: 100px;
+  background: var(--bg-dark);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+#minimap-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+#minimap-fog {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+#minimap-player {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--player);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--player);
+  transform: translate3d(-50%, -50%, 0);
+  z-index: 10;
+}
+
+/* Corpse marker on minimap */
+.minimap-corpse {
+  position: absolute;
+  font-size: 10px;
+  transform: translate3d(-50%, -50%, 0);
+  z-index: 9;
+  animation: corpse-blink 1.5s ease-in-out infinite;
+  text-shadow: 0 0 4px var(--danger), 0 0 8px var(--danger);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+@keyframes corpse-blink {
+  0%, 100% { opacity: 1; transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1); }
+  50% { opacity: 0.6; transform: translate3d(-50%, -50%, 0) scale3d(1.2, 1.2, 1); }
+}
+
+#minimap-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---------- Path Markers ---------- */
+.path-marker {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 8;
+  box-shadow: 0 0 6px var(--accent);
+  opacity: var(--marker-opacity, 0.6);
+  animation: path-pulse 1s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes path-pulse {
+  0%, 100% { opacity: 0.4; transform: scale3d(0.8, 0.8, 1); }
+  50% { opacity: 1; transform: scale3d(1.2, 1.2, 1); }
+}
+

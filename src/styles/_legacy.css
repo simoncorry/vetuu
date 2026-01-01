@@ -1,0 +1,2098 @@
+/* ============================================
+   VETUU — Drycross Alpha
+   MMO-style UI with tab-target combat
+   ============================================ */
+
+/* ============================================
+   ANIMATION & TRANSFORM RULES
+   ============================================
+   
+   ALL motion, animation, and transitions MUST use CSS.
+   JavaScript should only set final positions/states.
+   
+   REQUIRED: Use 3D transforms for GPU acceleration:
+   - translate3d(x, y, 0) instead of translate(x, y)
+   - scale3d(x, y, 1) instead of scale(x) or scale(x, y)  
+   - rotate3d(0, 0, 1, angle) instead of rotate(angle)
+   - Always include will-change on animated elements
+   
+   This ensures all animations run on the GPU compositor
+   thread, not the main thread, for smooth 60fps motion.
+   
+   ============================================ */
+
+/* ---------- Custom Properties ---------- */
+:root {
+  /* Tile dimensions */
+  --tile-size: 24px;
+  --map-width: 120;
+  --map-height: 80;
+
+  /* Palette: Desert tones */
+  --sand: #C49C6A;
+  --dune: #D0AD73;
+  --rock: #6B7075;
+  --road: #A8895F;
+  --scrap-town: #4C545A;
+  --planks: #8A5F3D;
+  --ash: #8D7A5B;
+  --salt: #D8D2BE;
+  --dry-sand: #B68F5F;
+
+  /* UI Colors */
+  --bg-dark: #0D0F11;
+  --bg-panel: #181C20;
+  --bg-panel-alpha: rgba(24, 28, 32, 0.95);
+  --bg-frame: rgba(20, 24, 28, 0.98);
+  --text-primary: #E8E4DB;
+  --text-secondary: #B8B4AB;
+  --text-muted: #8A8780;
+  --text-disabled: #5A5752;
+  --accent: #69D2D6;
+  --accent-dim: #3A8A8E;
+  --danger: #D64545;
+  --danger-dark: #8B2020;
+  --warning: #E18B37;
+  --success: #5DAD5D;
+  --hp-color: #45A845;
+  --hp-bg: #1E3A1E;
+  --sense-color: #4B9CD6;
+  --sense-bg: #1E2E3A;
+  --rarity-green: #5DAD5D;
+  --rarity-blue: #5A9BD6;
+  --rarity-gold: #D6A55A;
+
+  /* Actor colors */
+  --player: #00E5E5;
+  --militia: #22B6B8;
+  --verdleg: #E18B37;
+  --trog: #8B5A2B;
+  --karth: #2E343B;
+  --boss: #8B45D6;
+
+  /* Level badge colors */
+  --level-trivial: #888888;
+  --level-easy: #5DAD5D;
+  --level-normal: #B8B4AB;
+  --level-hard: #E18B37;
+  --level-very-hard: #D64545;
+  --level-impossible: #8B45D6;
+
+  /* Timing - Classic WoW pacing */
+  --move-duration: 280ms; /* Tactical movement speed */
+  --move-steps: 4;
+  --ui-transition: 180ms;
+
+  /* Typography */
+  --font-display: 'Courier New', Courier, monospace;
+  --font-body: system-ui, -apple-system, sans-serif;
+
+  /* Frame styling */
+  --frame-border: #3A3E42;
+  --frame-inner: #252A2E;
+}
+
+/* ---------- Reset & Base ---------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Game Container ---------- */
+#game {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Viewport & World ---------- */
+#viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#world {
+  position: absolute;
+  width: calc(var(--map-width) * var(--tile-size));
+  height: calc(var(--map-height) * var(--tile-size));
+  /* Linear for smooth continuous movement - matches player */
+  transition: transform var(--move-duration) linear;
+  will-change: transform;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#actor-layer { pointer-events: auto; z-index: 10; }
+#fog-layer { z-index: 20; }
+#object-layer { z-index: 5; }
+
+/* ---------- Tiles ---------- */
+.tile {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background-color: var(--tile-color, var(--sand));
+}
+
+/* ---------- Objects ---------- */
+.object {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background-color: var(--obj-color, #444);
+  border-radius: 2px;
+}
+
+.object[data-interactable] { cursor: pointer; }
+.object.node-collected { opacity: 0.3; }
+
+/* ---------- Actors ---------- */
+.actor {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  border-radius: 4px;
+  z-index: 15;
+}
+
+/* Player */
+#player {
+  background: var(--player);
+  box-shadow: 0 0 8px var(--player), inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  /* GPU-accelerated movement - linear for smooth continuous walking */
+  transition: transform var(--move-duration) linear;
+  will-change: transform;
+}
+
+#player::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 2px;
+  right: 2px;
+  height: 4px;
+  background: var(--hp-bg);
+  border-radius: 2px;
+}
+
+#player::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 2px;
+  width: calc((var(--player-hp-pct, 100) / 100) * (var(--tile-size) - 4px));
+  height: 4px;
+  background: var(--hp-color);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+#player.moving {
+  animation: actor-bob var(--move-duration) steps(var(--move-steps), end);
+}
+
+/* Ghost mode - player is semi-transparent and ethereal */
+#player.ghost {
+  background: rgba(0, 229, 229, 0.4);
+  box-shadow: 
+    0 0 16px rgba(200, 220, 255, 0.6),
+    0 0 32px rgba(200, 220, 255, 0.3),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.1);
+  animation: ghost-pulse 2s ease-in-out infinite;
+  filter: brightness(1.2) saturate(0.5);
+}
+
+#player.ghost::before,
+#player.ghost::after {
+  display: none; /* Hide health bars in ghost mode */
+}
+
+@keyframes ghost-pulse {
+  0%, 100% { 
+    opacity: 0.5;
+    box-shadow: 
+      0 0 16px rgba(200, 220, 255, 0.6),
+      0 0 32px rgba(200, 220, 255, 0.3);
+  }
+  50% { 
+    opacity: 0.7;
+    box-shadow: 
+      0 0 24px rgba(200, 220, 255, 0.8),
+      0 0 48px rgba(200, 220, 255, 0.5);
+  }
+}
+
+/* Downed state - player is in the medical bay awaiting choice */
+#player.downed {
+  opacity: 0.6;
+  filter: grayscale(0.6) brightness(0.8);
+  animation: downed-pulse 2s ease-in-out infinite;
+}
+
+@keyframes downed-pulse {
+  0%, 100% { 
+    opacity: 0.4;
+    filter: grayscale(0.6) brightness(0.7);
+  }
+  50% { 
+    opacity: 0.7;
+    filter: grayscale(0.4) brightness(0.9);
+  }
+}
+
+#player.downed::before,
+#player.downed::after {
+  display: none; /* Hide health bars when downed */
+}
+
+/* Immunity state - player is invulnerable after corpse revive */
+#player.immune {
+  animation: immune-flash 0.3s ease-in-out infinite;
+  pointer-events: none; /* Cannot be targeted during immunity */
+}
+
+@keyframes immune-flash {
+  0%, 100% { 
+    opacity: 1;
+    filter: brightness(1.5) saturate(1.2);
+    box-shadow: 
+      0 0 16px rgba(255, 215, 0, 0.8),
+      0 0 32px rgba(255, 215, 0, 0.4),
+      inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  }
+  50% { 
+    opacity: 0.4;
+    filter: brightness(1) saturate(1);
+    box-shadow: 
+      0 0 8px rgba(255, 215, 0, 0.4),
+      inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Corpse marker - shows where player died */
+.corpse-marker {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  border-radius: 4px;
+  z-index: 90;
+  pointer-events: auto;
+  cursor: pointer;
+  background: 
+    radial-gradient(circle, rgba(232, 93, 117, 0.3) 0%, transparent 70%);
+  border: 2px dashed var(--danger);
+  box-shadow: 
+    0 0 12px rgba(232, 93, 117, 0.5),
+    0 0 24px rgba(232, 93, 117, 0.2);
+  animation: corpse-beacon 1.5s ease-in-out infinite;
+}
+
+.corpse-marker::before {
+  content: '💀';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate3d(-50%, -50%, 0);
+  font-size: 14px;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8));
+}
+
+.corpse-marker::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid var(--danger);
+  animation: corpse-arrow 1s ease-in-out infinite;
+}
+
+@keyframes corpse-beacon {
+  0%, 100% {
+    box-shadow: 
+      0 0 12px rgba(232, 93, 117, 0.5),
+      0 0 24px rgba(232, 93, 117, 0.2);
+  }
+  50% {
+    box-shadow: 
+      0 0 20px rgba(232, 93, 117, 0.8),
+      0 0 40px rgba(232, 93, 117, 0.4);
+  }
+}
+
+@keyframes corpse-arrow {
+  0%, 100% { transform: translate3d(-50%, 0, 0); }
+  50% { transform: translate3d(-50%, -4px, 0); }
+}
+
+@keyframes actor-bob {
+  0%, 100% { transform: translate3d(var(--actor-x), var(--actor-y), 0); }
+  50% { transform: translate3d(var(--actor-x), calc(var(--actor-y) - 2px), 0); }
+}
+
+/* NPCs */
+.npc {
+  background: var(--npc-color, var(--militia));
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+/* NPC selected (not in combat) - offset stroke */
+.npc.targeted {
+  outline: 3px solid var(--success, #4CAF50);
+  outline-offset: 2px;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+}
+
+.npc[data-hidden="true"] { display: none; }
+
+.npc[data-quest]::before {
+  content: '!';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  width: 12px;
+  height: 12px;
+  background: var(--warning);
+  color: var(--bg-dark);
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 12px;
+  border-radius: 2px;
+  animation: quest-bob 1s ease-in-out infinite;
+  will-change: transform;
+}
+
+.npc[data-quest="return"]::before {
+  content: '?';
+  background: var(--success);
+}
+
+@keyframes quest-bob {
+  0%, 100% { transform: translate3d(-50%, 0, 0); }
+  50% { transform: translate3d(-50%, -3px, 0); }
+}
+
+/* Guards */
+.npc.guard {
+  background: var(--npc-color, #22B6B8);
+  box-shadow: 
+    0 0 8px rgba(34, 182, 184, 0.5),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.npc.guard::after {
+  content: '⚔';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  font-size: 10px;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Medic */
+.npc.medic {
+  background: var(--npc-color, #E85D75);
+  box-shadow: 
+    0 0 8px rgba(232, 93, 117, 0.5),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.npc.medic::after {
+  content: '✚';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  font-size: 10px;
+  color: #E85D75;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Guard/NPC downed state */
+.npc.downed {
+  opacity: 0.3;
+  filter: grayscale(0.5);
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+.npc:not(.downed) {
+  opacity: 1;
+  filter: none;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+/* ---------- Enemies ---------- */
+.enemy {
+  background: var(--enemy-color, var(--danger));
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  /* GPU-accelerated movement */
+  transition: transform var(--enemy-move-speed, 400ms) linear, box-shadow 0.15s ease, background-color 0.3s ease;
+  will-change: transform;
+}
+
+/* Passive enemies (yellow) - non-aggressive until provoked */
+.enemy.passive {
+  --enemy-color: #B8A038;
+  box-shadow: 
+    0 0 6px rgba(184, 160, 56, 0.4),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.enemy.passive:hover {
+  box-shadow: 
+    0 0 10px rgba(184, 160, 56, 0.6),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+}
+
+.enemy-level-badge.passive-badge {
+  background: #B8A038;
+  border-color: #8B7830;
+  color: var(--bg-dark);
+}
+
+/* Alpha enemies - elite variants with distinctive frame */
+.enemy.alpha {
+  border: 2px solid var(--rarity-gold);
+  box-shadow: 
+    0 0 8px rgba(214, 165, 90, 0.6),
+    0 0 16px rgba(214, 165, 90, 0.3),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  animation: alpha-pulse 2s ease-in-out infinite;
+}
+
+.enemy.alpha::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px solid var(--rarity-gold);
+  border-radius: 6px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@keyframes alpha-pulse {
+  0%, 100% { 
+    box-shadow: 
+      0 0 8px rgba(214, 165, 90, 0.6),
+      0 0 16px rgba(214, 165, 90, 0.3),
+      inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  }
+  50% { 
+    box-shadow: 
+      0 0 12px rgba(214, 165, 90, 0.8),
+      0 0 24px rgba(214, 165, 90, 0.5),
+      inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  }
+}
+
+.enemy:hover {
+  box-shadow: 0 0 8px var(--danger), inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Enemy selected (not yet in combat) - offset stroke */
+.enemy.targeted {
+  outline: 3px solid var(--danger);
+  outline-offset: 2px;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Enemy in active combat - flashing red glow */
+.enemy.in-combat {
+  box-shadow: 0 0 16px var(--danger), 0 0 32px rgba(214, 69, 69, 0.4);
+  animation: combat-pulse 1s ease-in-out infinite;
+}
+
+.enemy.targeted.in-combat {
+  outline: 3px solid var(--danger);
+  outline-offset: 2px;
+  box-shadow: 0 0 16px var(--danger), 0 0 32px rgba(214, 69, 69, 0.4);
+  animation: combat-pulse 1s ease-in-out infinite;
+}
+
+@keyframes combat-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.3); }
+}
+
+/* ---------- Status Effect Visuals ---------- */
+.is-stunned {
+  filter: brightness(0.6) saturate(0.5);
+  outline: 2px solid #fff;
+  animation: stun-shake 0.1s ease-in-out infinite;
+}
+
+@keyframes stun-shake {
+  0%, 100% { transform: translate3d(var(--tx, 0), var(--ty, 0), 0); }
+  50% { transform: translate3d(calc(var(--tx, 0) + 2px), var(--ty, 0), 0); }
+}
+
+.is-rooted {
+  filter: brightness(0.85);
+  outline: 2px solid #8B4513;
+  box-shadow: 0 0 8px rgba(139, 69, 19, 0.6);
+}
+
+.is-slowed {
+  filter: brightness(0.9) hue-rotate(180deg);
+  outline: 2px dashed #00BFFF;
+}
+
+.is-vulnerable {
+  filter: brightness(1.2);
+  outline: 2px solid #FF4500;
+  animation: vuln-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes vuln-pulse {
+  0%, 100% { outline-width: 2px; }
+  50% { outline-width: 4px; }
+}
+
+.is-immune {
+  filter: brightness(1.3) saturate(1.5);
+  outline: 3px solid gold;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+}
+
+/* Retreating enemies - desaturated and running away */
+.retreating {
+  filter: brightness(0.7) saturate(0.4) !important;
+  opacity: 0.75;
+  pointer-events: none; /* Can't interact during retreat */
+}
+
+.retreating::before {
+  content: '🏃';
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%) scaleX(-1); /* Running away */
+  font-size: 14px;
+  animation: retreat-bounce 0.4s ease-in-out infinite;
+}
+
+@keyframes retreat-bounce {
+  0%, 100% { transform: translateX(-50%) scaleX(-1) translateY(0); }
+  50% { transform: translateX(-50%) scaleX(-1) translateY(-3px); }
+}
+
+/* Spawn immunity visual - brief invulnerability */
+.spawn-immune {
+  outline: 2px solid rgba(255, 215, 0, 0.8);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+  animation: spawn-materialize 1.5s ease-out;
+  pointer-events: none; /* Can't interact during immunity */
+}
+
+@keyframes spawn-materialize {
+  0% { 
+    filter: brightness(2) saturate(0);
+    opacity: 0.3;
+  }
+  50% {
+    filter: brightness(1.3) saturate(0.5);
+    opacity: 0.7;
+  }
+  100% { 
+    filter: brightness(1) saturate(1);
+    opacity: 1;
+  }
+}
+
+.enemy.dying {
+  animation: enemy-death 0.5s ease forwards;
+}
+
+@keyframes enemy-death {
+  0% { opacity: 1; transform: scale3d(1, 1, 1); }
+  50% { opacity: 0.5; transform: scale3d(1.2, 1.2, 1); }
+  100% { opacity: 0; transform: scale3d(0, 0, 1); }
+}
+
+/* Enemy level badge */
+.enemy-level-badge {
+  position: absolute;
+  top: -12px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  background: var(--bg-dark);
+  border: 1px solid var(--frame-border);
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 12px;
+  text-align: center;
+  color: var(--level-normal);
+  z-index: 5;
+}
+
+.enemy-level-badge.trivial { color: var(--level-trivial); border-color: var(--level-trivial); }
+.enemy-level-badge.easy { color: var(--level-easy); border-color: var(--level-easy); }
+.enemy-level-badge.normal { color: var(--level-normal); }
+.enemy-level-badge.hard { color: var(--level-hard); border-color: var(--level-hard); }
+.enemy-level-badge.very-hard { color: var(--level-very-hard); border-color: var(--level-very-hard); }
+.enemy-level-badge.impossible { 
+  color: var(--level-impossible); 
+  border-color: var(--level-impossible);
+  animation: skull-pulse 1.5s ease-in-out infinite;
+}
+
+/* Alpha enemy badge - gold border and background */
+.enemy-level-badge.alpha-badge {
+  background: linear-gradient(135deg, var(--rarity-gold), #B8860B);
+  border-color: var(--rarity-gold);
+  color: var(--bg-dark);
+  font-weight: bold;
+  min-width: 18px;
+  text-shadow: none;
+}
+
+@keyframes skull-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.enemy-hp-bar {
+  position: absolute;
+  top: -8px;
+  left: 2px;
+  right: 2px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.enemy-hp-fill {
+  height: 100%;
+  width: calc(var(--hp-pct, 100) * 1%);
+  background: var(--danger);
+  transition: width 0.2s ease;
+}
+
+/* Boss */
+.boss {
+  width: calc(var(--tile-size) * 1.5);
+  height: calc(var(--tile-size) * 1.5);
+  background: var(--boss);
+  box-shadow: 0 0 12px var(--boss);
+  border-radius: 6px;
+}
+
+/* ---------- Fog ---------- */
+.fog-tile {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  background: rgba(13, 15, 17, 1);
+  transition: background 0.3s ease;
+}
+
+.fog-tile.revealed {
+  background: transparent;
+  pointer-events: none;
+}
+
+/* ---------- Weapon Effects ---------- */
+
+/* Projectile (laser bolt) */
+.projectile {
+  position: absolute;
+  width: 16px;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, var(--color, #00FFFF), var(--color, #00FFFF));
+  box-shadow: 0 0 8px var(--color, #00FFFF), 0 0 16px var(--color, #00FFFF);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 150;
+  transform-origin: left center;
+  animation: projectile-fly 0.2s linear forwards;
+  will-change: transform, opacity;
+}
+
+.projectile.enhanced {
+  width: 24px;
+  height: 6px;
+  box-shadow: 0 0 12px var(--color, #00FFFF), 0 0 24px var(--color, #00FFFF);
+}
+
+@keyframes projectile-fly {
+  from {
+    opacity: 1;
+    transform: rotate3d(0, 0, 1, var(--angle, 0deg)) translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0.5;
+    transform: rotate3d(0, 0, 1, var(--angle, 0deg)) translate3d(var(--dx, 0), var(--dy, 0), 0);
+  }
+}
+
+/* Melee swipe */
+.melee-swipe {
+  position: absolute;
+  width: calc(var(--tile-size) * 2);
+  height: calc(var(--tile-size) * 2);
+  pointer-events: none;
+  z-index: 150;
+  transform: translate3d(-50%, -50%, 0) rotate3d(0, 0, 1, var(--angle, 0deg));
+  animation: swipe-arc 0.25s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.melee-swipe::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 20%, var(--color, #00FFFF) 50%, var(--color, #00FFFF));
+  box-shadow: 0 0 8px var(--color, #00FFFF);
+  transform-origin: left center;
+  transform: translate3d(0, -50%, 0);
+  animation: swipe-slash 0.2s ease-out forwards;
+}
+
+.melee-swipe.enhanced::before {
+  height: 5px;
+  box-shadow: 0 0 12px var(--color, #FFD700), 0 0 24px var(--color, #FFD700);
+}
+
+@keyframes swipe-arc {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes swipe-slash {
+  0% { transform: translate3d(0, -50%, 0) scale3d(0.3, 1, 1) rotate3d(0, 0, 1, -30deg); }
+  50% { transform: translate3d(0, -50%, 0) scale3d(1, 1, 1) rotate3d(0, 0, 1, 0deg); }
+  100% { transform: translate3d(0, -50%, 0) scale3d(0.3, 1, 1) rotate3d(0, 0, 1, 30deg); opacity: 0; }
+}
+
+/* Cleave effect */
+.cleave-effect {
+  position: absolute;
+  width: calc(var(--tile-size) * 3);
+  height: calc(var(--tile-size) * 3);
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 150;
+  animation: cleave-expand 0.3s ease-out forwards;
+  box-shadow: 0 0 20px var(--accent), inset 0 0 20px rgba(105, 210, 214, 0.3);
+  will-change: transform, opacity;
+}
+
+@keyframes cleave-expand {
+  from { 
+    transform: scale3d(0.3, 0.3, 1);
+    opacity: 1;
+  }
+  to { 
+    transform: scale3d(1.5, 1.5, 1);
+    opacity: 0;
+  }
+}
+
+/* ---------- Damage Numbers ---------- */
+.damage-number {
+  position: absolute;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--rarity-gold);
+  text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 200;
+  animation: damage-float 1s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.damage-number.crit {
+  font-size: 1.4rem;
+  color: #FF6B6B;
+}
+
+.damage-number.player-damage {
+  color: var(--danger);
+}
+
+@keyframes damage-float {
+  0% { opacity: 1; transform: translate3d(0, 0, 0) scale3d(1, 1, 1); }
+  100% { opacity: 0; transform: translate3d(0, -40px, 0) scale3d(0.8, 0.8, 1); }
+}
+
+/* ============================================
+   TOP LEFT: PLAYER HUD
+   ============================================ */
+#hud {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  min-width: 180px;
+  font-family: var(--font-display);
+  z-index: 1000;
+}
+
+#hud-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.stat-label {
+  width: 3rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+.stat-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--hp-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stat-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--pct) * 1%);
+  background: var(--hp-color);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.sense-bar { background: var(--sense-bg); }
+.sense-bar .stat-fill { background: var(--sense-color); }
+
+.stat-value {
+  width: 4rem;
+  text-align: right;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.stat-row {
+  display: flex;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-mini {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.stat-mini strong {
+  color: var(--text-primary);
+}
+
+#hud-level {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#level-badge {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+#level-badge strong {
+  color: var(--rarity-gold);
+}
+
+.xp-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.xp-bar .stat-fill {
+  background: var(--rarity-gold);
+}
+
+#hud-location {
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#location-name {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ============================================
+   TOP RIGHT: MINIMAP
+   ============================================ */
+#minimap-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  z-index: 1000;
+}
+
+#minimap {
+  position: relative;
+  width: 150px;
+  height: 100px;
+  background: var(--bg-dark);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+#minimap-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+#minimap-fog {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+#minimap-player {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--player);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--player);
+  transform: translate3d(-50%, -50%, 0);
+  z-index: 10;
+}
+
+/* Corpse marker on minimap */
+.minimap-corpse {
+  position: absolute;
+  font-size: 10px;
+  transform: translate3d(-50%, -50%, 0);
+  z-index: 9;
+  animation: corpse-blink 1.5s ease-in-out infinite;
+  text-shadow: 0 0 4px var(--danger), 0 0 8px var(--danger);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+@keyframes corpse-blink {
+  0%, 100% { opacity: 1; transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1); }
+  50% { opacity: 0.6; transform: translate3d(-50%, -50%, 0) scale3d(1.2, 1.2, 1); }
+}
+
+#minimap-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================
+   QUEST TRACKER
+   ============================================ */
+#quest-tracker {
+  position: fixed;
+  top: 140px;
+  right: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  min-width: 200px;
+  max-width: 260px;
+  font-family: var(--font-display);
+  z-index: 1000;
+}
+
+#quest-tracker h3 {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+#quest-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.quest-item {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.quest-item.active {
+  color: var(--warning);
+}
+
+.quest-item .quest-name {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.quest-item .quest-objective {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding-left: 0.5rem;
+}
+
+.quest-item .quest-objective::before { content: '◦ '; }
+.quest-item .quest-objective.complete::before {
+  content: '✓ ';
+  color: var(--success);
+}
+
+/* ============================================
+   COMBAT LOG
+   ============================================ */
+#combat-log-container {
+  position: fixed;
+  bottom: 180px;
+  left: 1rem;
+  width: 280px;
+  z-index: 900;
+}
+
+#combat-log {
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  max-height: 150px;
+  overflow-y: auto;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.combat-log-line {
+  padding: 0.15rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.combat-log-line:last-child {
+  border-bottom: none;
+}
+
+/* ============================================
+   UNIT FRAMES (Player & Target)
+   ============================================ */
+.unit-frame {
+  position: fixed;
+  bottom: 80px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-frame);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-width: 200px;
+  z-index: 1100;
+}
+
+#player-frame {
+  left: calc(50% - 320px);
+}
+
+#target-frame {
+  right: calc(50% - 320px);
+  flex-direction: row-reverse;
+}
+
+#target-frame.hidden {
+  display: none;
+}
+
+.frame-portrait {
+  width: 48px;
+  height: 48px;
+  background: var(--frame-inner);
+  border: 2px solid var(--frame-border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.player-portrait {
+  border-color: var(--accent-dim);
+}
+
+.enemy-portrait {
+  border-color: var(--danger-dark);
+}
+
+.frame-info {
+  flex: 1;
+  min-width: 130px;
+}
+
+.frame-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+
+.frame-name {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.frame-level {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  color: var(--rarity-gold);
+}
+
+.frame-bar {
+  position: relative;
+  height: 12px;
+  background: var(--hp-bg);
+  border-radius: 3px;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+}
+
+.frame-bar.sense-bar {
+  height: 8px;
+  background: var(--sense-bg);
+}
+
+.frame-hp-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(var(--hp-pct, 100) * 1%);
+  background: var(--hp-color);
+  transition: width 0.3s ease;
+}
+
+.frame-sense-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(var(--sense-pct, 100) * 1%);
+  background: var(--sense-color);
+  transition: width 0.3s ease;
+}
+
+#target-frame .frame-hp-fill {
+  background: var(--danger);
+}
+
+/* Friendly NPC target (green instead of red) */
+#target-frame.friendly .frame-hp-fill {
+  background: var(--success, #4CAF50);
+}
+
+#target-frame.friendly .enemy-portrait {
+  border-color: var(--success, #4CAF50);
+}
+
+#target-frame.friendly .frame-level {
+  color: var(--success, #4CAF50);
+}
+
+.frame-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-primary);
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.frame-weakness {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.weakness-type {
+  color: var(--rarity-gold);
+}
+
+/* ============================================
+   ACTION BAR
+   ============================================ */
+#action-bar {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-frame);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  z-index: 1200;
+}
+
+#weapon-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#weapon-display {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+#current-weapon-icon {
+  font-size: 1.4rem;
+}
+
+#current-weapon-name {
+  white-space: nowrap;
+}
+
+#weapon-cycle-btn {
+  width: 32px;
+  height: 32px;
+  background: var(--frame-inner);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+#weapon-cycle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.bar-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--frame-border);
+  margin: 0 0.25rem;
+}
+
+#action-slots {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.action-slot {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  background: var(--frame-inner);
+  border: 2px solid var(--frame-border);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.action-slot:hover:not(.on-cooldown) {
+  border-color: var(--accent);
+  background: rgba(105, 210, 214, 0.1);
+}
+
+.action-slot.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-dim);
+}
+
+/* Disabled state - when targeting friendly NPC */
+.action-slot.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.action-slot.disabled::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.3) 3px,
+    rgba(0, 0, 0, 0.3) 6px
+  );
+  border-radius: 4px;
+}
+
+#action-bar.target-friendly::before {
+  content: 'Friendly Target';
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--success, #4CAF50);
+  white-space: nowrap;
+}
+
+.action-slot.on-cooldown {
+  cursor: not-allowed;
+}
+
+/* Cooldown overlay that fills from bottom to top */
+.cooldown-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--cooldown-pct, 0) * 1%);
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 0 0 4px 4px;
+  pointer-events: none;
+  z-index: 5;
+  transition: height 0.1s linear;
+}
+
+/* Cooldown timer text */
+.cooldown-timer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: var(--text-primary);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.slot-icon {
+  font-size: 1.2rem;
+}
+
+.slot-label {
+  font-family: var(--font-display);
+  font-size: 0.45rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+  max-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-key {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.1rem 0.2rem;
+  border-radius: 2px;
+}
+
+.slot-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--frame-border);
+  margin: 0 0.25rem;
+}
+
+.special-slot {
+  border-color: var(--rarity-gold);
+  border-style: dashed;
+}
+
+.special-slot:hover:not(.on-cooldown) {
+  border-color: var(--rarity-gold);
+  background: rgba(214, 165, 90, 0.1);
+  border-style: solid;
+}
+
+/* ============================================
+   XP BAR (WoW-style)
+   ============================================ */
+#xp-bar-container {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  z-index: 1150;
+  /* Width matches action bar dynamically via JS, fallback to auto */
+  width: var(--action-bar-width, auto);
+  min-width: 300px;
+}
+
+#xp-bar-track {
+  position: relative;
+  height: 12px;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+  border: 2px solid var(--frame-border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+#xp-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(var(--xp-pct, 0) * 1%);
+  background: linear-gradient(180deg, #9B59B6 0%, #6B3D8E 50%, #4A2963 100%);
+  box-shadow: 0 0 8px rgba(155, 89, 182, 0.5);
+  transition: width 0.4s ease-out;
+}
+
+#xp-bar-notches {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-evenly;
+  pointer-events: none;
+}
+
+.xp-notch {
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+#xp-bar-text {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+#xp-bar-level {
+  color: var(--rarity-gold);
+  font-weight: 600;
+}
+
+#xp-bar-progress {
+  color: var(--text-secondary);
+}
+
+/* Rested XP bonus indicator (optional enhancement) */
+#xp-bar-fill.rested::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  height: 100%;
+  width: 20%;
+  background: linear-gradient(180deg, #3498DB 0%, #2471A3 50%, #1A5276 100%);
+  opacity: 0.6;
+}
+
+/* ============================================
+   DIALOGUE PANEL
+   ============================================ */
+#dialogue-panel {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  width: min(90vw, 600px);
+  background: var(--bg-panel);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0;
+  font-family: var(--font-display);
+  z-index: 2000;
+  display: none;
+}
+
+#dialogue-panel[open] {
+  display: block;
+  animation: dialogue-in 0.2s ease;
+}
+
+#dialogue-panel::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+@keyframes dialogue-in {
+  from { opacity: 0; transform: translate3d(-50%, 20px, 0); }
+  to { opacity: 1; transform: translate3d(-50%, 0, 0); }
+}
+
+#dialogue-speaker {
+  padding: 0.75rem 1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  border-bottom: 1px solid var(--frame-border);
+}
+
+#dialogue-text {
+  padding: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  min-height: 3rem;
+}
+
+#dialogue-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem 1rem;
+  border-top: 1px solid var(--frame-border);
+}
+
+.dialogue-choice {
+  background: var(--frame-inner);
+  border: 2px solid var(--frame-border);
+  border-radius: 4px;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dialogue-choice:hover:not([disabled]),
+.dialogue-choice.selected:not([disabled]) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.dialogue-choice.selected:not([disabled]) {
+  box-shadow: 0 0 8px var(--accent-dim);
+}
+
+.dialogue-choice:focus {
+  outline: none;
+}
+
+.dialogue-choice[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Previously selected dialogue options */
+.dialogue-choice.previously-selected {
+  opacity: 0.65;
+}
+
+.dialogue-choice.previously-selected .choice-text {
+  color: var(--text-muted);
+}
+
+.dialogue-choice.previously-selected:hover:not([disabled]),
+.dialogue-choice.previously-selected.selected:not([disabled]) {
+  opacity: 0.85;
+}
+
+.choice-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  background: var(--bg-dark);
+  border: 1px solid var(--frame-border);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dialogue-choice.selected .choice-key,
+.dialogue-choice:hover .choice-key {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.choice-text {
+  flex: 1;
+}
+
+/* Quest icon for quest-related dialogue options */
+.choice-quest-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  background: var(--warning);
+  color: var(--bg-dark);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.dialogue-choice.previously-selected .choice-quest-icon {
+  background: var(--text-muted);
+}
+
+/* Back/navigation options in dialogue */
+.dialogue-choice.back-option,
+.dialogue-choice.goodbye-option {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--frame-border);
+  padding-top: 0.75rem;
+  background: transparent;
+  opacity: 0.7;
+}
+
+.dialogue-choice.back-option:hover,
+.dialogue-choice.back-option.selected,
+.dialogue-choice.goodbye-option:hover,
+.dialogue-choice.goodbye-option.selected {
+  opacity: 1;
+}
+
+/* ============================================
+   INVENTORY PANEL
+   ============================================ */
+#inventory-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate3d(-50%, -50%, 0);
+  width: min(90vw, 400px);
+  max-height: 70vh;
+  background: var(--bg-panel);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0;
+  z-index: 2000;
+  display: none;
+  overflow: hidden;
+}
+
+#inventory-panel[open] {
+  display: block;
+}
+
+#inventory-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--frame-border);
+}
+
+#inventory-panel h2 {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+#inventory-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+#inventory-list {
+  list-style: none;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.inventory-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inventory-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inventory-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.inventory-item-icon.green { background: var(--rarity-green); }
+.inventory-item-icon.blue { background: var(--rarity-blue); }
+.inventory-item-icon.gold { background: var(--rarity-gold); }
+
+.inventory-item-info { flex: 1; }
+.inventory-item-name { font-size: 0.8rem; font-weight: 600; }
+.inventory-item-desc { font-size: 0.65rem; color: var(--text-muted); }
+.inventory-item-qty { font-size: 0.75rem; color: var(--text-secondary); }
+
+/* ============================================
+   INTERACT PROMPT
+   ============================================ */
+#interact-prompt {
+  position: fixed;
+  bottom: 180px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  z-index: 500;
+}
+
+#interact-prompt.hidden { display: none; }
+
+#interact-prompt kbd {
+  background: var(--frame-inner);
+  border: 1px solid var(--frame-border);
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  margin-right: 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+#toast-container {
+  position: fixed;
+  bottom: 200px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 4000;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--bg-panel);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 2.7s forwards;
+  white-space: nowrap;
+}
+
+.toast.xp { border-left: 3px solid var(--rarity-gold); }
+.toast.item { border-left: 3px solid var(--success); }
+.toast.quest { border-left: 3px solid var(--warning); }
+.toast.error { border-left: 3px solid var(--danger); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ============================================
+   CONTROLS HINT
+   ============================================ */
+#controls-hint {
+  position: fixed;
+  bottom: 100px;
+  right: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  z-index: 900;
+  opacity: 0.7;
+}
+
+#controls-hint:hover { opacity: 1; }
+
+#controls-hint p { margin-bottom: 0.2rem; }
+#controls-hint p:last-child { margin-bottom: 0; }
+
+#controls-hint kbd {
+  background: var(--frame-inner);
+  border: 1px solid var(--frame-border);
+  border-radius: 2px;
+  padding: 0.05rem 0.2rem;
+  margin: 0 0.1rem;
+  font-size: 0.55rem;
+}
+
+#reset-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.4rem;
+  background: var(--danger-dark);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+#reset-btn:hover {
+  background: var(--danger);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 900px) {
+  #player-frame { left: 1rem; }
+  #target-frame { right: 1rem; }
+  
+  .unit-frame {
+    min-width: 160px;
+  }
+  
+  .frame-portrait {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --tile-size: 20px;
+  }
+
+  #hud {
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.5rem;
+    min-width: 140px;
+  }
+
+  #minimap-container {
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  #minimap {
+    width: 100px;
+    height: 70px;
+  }
+
+  #quest-tracker {
+    top: 100px;
+    right: 0.5rem;
+    max-width: 160px;
+    padding: 0.5rem;
+  }
+
+  #action-bar {
+    bottom: 24px;
+    padding: 0.25rem 0.5rem;
+    gap: 0.25rem;
+  }
+
+  .action-slot {
+    width: 40px;
+    height: 40px;
+  }
+
+  #weapon-display {
+    display: none;
+  }
+
+  .unit-frame {
+    bottom: 70px;
+    min-width: 120px;
+    padding: 0.25rem;
+  }
+
+  .frame-portrait { display: none; }
+
+  #combat-log-container {
+    display: none;
+  }
+
+  #controls-hint {
+    display: none;
+  }
+
+  #xp-bar-container {
+    width: 90vw;
+  }
+
+  #xp-bar-track {
+    height: 10px;
+  }
+
+  #xp-bar-text {
+    font-size: 0.5rem;
+  }
+}
+
+/* ============================================
+   PATH MARKERS
+   ============================================ */
+.path-marker {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 8;
+  box-shadow: 0 0 6px var(--accent);
+  opacity: var(--marker-opacity, 0.6);
+  animation: path-pulse 1s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes path-pulse {
+  0%, 100% { opacity: 0.4; transform: scale3d(0.8, 0.8, 1); }
+  50% { opacity: 1; transform: scale3d(1.2, 1.2, 1); }
+}
+
+/* ============================================
+   UTILITY
+   ============================================ */
+.hidden { display: none !important; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

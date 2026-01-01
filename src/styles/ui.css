@@ -1,0 +1,1123 @@
+/* ============================================
+   VETUU — UI Styles
+   HUD, action bar, frames, panels, overlays
+   ============================================ */
+
+/* ============================================
+   TOP LEFT: PLAYER HUD
+   ============================================ */
+#hud {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  min-width: 180px;
+  font-family: var(--font-display);
+  z-index: 1000;
+}
+
+#hud-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.stat-label {
+  width: 3rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+.stat-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--hp-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stat-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--pct) * 1%);
+  background: var(--hp-color);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.sense-bar { background: var(--sense-bg); }
+.sense-bar .stat-fill { background: var(--sense-color); }
+
+.stat-value {
+  width: 4rem;
+  text-align: right;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.stat-row {
+  display: flex;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-mini {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.stat-mini strong {
+  color: var(--text-primary);
+}
+
+#hud-level {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#level-badge {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+#level-badge strong {
+  color: var(--rarity-gold);
+}
+
+.xp-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.xp-bar .stat-fill {
+  background: var(--rarity-gold);
+}
+
+#hud-location {
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#location-name {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ============================================
+   QUEST TRACKER
+   ============================================ */
+#quest-tracker {
+  position: fixed;
+  top: 140px;
+  right: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  min-width: 200px;
+  max-width: 260px;
+  font-family: var(--font-display);
+  z-index: 1000;
+}
+
+#quest-tracker h3 {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+#quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.quest-item {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.quest-item.active {
+  color: var(--warning);
+}
+
+.quest-item .quest-name {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.quest-item .quest-objective {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding-left: 0.5rem;
+}
+
+.quest-item .quest-objective::before { content: '◦ '; }
+.quest-item .quest-objective.complete::before {
+  content: '✓ ';
+  color: var(--success);
+}
+
+/* ============================================
+   COMBAT LOG
+   ============================================ */
+#combat-log-container {
+  position: fixed;
+  bottom: 180px;
+  left: 1rem;
+  width: 280px;
+  z-index: 900;
+}
+
+#combat-log {
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  max-height: 150px;
+  overflow-y: auto;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.combat-log-line {
+  padding: 0.15rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.combat-log-line:last-child {
+  border-bottom: none;
+}
+
+/* ============================================
+   UNIT FRAMES (Player & Target)
+   ============================================ */
+.unit-frame {
+  position: fixed;
+  bottom: 80px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-frame);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-width: 200px;
+  z-index: 1100;
+}
+
+#player-frame {
+  left: calc(50% - 320px);
+}
+
+#target-frame {
+  right: calc(50% - 320px);
+  flex-direction: row-reverse;
+}
+
+#target-frame.hidden {
+  display: none;
+}
+
+.frame-portrait {
+  width: 48px;
+  height: 48px;
+  background: var(--frame-inner);
+  border: 2px solid var(--frame-border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.player-portrait {
+  border-color: var(--accent-dim);
+}
+
+.enemy-portrait {
+  border-color: var(--danger-dark);
+}
+
+.frame-info {
+  flex: 1;
+  min-width: 130px;
+}
+
+.frame-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+
+.frame-name {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.frame-level {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  color: var(--rarity-gold);
+}
+
+.frame-bar {
+  position: relative;
+  height: 12px;
+  background: var(--hp-bg);
+  border-radius: 3px;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+}
+
+.frame-bar.sense-bar {
+  height: 8px;
+  background: var(--sense-bg);
+}
+
+.frame-hp-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(var(--hp-pct, 100) * 1%);
+  background: var(--hp-color);
+  transition: width 0.3s ease;
+}
+
+.frame-sense-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(var(--sense-pct, 100) * 1%);
+  background: var(--sense-color);
+  transition: width 0.3s ease;
+}
+
+#target-frame .frame-hp-fill {
+  background: var(--danger);
+}
+
+/* Friendly NPC target (green instead of red) */
+#target-frame.friendly .frame-hp-fill {
+  background: var(--success, #4CAF50);
+}
+
+#target-frame.friendly .enemy-portrait {
+  border-color: var(--success, #4CAF50);
+}
+
+#target-frame.friendly .frame-level {
+  color: var(--success, #4CAF50);
+}
+
+.frame-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-primary);
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.frame-weakness {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.weakness-type {
+  color: var(--rarity-gold);
+}
+
+/* ============================================
+   ACTION BAR
+   ============================================ */
+#action-bar {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-frame);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  z-index: 1200;
+}
+
+#weapon-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#weapon-display {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+#current-weapon-icon {
+  font-size: 1.4rem;
+}
+
+#current-weapon-name {
+  white-space: nowrap;
+}
+
+#weapon-cycle-btn {
+  width: 32px;
+  height: 32px;
+  background: var(--frame-inner);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+#weapon-cycle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.bar-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--frame-border);
+  margin: 0 0.25rem;
+}
+
+#action-slots {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.action-slot {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  background: var(--frame-inner);
+  border: 2px solid var(--frame-border);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.action-slot:hover:not(.on-cooldown) {
+  border-color: var(--accent);
+  background: rgba(105, 210, 214, 0.1);
+}
+
+.action-slot.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-dim);
+}
+
+/* Disabled state - when targeting friendly NPC */
+.action-slot.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.action-slot.disabled::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.3) 3px,
+    rgba(0, 0, 0, 0.3) 6px
+  );
+  border-radius: 4px;
+}
+
+#action-bar.target-friendly::before {
+  content: 'Friendly Target';
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--success, #4CAF50);
+  white-space: nowrap;
+}
+
+.action-slot.on-cooldown {
+  cursor: not-allowed;
+}
+
+/* Cooldown overlay that fills from bottom to top */
+.cooldown-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--cooldown-pct, 0) * 1%);
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 0 0 4px 4px;
+  pointer-events: none;
+  z-index: 5;
+  transition: height 0.1s linear;
+}
+
+/* Cooldown timer text */
+.cooldown-timer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: var(--text-primary);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.slot-icon {
+  font-size: 1.2rem;
+}
+
+.slot-label {
+  font-family: var(--font-display);
+  font-size: 0.45rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+  max-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-key {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.1rem 0.2rem;
+  border-radius: 2px;
+}
+
+.slot-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--frame-border);
+  margin: 0 0.25rem;
+}
+
+.special-slot {
+  border-color: var(--rarity-gold);
+  border-style: dashed;
+}
+
+.special-slot:hover:not(.on-cooldown) {
+  border-color: var(--rarity-gold);
+  background: rgba(214, 165, 90, 0.1);
+  border-style: solid;
+}
+
+/* ============================================
+   XP BAR (WoW-style)
+   ============================================ */
+#xp-bar-container {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  z-index: 1150;
+  /* Width matches action bar dynamically via JS, fallback to auto */
+  width: var(--action-bar-width, auto);
+  min-width: 300px;
+}
+
+#xp-bar-track {
+  position: relative;
+  height: 12px;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+  border: 2px solid var(--frame-border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+#xp-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(var(--xp-pct, 0) * 1%);
+  background: linear-gradient(180deg, #9B59B6 0%, #6B3D8E 50%, #4A2963 100%);
+  box-shadow: 0 0 8px rgba(155, 89, 182, 0.5);
+  transition: width 0.4s ease-out;
+}
+
+#xp-bar-notches {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-evenly;
+  pointer-events: none;
+}
+
+.xp-notch {
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+#xp-bar-text {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+#xp-bar-level {
+  color: var(--rarity-gold);
+  font-weight: 600;
+}
+
+#xp-bar-progress {
+  color: var(--text-secondary);
+}
+
+/* Rested XP bonus indicator (optional enhancement) */
+#xp-bar-fill.rested::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  height: 100%;
+  width: 20%;
+  background: linear-gradient(180deg, #3498DB 0%, #2471A3 50%, #1A5276 100%);
+  opacity: 0.6;
+}
+
+/* ============================================
+   DIALOGUE PANEL
+   ============================================ */
+#dialogue-panel {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  width: min(90vw, 600px);
+  background: var(--bg-panel);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0;
+  font-family: var(--font-display);
+  z-index: 2000;
+  display: none;
+}
+
+#dialogue-panel[open] {
+  display: block;
+  animation: dialogue-in 0.2s ease;
+}
+
+#dialogue-panel::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+@keyframes dialogue-in {
+  from { opacity: 0; transform: translate3d(-50%, 20px, 0); }
+  to { opacity: 1; transform: translate3d(-50%, 0, 0); }
+}
+
+#dialogue-speaker {
+  padding: 0.75rem 1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  border-bottom: 1px solid var(--frame-border);
+}
+
+#dialogue-text {
+  padding: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  min-height: 3rem;
+}
+
+#dialogue-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem 1rem;
+  border-top: 1px solid var(--frame-border);
+}
+
+.dialogue-choice {
+  background: var(--frame-inner);
+  border: 2px solid var(--frame-border);
+  border-radius: 4px;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dialogue-choice:hover:not([disabled]),
+.dialogue-choice.selected:not([disabled]) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.dialogue-choice.selected:not([disabled]) {
+  box-shadow: 0 0 8px var(--accent-dim);
+}
+
+.dialogue-choice:focus {
+  outline: none;
+}
+
+.dialogue-choice[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Previously selected dialogue options */
+.dialogue-choice.previously-selected {
+  opacity: 0.65;
+}
+
+.dialogue-choice.previously-selected .choice-text {
+  color: var(--text-muted);
+}
+
+.dialogue-choice.previously-selected:hover:not([disabled]),
+.dialogue-choice.previously-selected.selected:not([disabled]) {
+  opacity: 0.85;
+}
+
+.choice-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  background: var(--bg-dark);
+  border: 1px solid var(--frame-border);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dialogue-choice.selected .choice-key,
+.dialogue-choice:hover .choice-key {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.choice-text {
+  flex: 1;
+}
+
+/* Quest icon for quest-related dialogue options */
+.choice-quest-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  background: var(--warning);
+  color: var(--bg-dark);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.dialogue-choice.previously-selected .choice-quest-icon {
+  background: var(--text-muted);
+}
+
+/* Back/navigation options in dialogue */
+.dialogue-choice.back-option,
+.dialogue-choice.goodbye-option {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--frame-border);
+  padding-top: 0.75rem;
+  background: transparent;
+  opacity: 0.7;
+}
+
+.dialogue-choice.back-option:hover,
+.dialogue-choice.back-option.selected,
+.dialogue-choice.goodbye-option:hover,
+.dialogue-choice.goodbye-option.selected {
+  opacity: 1;
+}
+
+/* ============================================
+   INVENTORY PANEL
+   ============================================ */
+#inventory-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate3d(-50%, -50%, 0);
+  width: min(90vw, 400px);
+  max-height: 70vh;
+  background: var(--bg-panel);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  padding: 0;
+  z-index: 2000;
+  display: none;
+  overflow: hidden;
+}
+
+#inventory-panel[open] {
+  display: block;
+}
+
+#inventory-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--frame-border);
+}
+
+#inventory-panel h2 {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+#inventory-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+#inventory-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.inventory-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.inventory-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inventory-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.inventory-item-icon.green { background: var(--rarity-green); }
+.inventory-item-icon.blue { background: var(--rarity-blue); }
+.inventory-item-icon.gold { background: var(--rarity-gold); }
+
+.inventory-item-info { flex: 1; }
+.inventory-item-name { font-size: 0.8rem; font-weight: 600; }
+.inventory-item-desc { font-size: 0.65rem; color: var(--text-muted); }
+.inventory-item-qty { font-size: 0.75rem; color: var(--text-secondary); }
+
+/* ============================================
+   INTERACT PROMPT
+   ============================================ */
+#interact-prompt {
+  position: fixed;
+  bottom: 180px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  z-index: 500;
+}
+
+#interact-prompt.hidden { display: none; }
+
+#interact-prompt kbd {
+  background: var(--frame-inner);
+  border: 1px solid var(--frame-border);
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  margin-right: 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+#toast-container {
+  position: fixed;
+  bottom: 200px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 4000;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--bg-panel);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 2.7s forwards;
+  white-space: nowrap;
+}
+
+.toast.xp { border-left: 3px solid var(--rarity-gold); }
+.toast.item { border-left: 3px solid var(--success); }
+.toast.quest { border-left: 3px solid var(--warning); }
+.toast.error { border-left: 3px solid var(--danger); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ============================================
+   CONTROLS HINT
+   ============================================ */
+#controls-hint {
+  position: fixed;
+  bottom: 100px;
+  right: 1rem;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  z-index: 900;
+  opacity: 0.7;
+}
+
+#controls-hint:hover { opacity: 1; }
+
+#controls-hint p { margin-bottom: 0.2rem; }
+#controls-hint p:last-child { margin-bottom: 0; }
+
+#controls-hint kbd {
+  background: var(--frame-inner);
+  border: 1px solid var(--frame-border);
+  border-radius: 2px;
+  padding: 0.05rem 0.2rem;
+  margin: 0 0.1rem;
+  font-size: 0.55rem;
+}
+
+#reset-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.4rem;
+  background: var(--danger-dark);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+#reset-btn:hover {
+  background: var(--danger);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 900px) {
+  #player-frame { left: 1rem; }
+  #target-frame { right: 1rem; }
+  
+  .unit-frame {
+    min-width: 160px;
+  }
+  
+  .frame-portrait {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --tile-size: 20px;
+  }
+
+  #hud {
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.5rem;
+    min-width: 140px;
+  }
+
+  #minimap-container {
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  #minimap {
+    width: 100px;
+    height: 70px;
+  }
+
+  #quest-tracker {
+    top: 100px;
+    right: 0.5rem;
+    max-width: 160px;
+    padding: 0.5rem;
+  }
+
+  #action-bar {
+    bottom: 24px;
+    padding: 0.25rem 0.5rem;
+    gap: 0.25rem;
+  }
+
+  .action-slot {
+    width: 40px;
+    height: 40px;
+  }
+
+  #weapon-display {
+    display: none;
+  }
+
+  .unit-frame {
+    bottom: 70px;
+    min-width: 120px;
+    padding: 0.25rem;
+  }
+
+  .frame-portrait { display: none; }
+
+  #combat-log-container {
+    display: none;
+  }
+
+  #controls-hint {
+    display: none;
+  }
+
+  #xp-bar-container {
+    width: 90vw;
+  }
+
+  #xp-bar-track {
+    height: 10px;
+  }
+
+  #xp-bar-text {
+    font-size: 0.5rem;
+  }
+}
+

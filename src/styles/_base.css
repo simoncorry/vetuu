@@ -1,0 +1,44 @@
+/* ============================================
+   VETUU — Base Styles
+   Global typography & page layout primitives
+   ============================================ */
+
+/* ============================================
+   ANIMATION & TRANSFORM RULES
+   ============================================
+   
+   ALL motion, animation, and transitions MUST use CSS.
+   JavaScript should only set final positions/states.
+   
+   REQUIRED: Use 3D transforms for GPU acceleration:
+   - translate3d(x, y, 0) instead of translate(x, y)
+   - scale3d(x, y, 1) instead of scale(x) or scale(x, y)  
+   - rotate3d(0, 0, 1, angle) instead of rotate(angle)
+   - Always include will-change on animated elements
+   
+   This ensures all animations run on the GPU compositor
+   thread, not the main thread, for smooth 60fps motion.
+   
+   ============================================ */
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Game Container ---------- */
+#game {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+

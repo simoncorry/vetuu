@@ -1,0 +1,76 @@
+/* ============================================
+   VETUU — Design Tokens
+   CSS custom properties for consistent theming
+   ============================================ */
+
+/* ---------- Custom Properties ---------- */
+:root {
+  /* Tile dimensions */
+  --tile-size: 24px;
+  --map-width: 120;
+  --map-height: 80;
+
+  /* Palette: Desert tones */
+  --sand: #C49C6A;
+  --dune: #D0AD73;
+  --rock: #6B7075;
+  --road: #A8895F;
+  --scrap-town: #4C545A;
+  --planks: #8A5F3D;
+  --ash: #8D7A5B;
+  --salt: #D8D2BE;
+  --dry-sand: #B68F5F;
+
+  /* UI Colors */
+  --bg-dark: #0D0F11;
+  --bg-panel: #181C20;
+  --bg-panel-alpha: rgba(24, 28, 32, 0.95);
+  --bg-frame: rgba(20, 24, 28, 0.98);
+  --text-primary: #E8E4DB;
+  --text-secondary: #B8B4AB;
+  --text-muted: #8A8780;
+  --text-disabled: #5A5752;
+  --accent: #69D2D6;
+  --accent-dim: #3A8A8E;
+  --danger: #D64545;
+  --danger-dark: #8B2020;
+  --warning: #E18B37;
+  --success: #5DAD5D;
+  --hp-color: #45A845;
+  --hp-bg: #1E3A1E;
+  --sense-color: #4B9CD6;
+  --sense-bg: #1E2E3A;
+  --rarity-green: #5DAD5D;
+  --rarity-blue: #5A9BD6;
+  --rarity-gold: #D6A55A;
+
+  /* Actor colors */
+  --player: #00E5E5;
+  --militia: #22B6B8;
+  --verdleg: #E18B37;
+  --trog: #8B5A2B;
+  --karth: #2E343B;
+  --boss: #8B45D6;
+
+  /* Level badge colors */
+  --level-trivial: #888888;
+  --level-easy: #5DAD5D;
+  --level-normal: #B8B4AB;
+  --level-hard: #E18B37;
+  --level-very-hard: #D64545;
+  --level-impossible: #8B45D6;
+
+  /* Timing - Classic WoW pacing */
+  --move-duration: 280ms; /* Tactical movement speed */
+  --move-steps: 4;
+  --ui-transition: 180ms;
+
+  /* Typography */
+  --font-display: 'Courier New', Courier, monospace;
+  --font-body: system-ui, -apple-system, sans-serif;
+
+  /* Frame styling */
+  --frame-border: #3A3E42;
+  --frame-inner: #252A2E;
+}
+
