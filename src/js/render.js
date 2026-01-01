@@ -296,7 +296,7 @@ export function renderPath(path) {
     marker.className = 'path-marker';
     marker.style.left = `${x * TILE_SIZE + TILE_SIZE / 2 - 3}px`;
     marker.style.top = `${y * TILE_SIZE + TILE_SIZE / 2 - 3}px`;
-    marker.style.opacity = 0.3 + (i / path.length) * 0.5;
+    marker.style.setProperty('--marker-opacity', 0.3 + (i / path.length) * 0.5);
     fragment.appendChild(marker);
   }
 

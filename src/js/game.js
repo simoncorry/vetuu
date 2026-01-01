@@ -266,7 +266,7 @@ export function updateHUD() {
   const xpBarFill = document.getElementById('xp-bar-fill');
   const xpBarLevel = document.getElementById('xp-bar-level');
   const xpBarProgress = document.getElementById('xp-bar-progress');
-  if (xpBarFill) xpBarFill.style.width = `${Math.max(0, xpProgress)}%`;
+  if (xpBarFill) xpBarFill.style.setProperty('--xp-pct', Math.max(0, xpProgress));
   if (xpBarLevel) xpBarLevel.textContent = `Lv.${p.level}`;
   if (xpBarProgress) {
     xpBarProgress.textContent = p.level >= 25 ? 'MAX LEVEL' : `${p.xp} / ${p.xpToNext} XP`;
@@ -279,9 +279,9 @@ export function updateHUD() {
   const playerSenseText = document.getElementById('player-sense-text');
   const playerFrameLevel = document.getElementById('player-frame-level');
 
-  if (playerHpFill) playerHpFill.style.width = `${hpPct}%`;
+  if (playerHpFill) playerHpFill.style.setProperty('--hp-pct', hpPct);
   if (playerHpText) playerHpText.textContent = `${p.hp}/${maxHP}`;
-  if (playerSenseFill) playerSenseFill.style.width = `${sensePct}%`;
+  if (playerSenseFill) playerSenseFill.style.setProperty('--sense-pct', sensePct);
   if (playerSenseText) playerSenseText.textContent = `${p.sense}/${p.maxSense}`;
   if (playerFrameLevel) playerFrameLevel.textContent = p.level;
 

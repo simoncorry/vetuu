@@ -472,7 +472,7 @@ function showPathMarkers(path) {
     marker.className = 'path-marker';
     marker.style.left = `${x * TILE_SIZE + TILE_SIZE / 2 - 4}px`;
     marker.style.top = `${y * TILE_SIZE + TILE_SIZE / 2 - 4}px`;
-    marker.style.opacity = String(0.3 + (i / path.length) * 0.5);
+    marker.style.setProperty('--marker-opacity', 0.3 + (i / path.length) * 0.5);
     actorLayer.appendChild(marker);
     pathMarkers.push(marker);
   }

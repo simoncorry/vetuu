@@ -679,13 +679,13 @@ function handleGuardDeath(guard) {
   guard.hp = 0;
   logCombat(`Ironcross Guard has fallen!`);
   
-  // Visual feedback - remove guard element or mark as dead
+  // Visual feedback - mark guard as downed
   const guardEl = document.querySelector(`[data-npc-id="${guard.id}"]`);
   if (guardEl) {
     guardEl.classList.add('dying');
     setTimeout(() => {
-      guardEl.style.opacity = '0.3';
       guardEl.classList.remove('dying');
+      guardEl.classList.add('downed');
     }, 500);
   }
   
@@ -693,7 +693,7 @@ function handleGuardDeath(guard) {
   setTimeout(() => {
     guard.hp = getMaxHP(guard);
     if (guardEl) {
-      guardEl.style.opacity = '1';
+      guardEl.classList.remove('downed');
     }
     logCombat('Ironcross Guard has recovered!');
   }, 30000);
@@ -1540,16 +1540,14 @@ function updateEnemyVisuals() {
       el.classList.remove('spawn-immune');
     }
     
-    // Passive state visual
+    // Passive state visual - CSS handles the color via .passive class
     const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
     if (isPassive) {
       el.classList.add('passive');
       el.dataset.passive = 'true';
-      el.style.backgroundColor = '#B8A038'; // Yellow for passive
     } else {
       el.classList.remove('passive');
       delete el.dataset.passive;
-      el.style.backgroundColor = enemy.color;
     }
     
     // In-combat visual (flashing red glow) - when enemy is actively engaged/provoked
@@ -3569,9 +3567,13 @@ export function renderEnemies(state) {
     
     const moveSpeed = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
     
+    // Set CSS variables for enemy-specific values
+    el.style.setProperty('--enemy-color', enemy.color);
+    el.style.setProperty('--enemy-move-speed', `${moveSpeed}ms`);
+    
+    // Initial position without transition
     el.style.transition = 'none';
     el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
-    el.style.backgroundColor = isPassive ? '#B8A038' : enemy.color; // Yellow for passive
     
     el.dataset.moveSpeed = moveSpeed;
 
@@ -3600,7 +3602,10 @@ export function renderEnemies(state) {
 
     const hpBar = document.createElement('div');
     hpBar.className = 'enemy-hp-bar';
-    hpBar.innerHTML = `<span class="enemy-hp-fill" style="width: ${getHPPercent(enemy)}%"></span>`;
+    const hpFill = document.createElement('span');
+    hpFill.className = 'enemy-hp-fill';
+    hpFill.style.setProperty('--hp-pct', getHPPercent(enemy));
+    hpBar.appendChild(hpFill);
     el.appendChild(hpBar);
 
     el.addEventListener('click', (e) => {
@@ -3615,10 +3620,10 @@ export function renderEnemies(state) {
     actorLayer.appendChild(el);
   }
   
+  // Re-enable transitions after initial placement (CSS uses --enemy-move-speed variable)
   requestAnimationFrame(() => {
     actorLayer.querySelectorAll('.enemy').forEach(el => {
-      const moveSpeed = el.dataset.moveSpeed || DEFAULT_MOVE_COOLDOWN;
-      el.style.transition = `transform ${moveSpeed}ms linear, box-shadow 0.15s ease, background-color 0.3s ease`;
+      el.style.transition = '';
     });
   });
 }
@@ -3628,7 +3633,7 @@ export function renderEnemies(state) {
 function updateEnemyHealthBar(enemy) {
   const fill = document.querySelector(`[data-enemy-id="${enemy.id}"] .enemy-hp-fill`);
   if (fill) {
-    fill.style.width = `${getHPPercent(enemy)}%`;
+    fill.style.setProperty('--hp-pct', getHPPercent(enemy));
   }
 }
 
@@ -3686,7 +3691,7 @@ function updatePlayerHealthBar() {
   
   const fill = document.getElementById('player-hp-fill');
   const text = document.getElementById('player-hp-text');
-  if (fill) fill.style.width = `${pct}%`;
+  if (fill) fill.style.setProperty('--hp-pct', pct);
   if (text) text.textContent = `${player.hp}/${max}`;
 
   const mainFill = document.getElementById('hp-fill');
@@ -3697,14 +3702,16 @@ function updatePlayerHealthBar() {
 
 function updatePlayerSenseBar() {
   const player = currentState.player;
+  const sensePct = (player.sense / player.maxSense) * 100;
+  
   const fill = document.getElementById('player-sense-fill');
   const text = document.getElementById('player-sense-text');
-  if (fill) fill.style.width = `${(player.sense / player.maxSense) * 100}%`;
+  if (fill) fill.style.setProperty('--sense-pct', sensePct);
   if (text) text.textContent = `${player.sense}/${player.maxSense}`;
 
   const mainFill = document.getElementById('sense-fill');
   const mainText = document.getElementById('sense-text');
-  if (mainFill) mainFill.style.setProperty('--pct', (player.sense / player.maxSense) * 100);
+  if (mainFill) mainFill.style.setProperty('--pct', sensePct);
   if (mainText) mainText.textContent = `${player.sense}/${player.maxSense}`;
 }
 
@@ -3727,7 +3734,7 @@ function updateTargetFrame() {
   const targetMax = getMaxHP(currentTarget);
   if (nameEl) nameEl.textContent = currentTarget.name;
   if (levelEl) levelEl.textContent = `Lv.${currentTarget.level}`;
-  if (hpFill) hpFill.style.width = `${getHPPercent(currentTarget)}%`;
+  if (hpFill) hpFill.style.setProperty('--hp-pct', getHPPercent(currentTarget));
   if (hpText) hpText.textContent = `${Math.max(0, currentTarget.hp)}/${targetMax}`;
 
   const config = ENEMY_CONFIGS[currentTarget.type];
@@ -3767,10 +3774,10 @@ function updateTargetFrame() {
     // NPCs with HP (like guards) show health, others show full bar
     const npcMax = getMaxHP(currentNpcTarget);
     if (currentNpcTarget.hp !== undefined && npcMax) {
-      if (hpFill) hpFill.style.width = `${getHPPercent(currentNpcTarget)}%`;
+      if (hpFill) hpFill.style.setProperty('--hp-pct', getHPPercent(currentNpcTarget));
       if (hpText) hpText.textContent = `${Math.max(0, currentNpcTarget.hp)}/${npcMax}`;
     } else {
-      if (hpFill) hpFill.style.width = '100%';
+      if (hpFill) hpFill.style.setProperty('--hp-pct', 100);
       if (hpText) hpText.textContent = '—';
     }
 
@@ -3863,7 +3870,7 @@ function updateCooldownUI() {
       }
 
       const pct = (cooldown / maxCooldown) * 100;
-      overlay.style.height = `${pct}%`;
+      overlay.style.setProperty('--cooldown-pct', pct);
       timer.textContent = (cooldown / 1000).toFixed(1);
     } else {
       overlay?.remove();
