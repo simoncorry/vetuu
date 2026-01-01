@@ -1092,7 +1092,7 @@ function processEnemyAI(enemy, t) {
     const dHome = enemy.home ? distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y) : 0;
     if (dHome > 2) {
       moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
-    } else if (!isExpired(enemy.moveCooldown, t) === false && Math.random() < 0.02) {
+    } else if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.02) {
       aiIdle(enemy, t, weapon);
     }
     return;
@@ -1244,7 +1244,7 @@ function handleUnawareState(enemy, t, weapon) {
     // At home - regenerate and maybe idle
     regenAtHome(enemy, t);
     
-    if (t >= (enemy.moveCooldown ?? 0) && Math.random() < 0.02) {
+    if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.02) {
       aiIdle(enemy, t, weapon);
     }
   }
@@ -1311,7 +1311,7 @@ function handleRetreatState(enemy, t) {
   
   // Move toward home (faster movement during retreat)
   const moveCD = 320; // Faster than normal
-  if (t < (enemy.moveCooldown ?? 0)) return;
+  if (!isExpired(enemy.moveCooldown, t)) return;
   
   const dx = Math.sign(enemy.home.x - enemy.x);
   const dy = Math.sign(enemy.home.y - enemy.y);
