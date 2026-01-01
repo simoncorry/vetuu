@@ -46,23 +46,8 @@ const ENEMY_CONFIGS = {
 // Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;
 
-// Drycross protection zone - using rectangular bounds for accurate base coverage
+// Drycross center for player respawn
 let DRYCROSS_CENTER = { x: 56, y: 42 };
-
-// Base bounds in ORIGINAL coordinates (before map expansion offset)
-// The base is bounded by guards at: north y=29, south y=46, west x=44, east x=64
-const BASE_BOUNDS_ORIGINAL = {
-  minX: 44,  // West guard line
-  maxX: 64,  // East guard line
-  minY: 29,  // North guard line
-  maxY: 46   // South guard line
-};
-
-// Expanded base bounds (will be set in initCombat)
-let BASE_BOUNDS = { ...BASE_BOUNDS_ORIGINAL };
-
-// Buffer zone around base edges where enemies cannot go
-const BASE_EDGE_BUFFER = 4; // Enemies stay at least 4 tiles from the base edge
 
 // Combat rules
 const GUARD_LEVEL = 5; // Guard level - enemies can now fight back
@@ -554,7 +539,7 @@ export function initCombat(state) {
     state.runtime.activeEnemies = [];
   }
 
-  // Update Drycross center and bounds based on expanded map
+  // Update Drycross center based on expanded map (for player respawn)
   if (state.map.meta?.originalOffset) {
     const ox = state.map.meta.originalOffset.x;
     const oy = state.map.meta.originalOffset.y;
@@ -562,14 +547,6 @@ export function initCombat(state) {
     DRYCROSS_CENTER = {
       x: 56 + ox,
       y: 42 + oy
-    };
-    
-    // Expand base bounds with offset
-    BASE_BOUNDS = {
-      minX: BASE_BOUNDS_ORIGINAL.minX + ox,
-      maxX: BASE_BOUNDS_ORIGINAL.maxX + ox,
-      minY: BASE_BOUNDS_ORIGINAL.minY + oy,
-      maxY: BASE_BOUNDS_ORIGINAL.maxY + oy
     };
   }
 
@@ -1006,7 +983,7 @@ function processRegeneration(now) {
 // 4. Retreating handler
 // 5. pendingAggro resolution (provoked while broken off)
 // 6. brokenOff handler
-// 7. Guard/base retreat checks
+// 7. Guard retreat checks
 // 8. Passive/conditional gating (unless provoked)
 // 9. Engaged handler: leash/deaggro + combat AI
 // 10. Detection: UNAWARE -> ALERT -> ENGAGED
@@ -1099,7 +1076,7 @@ function processEnemyAI(enemy, t) {
   }
   
   // ============================================
-  // 7. GUARD/BASE RETREAT CHECKS
+  // 7. GUARD RETREAT CHECKS
   // ============================================
   if (shouldBreakOffFromGuards(enemy, guards, t)) {
     startRetreat(enemy, t, 'guards');
@@ -1110,12 +1087,6 @@ function processEnemyAI(enemy, t) {
     }
     
     updateEnemyVisuals();
-    return;
-  }
-
-  if (shouldRetreatFromBase(enemy)) {
-    startRetreat(enemy, t, 'base');
-    releaseAttackerSlot(enemy);
     return;
   }
   
@@ -1516,24 +1487,6 @@ function executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config) {
     default:
       aiMelee(enemy, weapon, dPlayer, hasLOS, t, inSettle);
   }
-}
-
-// ============================================
-// BASE PROXIMITY CHECK
-// ============================================
-
-/**
- * Check if enemy should retreat due to base proximity
- */
-function shouldRetreatFromBase(enemy) {
-  if (enemy.isBoss) return false;
-  
-  // If at the base boundary edge, need to retreat
-  if (isInsideBaseZone(enemy.x, enemy.y, BASE_EDGE_BUFFER + 1)) {
-    return true;
-  }
-  
-  return false;
 }
 
 // Note: hasSpawnImmunity is imported from aiUtils.js as checkSpawnImmunity
@@ -2034,9 +1987,6 @@ function moveToGetLOS(enemy) {
 function canEnemyMoveTo(x, y, excludeId) {
   if (!canMoveTo(currentState, x, y)) return false;
   if (x === currentState.player.x && y === currentState.player.y) return false;
-
-  // Enemies cannot enter the base zone (rectangular bounds + buffer)
-  if (isInsideBaseZone(x, y, BASE_EDGE_BUFFER)) return false;
 
   // Don't walk on other enemies (but can be adjacent - no gap required in combat)
   for (const other of currentState.runtime.activeEnemies) {
@@ -3036,20 +2986,6 @@ function clearTarget() {
 
 export function getCurrentTarget() {
   return currentTarget;
-}
-
-// ============================================
-// BASE ZONE UTILITY
-// ============================================
-/**
- * Check if a position is inside or too close to the base
- * Uses rectangular bounds for accurate base coverage
- */
-function isInsideBaseZone(x, y, buffer = 0) {
-  // Check if position is within base bounds + buffer
-  const inBaseX = x >= (BASE_BOUNDS.minX - buffer) && x <= (BASE_BOUNDS.maxX + buffer);
-  const inBaseY = y >= (BASE_BOUNDS.minY - buffer) && y <= (BASE_BOUNDS.maxY + buffer);
-  return inBaseX && inBaseY;
 }
 
 export function spawnBoss(state, bossDef) {
