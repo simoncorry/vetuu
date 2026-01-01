@@ -5207,15 +5207,23 @@ function updatePlayerHealthBar() {
   const max = getMaxHP(player);
   const pct = getHPPercent(player);
   
+  // Update player frame (portrait)
   const fill = document.getElementById('player-hp-fill');
   const text = document.getElementById('player-hp-text');
   if (fill) fill.style.setProperty('--hp-pct', pct);
   if (text) text.textContent = `${player.hp}/${max}`;
 
+  // Update main HUD bar
   const mainFill = document.getElementById('hp-fill');
   const mainText = document.getElementById('hp-text');
   if (mainFill) mainFill.style.setProperty('--pct', pct);
   if (mainText) mainText.textContent = `${player.hp}/${max}`;
+  
+  // Update player sprite health bar (above character)
+  const playerEl = document.getElementById('player');
+  if (playerEl) {
+    playerEl.style.setProperty('--player-hp-pct', pct);
+  }
 }
 
 function updatePlayerSenseBar() {
