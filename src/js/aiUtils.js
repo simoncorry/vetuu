@@ -1,23 +1,16 @@
 /**
  * VETUU — AI Utilities
  * Helper functions for enemy AI behavior, retreat, and state management.
+ * 
+ * TIMING: All functions use performance.now() via time.js for consistency.
+ * Legacy Date.now() timestamps are normalized via toPerfTime().
  */
 
 import { AI } from './aiConstants.js';
+import { nowMs, toPerfTime, isExpired, remainingMs } from './time.js';
 
-// ============================================
-// TIMING
-// ============================================
-
-/** 
- * Current time in milliseconds (performance.now for local calculations)
- * NOTE: For timestamps that persist on entities (like spawnImmunityUntil),
- * combat.js uses Date.now() instead. When comparing against entity timestamps,
- * always use Date.now() to ensure consistency.
- */
-export function nowMs() {
-  return performance.now();
-}
+// Re-export nowMs for convenience
+export { nowMs, toPerfTime, isExpired, remainingMs };
 
 // ============================================
 // DISTANCE
@@ -53,40 +46,51 @@ export function ensureEffects(entity) {
 // STATUS CHECKS
 // ============================================
 
-/** Check if entity is immune to damage/CC */
-export function isImmune(entity, t = null) {
-  // Player immunity flag
+/**
+ * Check if entity is immune to damage/CC.
+ * Spawn immunity blocks damage/CC only, NOT detection/aggro.
+ */
+export function isImmune(entity, t = nowMs()) {
+  // Player immunity flag (corpse run immunity)
   if (entity.isImmune === true) return true;
   
-  // Effects-based immunity (uses performance.now() time base)
-  const perfNow = t ?? nowMs();
-  if ((entity.effects?.immuneUntil ?? 0) > perfNow) return true;
+  // Effects-based immunity
+  if (!isExpired(entity.effects?.immuneUntil, t)) return true;
   
-  // Spawn immunity (uses Date.now() time base)
-  const dateNow = Date.now();
-  if ((entity.spawnImmunityUntil ?? 0) > dateNow) return true;
+  // Spawn immunity (normalized from legacy Date.now timestamps)
+  if (!isExpired(entity.spawnImmunityUntil, t)) return true;
   
   return false;
 }
 
-/** Check if entity has spawn immunity (subset of isImmune) */
-export function hasSpawnImmunity(entity, t = Date.now()) {
-  return (entity.spawnImmunityUntil ?? 0) > t;
+/**
+ * Check if entity has spawn immunity.
+ * Used to block damage/CC, but NOT aggro/detection.
+ */
+export function hasSpawnImmunity(entity, t = nowMs()) {
+  return !isExpired(entity.spawnImmunityUntil, t);
+}
+
+/**
+ * Get remaining spawn immunity time in ms.
+ */
+export function getSpawnImmunityRemaining(entity, t = nowMs()) {
+  return remainingMs(entity.spawnImmunityUntil, t);
 }
 
 /** Check if entity is stunned */
 export function isStunned(entity, t = nowMs()) {
-  return (entity.effects?.stunUntil ?? 0) > t;
+  return !isExpired(entity.effects?.stunUntil, t);
 }
 
 /** Check if entity is rooted */
 export function isRooted(entity, t = nowMs()) {
-  return (entity.effects?.rootUntil ?? 0) > t;
+  return !isExpired(entity.effects?.rootUntil, t);
 }
 
 /** Check if entity is slowed */
 export function isSlowed(entity, t = nowMs()) {
-  return (entity.effects?.slowUntil ?? 0) > t;
+  return !isExpired(entity.effects?.slowUntil, t);
 }
 
 /** Check if entity can move (not stunned or rooted) */
@@ -99,15 +103,42 @@ export function canAct(entity, t = nowMs()) {
   return !isStunned(entity, t);
 }
 
-/** Check if entity is broken off (cannot re-aggro) */
+/**
+ * Check if entity is broken off (cannot re-aggro yet).
+ * Uses normalized time comparison.
+ */
 export function isBrokenOff(entity, t = nowMs()) {
-  return t < (entity.brokenOffUntil ?? 0);
+  return !isExpired(entity.brokenOffUntil, t);
 }
 
-/** Check if entity is in spawn settle period (cannot aggro yet) */
+/**
+ * Check if entity is in spawn settle period.
+ * Spawn settle: cannot ATTACK yet, but CAN aggro/detect.
+ * This prevents instant attacks right after spawn, but allows immediate engagement.
+ */
 export function isInSpawnSettle(entity, t = nowMs()) {
-  const spawnTime = entity.spawnedAt ?? 0;
+  const spawnTime = toPerfTime(entity.spawnedAt ?? 0);
+  if (!spawnTime) return false;
   return t < spawnTime + AI.SPAWN_SETTLE_MS;
+}
+
+/**
+ * Get remaining spawn settle time in ms.
+ */
+export function getSpawnSettleRemaining(entity, t = nowMs()) {
+  const spawnTime = toPerfTime(entity.spawnedAt ?? 0);
+  if (!spawnTime) return 0;
+  return Math.max(0, (spawnTime + AI.SPAWN_SETTLE_MS) - t);
+}
+
+/**
+ * Check if entity can aggro (not broken off, not retreating).
+ * NOTE: Spawn immunity/settle do NOT block aggro.
+ */
+export function canAggro(entity, t = nowMs()) {
+  if (entity.isRetreating) return false;
+  if (isBrokenOff(entity, t)) return false;
+  return true;
 }
 
 // ============================================

@@ -22,10 +22,11 @@ import {
 } from './utils.js';
 import { AI } from './aiConstants.js';
 import { getMaxHP, getHPPercent, normalizeHealthKeys, clampHP } from './entityCompat.js';
+import { nowMs, toPerfTime, isExpired, remainingMs } from './time.js';
 import {
-  nowMs,
-  isImmune, hasSpawnImmunity as checkSpawnImmunity, isStunned, isRooted, canMove, canAct,
-  isBrokenOff, isInSpawnSettle,
+  isImmune, hasSpawnImmunity, isStunned, isRooted, canMove, canAct,
+  isBrokenOff, isInSpawnSettle, canAggro,
+  getSpawnImmunityRemaining, getSpawnSettleRemaining,
   getLeashRadius, getAggroRadius, computeDeaggroRadius,
   startRetreat, processRetreat, finishResetAtHome,
   shouldBreakOffFromGuards, checkLeashAndDeaggro,
@@ -309,6 +310,83 @@ if (typeof window !== 'undefined') {
     console.log("To see breakdown of any hit, call: VETUU_LAST_HIT()");
     return "Simulation complete";
   };
+  
+  /**
+   * Debug info for a specific enemy.
+   * Usage: VETUU_ENEMY_DEBUG('enemy_123...') or VETUU_ENEMY_DEBUG(0) for first enemy
+   */
+  window.VETUU_ENEMY_DEBUG = (idOrIndex) => {
+    if (!currentState?.runtime?.activeEnemies) return 'No enemies';
+    
+    const t = nowMs();
+    let enemy;
+    
+    if (typeof idOrIndex === 'number') {
+      enemy = currentState.runtime.activeEnemies[idOrIndex];
+    } else {
+      enemy = currentState.runtime.activeEnemies.find(e => e.id === idOrIndex);
+    }
+    
+    if (!enemy) return `Enemy not found: ${idOrIndex}`;
+    
+    const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
+    const settleRemaining = getSpawnSettleRemaining(enemy, t);
+    const provokedRemaining = enemy.provokedUntil ? Math.max(0, enemy.provokedUntil - t) : 0;
+    const brokenOffRemaining = enemy.brokenOffUntil ? Math.max(0, toPerfTime(enemy.brokenOffUntil) - t) : 0;
+    
+    return {
+      id: enemy.id,
+      name: enemy.name,
+      type: enemy.type,
+      level: enemy.level,
+      hp: `${enemy.hp}/${getMaxHP(enemy)}`,
+      state: enemy.state,
+      isEngaged: enemy.isEngaged,
+      isAware: enemy.isAware,
+      isRetreating: enemy.isRetreating,
+      isAlpha: enemy.isAlpha,
+      position: { x: enemy.x, y: enemy.y },
+      home: enemy.home,
+      aggroType: enemy.aggroType,
+      immuneRemainingMs: Math.round(immuneRemaining),
+      settleRemainingMs: Math.round(settleRemaining),
+      provokedRemainingMs: Math.round(provokedRemaining),
+      brokenOffRemainingMs: Math.round(brokenOffRemaining),
+      pendingAggro: !!enemy.pendingAggro,
+      hasAttackerSlot: hasAttackerSlot(enemy, t),
+      provokedSet: provokedEnemies.has(enemy.id)
+    };
+  };
+  
+  /**
+   * Debug info for attacker slots.
+   * Usage: VETUU_ATTACKERS()
+   */
+  window.VETUU_ATTACKERS = () => {
+    return getAttackerSlotsDebug(nowMs());
+  };
+  
+  /**
+   * List all active enemies with summary info.
+   * Usage: VETUU_ENEMIES()
+   */
+  window.VETUU_ENEMIES = () => {
+    if (!currentState?.runtime?.activeEnemies) return 'No enemies';
+    
+    const t = nowMs();
+    return currentState.runtime.activeEnemies
+      .filter(e => e.hp > 0)
+      .map(e => ({
+        id: e.id.slice(-8),
+        name: e.name,
+        lv: e.level,
+        state: e.state,
+        hp: `${e.hp}/${getMaxHP(e)}`,
+        hasSlot: hasAttackerSlot(e, t),
+        immune: getSpawnImmunityRemaining(e, t) > 0,
+        settle: getSpawnSettleRemaining(e, t) > 0
+      }));
+  };
 }
 
 // ============================================
@@ -341,8 +419,110 @@ let lastRegenTick = 0;
 let meleeAttackQueue = [];
 let lastMeleeAttacker = null;
 
-// Track currently engaged attackers (max 2 at a time)
-let activeAttackers = new Set();
+// ============================================
+// ATTACKER SLOT SYSTEM (lease-based, max 2)
+// ============================================
+// Uses Map(id → expiresAt) instead of Set to prevent deadlocks.
+// Leases expire automatically if not renewed (attack executed).
+const ATTACKER_LEASE_MS = 1200; // Lease duration - must attack within this time
+let attackerSlots = new Map(); // Map<enemyId, leaseExpiresAt>
+
+/**
+ * Acquire an attacker slot (lease-based).
+ * Returns true if slot acquired or renewed.
+ */
+function acquireAttackerSlot(enemy, t = nowMs()) {
+  cleanupAttackerSlots(t);
+  
+  // Already has slot? Renew lease
+  if (attackerSlots.has(enemy.id)) {
+    attackerSlots.set(enemy.id, t + ATTACKER_LEASE_MS);
+    return true;
+  }
+  
+  // Room for more attackers?
+  if (attackerSlots.size < MAX_ENGAGED_ENEMIES) {
+    attackerSlots.set(enemy.id, t + ATTACKER_LEASE_MS);
+    return true;
+  }
+  
+  // No slots available
+  return false;
+}
+
+/**
+ * Release an attacker slot (on retreat, death, broken off, failed attack).
+ */
+function releaseAttackerSlot(enemy) {
+  attackerSlots.delete(enemy.id);
+}
+
+/**
+ * Check if enemy has an active attacker slot.
+ */
+function hasAttackerSlot(enemy, t = nowMs()) {
+  const expiresAt = attackerSlots.get(enemy.id);
+  if (!expiresAt) return false;
+  if (t >= expiresAt) {
+    attackerSlots.delete(enemy.id);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Clean up expired/invalid attacker slots.
+ */
+function cleanupAttackerSlots(t = nowMs()) {
+  for (const [id, expiresAt] of attackerSlots) {
+    // Expired lease
+    if (t >= expiresAt) {
+      attackerSlots.delete(id);
+      continue;
+    }
+    
+    // Find the enemy
+    const enemy = currentState?.runtime?.activeEnemies?.find(e => e.id === id);
+    
+    // Dead or missing
+    if (!enemy || enemy.hp <= 0) {
+      attackerSlots.delete(id);
+      continue;
+    }
+    
+    // Retreating or broken off
+    if (enemy.isRetreating || isBrokenOff(enemy, t)) {
+      attackerSlots.delete(id);
+      continue;
+    }
+    
+    // Too far from player (gave up)
+    const player = currentState?.player;
+    if (player) {
+      const dist = distCoords(enemy.x, enemy.y, player.x, player.y);
+      if (dist > 15) {
+        attackerSlots.delete(id);
+      }
+    }
+  }
+}
+
+/**
+ * Get debug info about current attacker slots.
+ */
+function getAttackerSlotsDebug(t = nowMs()) {
+  cleanupAttackerSlots(t);
+  const slots = [];
+  for (const [id, expiresAt] of attackerSlots) {
+    const enemy = currentState?.runtime?.activeEnemies?.find(e => e.id === id);
+    slots.push({
+      id,
+      name: enemy?.name || '?',
+      remainingMs: Math.max(0, expiresAt - t)
+    });
+  }
+  return { count: attackerSlots.size, max: MAX_ENGAGED_ENEMIES, slots };
+}
 
 // Guard state
 let guards = [];
@@ -462,8 +642,8 @@ function checkGuardIntercept() {
 
 // Enemy attacks a guard (uses unified damage)
 function enemyAttackGuard(enemy, guard) {
-  const now = Date.now();
-  if (enemy.cooldownUntil > now) return;
+  const now = nowMs();
+  if (!isExpired(enemy.cooldownUntil, now)) return;
   if (!guard.hp || guard.hp <= 0) return;
   
   const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
@@ -531,8 +711,8 @@ function handleGuardDeath(guard) {
 }
 
 function guardAttack(guard, enemy) {
-  const now = Date.now();
-  if (guard.cooldownUntil > now) return;
+  const t = nowMs();
+  if (!isExpired(guard.cooldownUntil, t)) return;
 
   const weapon = ENEMY_WEAPONS.guard_rifle;
   const dist = distCoords(guard.x, guard.y, enemy.x, enemy.y);
@@ -545,7 +725,7 @@ function guardAttack(guard, enemy) {
     showDamageNumber(enemy.x, enemy.y, damage, true);
     logCombat(`Ironcross Guard blasts ${enemy.name} for ${damage}!`);
 
-    guard.cooldownUntil = now + weapon.cooldown;
+    guard.cooldownUntil = t + weapon.cooldown;
 
     updateEnemyHealthBar(enemy);
     if (enemy.hp <= 0) {
@@ -563,7 +743,8 @@ function startCombatTick() {
   combatTickInterval = setInterval(() => {
     if (!currentState) return;
 
-    const now = Date.now();
+    // Use performance.now() for all simulation timing
+    const now = nowMs();
 
     // Update player cooldowns
     for (const key of Object.keys(actionCooldowns)) {
@@ -817,27 +998,31 @@ function processRegeneration(now) {
 // ENEMY AI - STATE MACHINE WITH PROPER LEASHING
 // ============================================
 // States: UNAWARE -> ALERT -> ENGAGED -> RETREATING -> UNAWARE
-// Enemies "belong" to an area and will return home when leash breaks
+// 
+// PRIORITY ORDER (explicit, no early returns that block aggro):
+// 1. Dead check
+// 2. Player ghost/immunity: disengage + return home
+// 3. Stunned: no actions
+// 4. Retreating handler
+// 5. pendingAggro resolution (provoked while broken off)
+// 6. brokenOff handler
+// 7. Guard/base retreat checks
+// 8. Passive/conditional gating (unless provoked)
+// 9. Engaged handler: leash/deaggro + combat AI
+// 10. Detection: UNAWARE -> ALERT -> ENGAGED
+//
+// CRITICAL: Spawn immunity blocks DAMAGE only, not detection/aggro.
+// CRITICAL: Spawn settle blocks ATTACKS only, not detection/aggro.
 
 function processEnemyAI(enemy, t) {
-  // Skip dead enemies
+  // ============================================
+  // 1. DEAD CHECK
+  // ============================================
   if (enemy.hp <= 0) return;
   
   // Initialize AI fields if needed
   if (!enemy.state) {
     initEnemyAIFields(enemy);
-  }
-  
-  // Don't engage player in ghost mode or immune
-  if (isGhostMode || playerImmunityActive) {
-    enemy.isEngaged = false;
-    enemy.isAware = false;
-    return;
-  }
-  
-  // Stunned enemies can't do anything
-  if (isStunned(enemy, t)) {
-    return;
   }
   
   const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
@@ -847,67 +1032,98 @@ function processEnemyAI(enemy, t) {
   const hasLOS = hasLineOfSight(currentState, enemy.x, enemy.y, player.x, player.y);
   
   // ============================================
-  // STATE: RETREATING
+  // 2. PLAYER GHOST/IMMUNITY - Disengage
+  // ============================================
+  if (isGhostMode || playerImmunityActive) {
+    enemy.isEngaged = false;
+    enemy.isAware = false;
+    enemy.state = AI.STATES.UNAWARE;
+    releaseAttackerSlot(enemy);
+    
+    // Return home
+    const dHome = enemy.home ? distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y) : 0;
+    if (dHome > 2) {
+      moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
+    }
+    return;
+  }
+  
+  // ============================================
+  // 3. STUNNED - No actions
+  // ============================================
+  if (isStunned(enemy, t)) {
+    return;
+  }
+  
+  // ============================================
+  // 4. RETREATING HANDLER
   // ============================================
   if (enemy.isRetreating) {
+    releaseAttackerSlot(enemy);
     handleRetreatState(enemy, t);
     return;
   }
   
   // ============================================
-  // BROKEN OFF CHECK (cannot re-aggro yet)
+  // 5. PENDING AGGRO RESOLUTION
   // ============================================
+  // If enemy was provoked while broken off/retreating, and can now aggro
+  if (enemy.pendingAggro && canAggro(enemy, t)) {
+    enemy.isAware = true;
+    enemy.awareTime = t - AI.ALERT_DURATION_MS;
+    enemy.lastSeenPlayer = t;
+    enemy.isEngaged = true;
+    enemy.state = AI.STATES.ENGAGED;
+    enemy.targetId = 'player';
+    enemy.pendingAggro = false;
+    // Fall through to engaged handler
+}
+
+// ============================================
+  // 6. BROKEN OFF HANDLER
+// ============================================
   if (isBrokenOff(enemy, t)) {
     enemy.targetId = null;
     enemy.isEngaged = false;
     enemy.isAware = false;
+    releaseAttackerSlot(enemy);
     
-    // Idle at home or move toward home
+    // Move toward home or idle
     const dHome = enemy.home ? distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y) : 0;
     if (dHome > 2) {
       moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
-    } else if (t >= (enemy.moveCooldown ?? 0) && Math.random() < 0.02) {
+    } else if (!isExpired(enemy.moveCooldown, t) === false && Math.random() < 0.02) {
       aiIdle(enemy, t, weapon);
     }
     return;
   }
   
   // ============================================
-  // SPAWN IMMUNITY / SETTLE CHECK
-  // ============================================
-  if (checkSpawnImmunity(enemy, t) || isInSpawnSettle(enemy, t)) {
-    // Just spawned - don't aggro yet
-    return;
-  }
-  
-  // ============================================
-  // GUARD BREAKOFF CHECK
+  // 7. GUARD/BASE RETREAT CHECKS
   // ============================================
   if (shouldBreakOffFromGuards(enemy, guards, t)) {
     startRetreat(enemy, t, 'guards');
+    releaseAttackerSlot(enemy);
     
-    // Retreat entire pack if in one
     if (enemy.packId) {
       retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'guards');
     }
     
     updateEnemyVisuals();
     return;
-}
+  }
 
-// ============================================
-  // BASE PROXIMITY CHECK
-// ============================================
   if (shouldRetreatFromBase(enemy)) {
     startRetreat(enemy, t, 'base');
+    releaseAttackerSlot(enemy);
     return;
   }
   
   // ============================================
-  // AGGRO TYPE HANDLING
+  // 8. PASSIVE/CONDITIONAL GATING
   // ============================================
   const aggroType = enemy.aggroType || (isEnemyPassive(enemy) ? 'passive' : 'aggressive');
-  const isProvoked = provokedEnemies.has(enemy.id);
+  const isProvoked = provokedEnemies.has(enemy.id) && !isExpired(enemy.provokedUntil, t);
   
   // Passive: only engage if provoked
   if (aggroType === 'passive' && !isProvoked) {
@@ -925,15 +1141,15 @@ function processEnemyAI(enemy, t) {
   }
   
   // ============================================
-  // STATE: ENGAGED - Check leash and deaggro
+  // 9. ENGAGED HANDLER - Leash/Deaggro + Combat
   // ============================================
   if (enemy.isEngaged || enemy.state === AI.STATES.ENGAGED) {
     const retreatReason = checkLeashAndDeaggro(enemy, player, t);
     
     if (retreatReason) {
       startRetreat(enemy, t, retreatReason);
+      releaseAttackerSlot(enemy);
       
-      // If pack member exceeds leash, retreat whole pack
       if (retreatReason === 'leash' && enemy.packId) {
         retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'leash');
       }
@@ -942,14 +1158,15 @@ function processEnemyAI(enemy, t) {
       return;
     }
     
-    // Continue combat
+    // Execute combat AI (handles spawn settle internally)
     executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config);
     return;
   }
   
   // ============================================
-  // STATE: UNAWARE / ALERT - Detection logic
+  // 10. DETECTION: UNAWARE -> ALERT -> ENGAGED
   // ============================================
+  // NOTE: Spawn immunity/settle do NOT block detection/aggro
   const aggroRadius = getAggroRadius(enemy);
   
   // Check if player is in detection range with LOS
@@ -967,7 +1184,8 @@ function processEnemyAI(enemy, t) {
   
   // Handle ALERT -> ENGAGED transition
   if (enemy.state === AI.STATES.ALERT) {
-    if (t - enemy.awareTime >= AI.ALERT_DURATION_MS) {
+    const alertTime = toPerfTime(enemy.awareTime);
+    if (t - alertTime >= AI.ALERT_DURATION_MS) {
       enemy.state = AI.STATES.ENGAGED;
   enemy.isEngaged = true;
       enemy.targetId = 'player';
@@ -1251,11 +1469,11 @@ function finishRetreat(enemy, t) {
  * Move enemy toward home point (legacy wrapper)
  */
 function moveEnemyTowardHome(enemy, targetX, targetY) {
-  const t = Date.now();
+  const t = nowMs();
   
   // Movement cooldown
   const moveCD = 400 * (enemy.isRetreating ? 0.8 : 1);
-  if (t < (enemy.moveCooldown ?? 0)) return;
+  if (!isExpired(enemy.moveCooldown, t)) return;
   
   const dx = Math.sign(targetX - enemy.x);
   const dy = Math.sign(targetY - enemy.y);
@@ -1273,24 +1491,30 @@ function moveEnemyTowardHome(enemy, targetX, targetY) {
 }
 
 /**
- * Execute combat AI based on enemy type
+ * Execute combat AI based on enemy type.
+ * 
+ * NOTE: Spawn settle is checked here - enemies can aggro/detect during settle,
+ * but cannot attack. They will move into position during settle period.
  */
 function executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config) {
+  // Check spawn settle - can move/position but cannot attack yet
+  const inSettle = isInSpawnSettle(enemy, t);
+
   switch (config.aiType) {
     case 'melee':
-      aiMelee(enemy, weapon, dPlayer, hasLOS, t);
+      aiMelee(enemy, weapon, dPlayer, hasLOS, t, inSettle);
       break;
     case 'ranged':
-      aiRanged(enemy, weapon, dPlayer, hasLOS, t);
+      aiRanged(enemy, weapon, dPlayer, hasLOS, t, inSettle);
       break;
     case 'aggressive':
-      aiAggressive(enemy, weapon, dPlayer, hasLOS, t);
+      aiAggressive(enemy, weapon, dPlayer, hasLOS, t, inSettle);
       break;
     case 'guard':
       // Guards don't chase
       break;
     default:
-      aiMelee(enemy, weapon, dPlayer, hasLOS, t);
+      aiMelee(enemy, weapon, dPlayer, hasLOS, t, inSettle);
   }
 }
 
@@ -1312,12 +1536,8 @@ function shouldRetreatFromBase(enemy) {
   return false;
 }
 
-/**
- * Check if entity has spawn immunity (wrapper for combat.js usage)
- */
-function hasSpawnImmunity(enemy) {
-  return checkSpawnImmunity(enemy, Date.now());
-}
+// Note: hasSpawnImmunity is imported from aiUtils.js as checkSpawnImmunity
+// No local wrapper needed - use the imported function directly
 
 /**
  * Update enemy visuals (health bars, retreat indicators, passive state)
@@ -1326,7 +1546,7 @@ function hasSpawnImmunity(enemy) {
 function updateEnemyVisuals() {
   if (!currentState?.runtime?.activeEnemies) return;
   
-  const t = Date.now();
+  const t = nowMs();
   
   for (const enemy of currentState.runtime.activeEnemies) {
     if (enemy.hp <= 0) continue;
@@ -1341,9 +1561,9 @@ function updateEnemyVisuals() {
       el.classList.remove('retreating');
     }
     
-    // Spawn immunity visual - check actual immunity state
-    const hasImmunity = (enemy.spawnImmunityUntil ?? 0) > t;
-    if (hasImmunity) {
+    // Spawn immunity visual
+    const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
+    if (immuneRemaining > 0) {
       el.classList.add('spawn-immune');
     } else {
       el.classList.remove('spawn-immune');
@@ -1426,50 +1646,67 @@ function isEnemyPassive(enemy) {
   return enemy.type === 'critter' && enemy.level < PASSIVE_CRITTER_MAX_LEVEL;
 }
 
-// Provoke an enemy (called when player attacks it)
-export function provokeEnemy(enemy) {
-  if (!enemy) return;
+/**
+ * Provoke an enemy (called when player attacks it).
+ * 
+ * NEW SEMANTICS:
+ * - Sets provokedUntil timer (15s) for aggro persistence
+ * - If canAggro, transitions immediately to ENGAGED
+ * - If brokenOff/retreating, sets pendingAggro flag
+ * - Aggros entire pack
+ * 
+ * @param {object} enemy - Enemy to provoke
+ * @param {number} t - Current time (performance.now)
+ * @param {string} reason - Why provoked: 'player_attack', 'pack', 'area'
+ */
+export function provokeEnemy(enemy, t = nowMs(), reason = 'player_attack') {
+  if (!enemy || enemy.hp <= 0) return;
   
-  const now = Date.now();
-  
-  // Provoke this enemy - make it immediately aware and engaged
+  // Mark as provoked for 15 seconds
   provokedEnemies.add(enemy.id);
-  enemy.isAware = true;
-  enemy.awareTime = now - 500; // Skip alert delay - they're responding to attack
-  enemy.lastSeenPlayer = now;
-  enemy.isEngaged = true;
-  enemy.state = 'ENGAGED';
+  enemy.provokedUntil = t + 15000;
+  enemy.provokeReason = reason;
   
-  // Aggro the entire pack - all pack members become aware and chase
-  aggroPack(enemy);
+  // Can we aggro immediately?
+  if (canAggro(enemy, t)) {
+    // Transition to ENGAGED immediately
+    enemy.isAware = true;
+    enemy.awareTime = t - AI.ALERT_DURATION_MS; // Skip alert delay
+    enemy.lastSeenPlayer = t;
+    enemy.isEngaged = true;
+    enemy.state = AI.STATES.ENGAGED;
+    enemy.targetId = 'player';
+    enemy.pendingAggro = false;
+  } else {
+    // Can't aggro yet (broken off, retreating) - set pending
+    enemy.pendingAggro = true;
+  }
+  
+  // Aggro the entire pack
+  aggroPack(enemy, t);
   
   updateEnemyVisuals();
 }
 
-// Aggro all members of an enemy's pack
-function aggroPack(enemy) {
+/**
+ * Aggro all members of an enemy's pack.
+ */
+function aggroPack(enemy, t = nowMs()) {
   // Use packId (new system) or fall back to spawnId (old system)
   const packKey = enemy.packId || enemy.spawnId;
   if (!packKey) return;
   
-  const now = Date.now();
   const packMembers = currentState.runtime.activeEnemies.filter(e => {
     if (e.hp <= 0) return false;
+    if (e.id === enemy.id) return false; // Skip the original (already provoked)
     // Match by packId (new system) or spawnId (legacy)
     return (e.packId && e.packId === enemy.packId) || 
            (e.spawnId && e.spawnId === enemy.spawnId);
   });
   
   for (const member of packMembers) {
-    // Make them aware and engaged
-    member.isAware = true;
-    member.awareTime = now - 500; // Skip alert delay - they're responding to attack
-    member.lastSeenPlayer = now;
-    member.isEngaged = true;
-    member.state = 'ENGAGED';
-    
-    // Also mark as provoked if passive/conditional
-    provokedEnemies.add(member.id);
+    // Provoke pack member (but with 'pack' reason)
+    provokeEnemy(member, t, 'pack');
   }
 }
 
@@ -1478,83 +1715,57 @@ function aggroPack(enemy) {
 // ============================================
 // MELEE AI - Surround and take turns
 // ============================================
-function aiMelee(enemy, weapon, dist, hasLOS, now) {
+function aiMelee(enemy, weapon, dist, hasLOS, t, inSettle = false) {
   const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
   
   // Can we attack?
   if (dist <= weapon.range && hasLOS) {
     // Check if it's our turn to attack (rotate through melee attackers)
-    if (canMeleeAttack(enemy, now)) {
-      if (!enemy.cooldownUntil || now >= enemy.cooldownUntil) {
-    enemyAttack(enemy, weapon);
+    if (canMeleeAttack(enemy, t)) {
+      // Spawn settle blocks attacks but not positioning
+      if (inSettle) {
+        // Just hold position, don't attack yet
+        return;
+      }
+      if (isExpired(enemy.cooldownUntil, t)) {
+        enemyAttack(enemy, weapon, t);
         lastMeleeAttacker = enemy.id;
       }
     } else {
       // Not our turn - only reposition occasionally, not constantly
-      if (now >= enemy.moveCooldown && Math.random() < 0.3) {
+      if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.3) {
         moveToSurroundPosition(enemy);
-        enemy.moveCooldown = now + moveCD * 1.5;
+        enemy.moveCooldown = t + moveCD * 1.5;
       }
     }
   } else if (hasLOS) {
     // Have LOS but not in range - advance toward player
-    if (now >= enemy.moveCooldown) {
+    if (isExpired(enemy.moveCooldown, t)) {
       moveTowardPlayer(enemy);
-      enemy.moveCooldown = now + moveCD;
+      enemy.moveCooldown = t + moveCD;
     }
   } else {
     // No LOS - try to find a path, but don't move constantly
-    if (now >= enemy.moveCooldown && Math.random() < 0.5) {
+    if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.5) {
       moveToGetLOS(enemy);
-      enemy.moveCooldown = now + moveCD * 1.2;
+      enemy.moveCooldown = t + moveCD * 1.2;
     }
   }
 }
 
-// Check if this enemy can actively engage (attack) - max 2 at a time
-function canEnemyEngage(enemy, now) {
-  // Clean up dead/distant enemies from active attackers
-  cleanupActiveAttackers();
-  
-  // If already an active attacker, they can continue
-  if (activeAttackers.has(enemy.id)) {
-    return true;
-  }
-  
-  // If we have room for more attackers, this enemy can engage
-  if (activeAttackers.size < MAX_ENGAGED_ENEMIES) {
-    activeAttackers.add(enemy.id);
-    return true;
-  }
-  
-  // Max attackers reached - this enemy must wait and surround
-  return false;
+/**
+ * Check if enemy can engage (acquire attacker slot).
+ * Uses lease-based system to prevent deadlocks.
+ */
+function canEnemyEngage(enemy, t = nowMs()) {
+  return acquireAttackerSlot(enemy, t);
 }
 
-// Remove dead or distant enemies from active attackers set
-function cleanupActiveAttackers() {
-  const player = currentState.player;
-  
-  for (const attackerId of activeAttackers) {
-    const enemy = currentState.runtime.activeEnemies.find(e => e.id === attackerId);
-    
-    // Remove if dead
-    if (!enemy || enemy.hp <= 0) {
-      activeAttackers.delete(attackerId);
-      continue;
-    }
-    
-    // Remove if too far from player (gave up pursuit)
-    const dist = distCoords(enemy.x, enemy.y, player.x, player.y);
-    if (dist > 12) {
-      activeAttackers.delete(attackerId);
-    }
-  }
-}
-
-// Legacy function for compatibility - now uses engagement system
-function canMeleeAttack(enemy, now) {
-  return canEnemyEngage(enemy, now);
+/**
+ * Legacy compatibility wrapper.
+ */
+function canMeleeAttack(enemy, t = nowMs()) {
+  return canEnemyEngage(enemy, t);
 }
 
 // Move to a position that surrounds the player
@@ -1644,27 +1855,31 @@ function moveToFlankPosition(enemy) {
 // ============================================
 // RANGED AI - Maintain distance, kite
 // ============================================
-function aiRanged(enemy, weapon, dist, hasLOS, now) {
+function aiRanged(enemy, weapon, dist, hasLOS, t, inSettle = false) {
   const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
   
   // If player is too close, retreat (always try to escape melee)
-  if (dist <= 2 && now >= enemy.moveCooldown) {
+  if (dist <= 2 && isExpired(enemy.moveCooldown, t)) {
         moveAwayFromPlayer(enemy);
-    enemy.moveCooldown = now + moveCD;
+    enemy.moveCooldown = t + moveCD;
     return;
   }
   
   // In range with LOS - check if we can engage (max 2 attackers)
   if (dist <= weapon.range && hasLOS) {
-    if (canEnemyEngage(enemy, now)) {
-      if (!enemy.cooldownUntil || now >= enemy.cooldownUntil) {
-      enemyAttack(enemy, weapon);
-    }
+    if (canEnemyEngage(enemy, t)) {
+      // Spawn settle blocks attacks
+      if (inSettle) {
+        return;
+      }
+      if (isExpired(enemy.cooldownUntil, t)) {
+        enemyAttack(enemy, weapon, t);
+      }
     } else {
       // Can't engage - find a different angle/position and wait
-      if (now >= enemy.moveCooldown && Math.random() < 0.3) {
+      if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.3) {
         moveToFlankPosition(enemy);
-        enemy.moveCooldown = now + moveCD * 1.5;
+        enemy.moveCooldown = t + moveCD * 1.5;
       }
     }
     return;
@@ -1672,34 +1887,38 @@ function aiRanged(enemy, weapon, dist, hasLOS, now) {
   
   // No LOS - try to reposition, but not frantically
   if (!hasLOS) {
-    if (now >= enemy.moveCooldown && Math.random() < 0.4) {
+    if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.4) {
       moveToGetLOS(enemy);
-      enemy.moveCooldown = now + moveCD * 1.3;
+      enemy.moveCooldown = t + moveCD * 1.3;
     }
     return;
   }
   
   // Out of range with LOS - advance cautiously
-  if (now >= enemy.moveCooldown && Math.random() < 0.6) {
+  if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.6) {
       moveTowardPlayerRanged(enemy, weapon.range);
-    enemy.moveCooldown = now + moveCD;
+    enemy.moveCooldown = t + moveCD;
   }
 }
 
 // ============================================
 // AGGRESSIVE AI - For bosses and alphas
 // ============================================
-function aiAggressive(enemy, weapon, dist, hasLOS, now) {
+function aiAggressive(enemy, weapon, dist, hasLOS, t, inSettle = false) {
   const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
   
   if (dist <= weapon.range && hasLOS) {
-    if (!enemy.cooldownUntil || now >= enemy.cooldownUntil) {
-    enemyAttack(enemy, weapon);
+    // Spawn settle blocks attacks
+    if (inSettle) {
+      return;
+    }
+    if (isExpired(enemy.cooldownUntil, t)) {
+      enemyAttack(enemy, weapon, t);
     }
   } else {
-    if (now >= enemy.moveCooldown) {
+    if (isExpired(enemy.moveCooldown, t)) {
       moveTowardPlayer(enemy);
-      enemy.moveCooldown = now + moveCD;
+      enemy.moveCooldown = t + moveCD;
     }
   }
 }
@@ -1878,15 +2097,36 @@ function calculateEnemyDamage(enemy, weapon, player) {
 // ============================================
 // ENEMY ATTACK
 // ============================================
-function enemyAttack(enemy, weapon) {
-  if (isGhostMode || playerImmunityActive) return; // Can't attack ghost or immune player
+/**
+ * Execute an enemy attack on the player.
+ * Uses performance time and releases attacker slot on failure.
+ * 
+ * @param {object} enemy - Attacking enemy
+ * @param {object} weapon - Enemy weapon config
+ * @param {number} t - Current time (performance.now)
+ */
+function enemyAttack(enemy, weapon, t = nowMs()) {
+  // Can't attack ghost or immune player - release slot
+  if (isGhostMode || playerImmunityActive) {
+    releaseAttackerSlot(enemy);
+    return;
+  }
   
   const player = currentState.player;
 
+  // No LOS - release slot so others can attack
   if (!hasLineOfSight(currentState, enemy.x, enemy.y, player.x, player.y)) {
+    releaseAttackerSlot(enemy);
     return;
   }
 
+  // Spawn settle check - can't attack yet
+  if (isInSpawnSettle(enemy, t)) {
+    // Don't release slot - enemy will attack soon
+    return;
+  }
+
+  // Execute attack
   let damage = calculateEnemyDamage(enemy, weapon, player);
 
   if (weapon.type === 'ranged') {
@@ -1896,12 +2136,16 @@ function enemyAttack(enemy, weapon) {
   }
 
   player.hp -= damage;
-  lastHitTime = Date.now();
+  lastHitTime = t;
 
   showDamageNumber(player.x, player.y, damage, false, true);
   logCombat(`${enemy.name} hits you for ${damage}!`);
 
-  enemy.cooldownUntil = Date.now() + weapon.cooldown;
+  // Set cooldown using perf time
+  enemy.cooldownUntil = t + weapon.cooldown;
+
+  // Renew attacker lease (successful attack)
+  acquireAttackerSlot(enemy, t);
 
   if (!currentTarget || currentTarget.hp <= 0) {
     autoTargetClosestAttacker();
@@ -2857,9 +3101,9 @@ function getEnemyColor(type) {
 async function handleEnemyDeath(enemy) {
   logCombat(`${enemy.name} defeated!`);
 
-  // Remove from provoked set and active attackers
+  // Remove from provoked set and attacker slots
   provokedEnemies.delete(enemy.id);
-  activeAttackers.delete(enemy.id);
+  releaseAttackerSlot(enemy);
 
   // ============================================
   // COMEBACK MECHANIC - XP Scaling
@@ -3013,7 +3257,7 @@ async function handlePlayerDeath() {
 export async function reviveAtBase() {
   const { showToast, updateHUD, clearMinimapCorpse } = await import('./game.js');
   const { updateCamera } = await import('./render.js');
-  const { renderFog, revealAround } = await import('./fog.js');
+    const { renderFog, revealAround } = await import('./fog.js');
 
   isGhostMode = false;
   corpseLocation = null;
@@ -3318,8 +3562,7 @@ function updateEnemyStatusEffects(enemy) {
 
 // Tick all enemy effects and update visuals
 function tickAllEnemyEffects() {
-  // IMPORTANT: Use Date.now() to match combat tick timing (not performance.now())
-  const t = Date.now();
+  const t = nowMs();
   
   for (const enemy of currentState.runtime.activeEnemies || []) {
     if (enemy.hp <= 0) continue;
@@ -3331,8 +3574,8 @@ function tickAllEnemyEffects() {
     // Sync spawn immunity visual state
     const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
     if (el) {
-      const hasImmunity = (enemy.spawnImmunityUntil ?? 0) > t;
-      if (hasImmunity) {
+      const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
+      if (immuneRemaining > 0) {
         el.classList.add('spawn-immune');
       } else {
         el.classList.remove('spawn-immune');

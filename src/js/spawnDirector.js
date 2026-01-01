@@ -13,7 +13,8 @@ import { canMoveTo } from './collision.js';
 import { hasFlag } from './save.js';
 import { distCoords, randomRange } from './utils.js';
 import { AI } from './aiConstants.js';
-import { initEnemyAI, nowMs } from './aiUtils.js';
+import { initEnemyAI } from './aiUtils.js';
+import { nowMs } from './time.js';
 import { normalizeHealthKeys, clampHP } from './entityCompat.js';
 
 // ============================================
@@ -492,7 +493,7 @@ function generateDefaultSpawners() {
 function spawnDirectorTick() {
   if (!currentState) return;
   
-  const now = Date.now();
+  const now = nowMs();
   const player = currentState.player;
   
   // Don't spawn while ghost running
@@ -732,7 +733,8 @@ function chooseSpawner(eligible, counts) {
 // BUILD SPAWN REQUEST
 // ============================================
 function buildSpawnRequest(spawner) {
-  const packId = spawner.kind === 'pack' ? `pack_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : null;
+  const t = nowMs();
+  const packId = spawner.kind === 'pack' ? `pack_${Math.floor(t)}_${Math.random().toString(36).substr(2, 5)}` : null;
   
   // Determine roster
   const roster = [];
@@ -875,8 +877,8 @@ function applyAlphaMods(enemy) {
 function createEnemy(rosterEntry, position, request) {
   const typeDef = ENEMY_TYPES[rosterEntry.type] || ENEMY_TYPES.critter;
   const level = rosterEntry.level;
-  // IMPORTANT: Use Date.now() to match combat.js timing (not performance.now())
-  const t = Date.now();
+  // Use performance.now() for all simulation timing
+  const t = nowMs();
   
   // Calculate base stats with level scaling (NO alpha mult here)
   const hpScale = 1 + (level - 1) * 0.15;   // +15% HP per level
@@ -892,7 +894,7 @@ function createEnemy(rosterEntry, position, request) {
   const homeCenter = request.metadata.homeCenter || { x: position.x, y: position.y };
   
   const enemy = {
-    id: `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
+    id: `enemy_${Math.floor(t)}_${Math.random().toString(36).substr(2, 8)}`,
     spawnerId: request.spawnerId,
     packId: request.packId,
     
@@ -1037,7 +1039,7 @@ export function getSpawnDebugInfo() {
     activeBubble: bubble,
     counts,
     spawnerCount: spawners.length,
-    eligibleSpawners: spawners.filter(s => isSpawnerEligible(s, Date.now(), counts)).length
+    eligibleSpawners: spawners.filter(s => isSpawnerEligible(s, nowMs(), counts)).length
   };
 }
 
