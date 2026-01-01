@@ -3034,6 +3034,9 @@ function executePush(ability) {
     // Provoke passive enemies
     provokeEnemy(enemy, nowMs(), 'push');
     
+    // Flash enemy outline to show they were affected
+    flashEnemyAffected(enemy);
+    
     // Update visual position with animation
     animateEnemyDisplacement(enemy);
   }
@@ -3074,6 +3077,9 @@ function executePull(ability) {
     
     // Provoke passive enemies
     provokeEnemy(enemy, nowMs(), 'pull');
+    
+    // Flash enemy outline to show they were affected
+    flashEnemyAffected(enemy);
     
     // Update visual position with animation
     animateEnemyDisplacement(enemy);
@@ -3206,6 +3212,9 @@ function showPushEffect(x, y) {
   
   world.appendChild(effect);
   setTimeout(() => effect.remove(), 400);
+  
+  // Show floating "PUSH!" text
+  showSenseAbilityText(x, y, 'PUSH!', '#4B9CD6');
 }
 
 /**
@@ -3233,6 +3242,54 @@ function showPullEffect(x, y) {
   
   world.appendChild(effect);
   setTimeout(() => effect.remove(), 400);
+  
+  // Show floating "PULL!" text
+  showSenseAbilityText(x, y, 'PULL!', '#9B59B6');
+}
+
+/**
+ * Show floating ability text (PUSH!/PULL!) above player
+ */
+function showSenseAbilityText(x, y, text, color) {
+  const world = document.getElementById('world');
+  if (!world) return;
+  
+  const textEl = document.createElement('div');
+  textEl.className = 'sense-ability-text';
+  textEl.textContent = text;
+  textEl.style.cssText = `
+    position: absolute;
+    left: ${x * 24 + 12}px;
+    top: ${y * 24 - 8}px;
+    color: ${color};
+    font-family: var(--font-display, 'Rajdhani', sans-serif);
+    font-size: 1rem;
+    font-weight: bold;
+    text-shadow: 0 0 8px ${color}, 0 0 12px ${color}, 2px 2px 2px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    z-index: 200;
+    transform: translateX(-50%);
+    animation: sense-text-float 0.8s ease-out forwards;
+  `;
+  
+  world.appendChild(textEl);
+  setTimeout(() => textEl.remove(), 800);
+}
+
+/**
+ * Flash enemy outline when affected by Push/Pull
+ */
+function flashEnemyAffected(enemy) {
+  const enemyEl = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  if (!enemyEl) return;
+  
+  // Add the flash class
+  enemyEl.classList.add('sense-affected');
+  
+  // Remove after animation
+  setTimeout(() => {
+    enemyEl.classList.remove('sense-affected');
+  }, 400);
 }
 
 /**
@@ -3383,6 +3440,9 @@ function executeSprint() {
     return;
   }
   
+  // Calculate distance before updating position (for log message)
+  const dashDistance = distCoords(player.x, player.y, finalX, finalY);
+  
   // Execute the dash
   player.x = finalX;
   player.y = finalY;
@@ -3408,7 +3468,7 @@ function executeSprint() {
   // Update UI
   updateUtilityCooldownUI('sprint');
   
-  logCombat(`Sprint! Dashed ${distCoords(player.x, player.y, finalX, finalY) || dashTiles} tiles`);
+  logCombat(`Sprint! Dashed ${dashDistance} tiles`);
 }
 
 /**

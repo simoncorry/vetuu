@@ -88,3 +88,67 @@
   }
 }
 
+/* ============================================
+   SENSE ABILITY EFFECTS (Push/Pull)
+   ============================================ */
+
+/* Floating ability text (PUSH!/PULL!) */
+.sense-ability-text {
+  letter-spacing: 0.1em;
+}
+
+@keyframes sense-text-float {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-32px);
+  }
+}
+
+/* Enemy outline flash when affected by Push/Pull */
+.sense-affected {
+  outline: 3px solid var(--sense-color, #4B9CD6) !important;
+  box-shadow: 0 0 16px var(--sense-color, #4B9CD6), inset 0 0 8px rgba(75, 156, 214, 0.3) !important;
+  animation: sense-flash 0.4s ease-out;
+}
+
+@keyframes sense-flash {
+  0% {
+    outline-width: 5px;
+    filter: brightness(1.5) saturate(1.5);
+  }
+  100% {
+    outline-width: 3px;
+    filter: brightness(1) saturate(1);
+  }
+}
+
+/* Push expanding ring animation */
+@keyframes push-expand {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 1;
+  }
+  100% {
+    width: calc(2 * 24px * 3);
+    height: calc(2 * 24px * 3);
+    opacity: 0;
+  }
+}
+
+/* Pull contracting ring animation */
+@keyframes pull-contract {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    width: 0;
+    height: 0;
+    opacity: 0;
+  }
+}
+
