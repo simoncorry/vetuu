@@ -47,11 +47,6 @@ const ENEMY_CONFIGS = {
   ironcross_guard: { weapon: 'guard_rifle', aiType: 'guard', hp: 2.0 }
 };
 
-// Legacy aliases for backward compatibility
-ENEMY_CONFIGS.scav = ENEMY_CONFIGS.scav_ranged;
-ENEMY_CONFIGS.scav_pistol = ENEMY_CONFIGS.scav_ranged;
-ENEMY_CONFIGS.scav_rifle = ENEMY_CONFIGS.scav_ranged;
-ENEMY_CONFIGS.trog_warband = ENEMY_CONFIGS.trog_warrior;
 
 // Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;

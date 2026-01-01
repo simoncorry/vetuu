@@ -209,17 +209,10 @@ export const ENEMY_WEAPONS = {
   }
 };
 
-// Legacy aliases for backward compatibility
+// Kept aliases for existing enemy definitions
 ENEMY_WEAPONS.claws = ENEMY_WEAPONS.melee_claws;
-ENEMY_WEAPONS.melee_bite = ENEMY_WEAPONS.melee_bite;
 ENEMY_WEAPONS.trog_spear = ENEMY_WEAPONS.melee_spear;
 ENEMY_WEAPONS.ritual_bolt = ENEMY_WEAPONS.ranged_bolt;
-ENEMY_WEAPONS.scav_pistol = ENEMY_WEAPONS.ranged_rifle;
-ENEMY_WEAPONS.scav_rifle = ENEMY_WEAPONS.ranged_rifle;
-ENEMY_WEAPONS.laser_rifle = ENEMY_WEAPONS.ranged_rifle;
-ENEMY_WEAPONS.laser_pistol = ENEMY_WEAPONS.ranged_rifle;
-ENEMY_WEAPONS.karth_rifle = ENEMY_WEAPONS.karth_laser;
-ENEMY_WEAPONS.karth_pistol = ENEMY_WEAPONS.karth_laser;
 
 // ============================================
 // HELPER: Get weapon ability by slot

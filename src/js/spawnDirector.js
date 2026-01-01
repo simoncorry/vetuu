@@ -198,9 +198,6 @@ const ENEMY_TYPES = {
   }
 };
 
-// Legacy aliases for spawner compatibility
-ENEMY_TYPES.scav_pistol = ENEMY_TYPES.scav_ranged;
-ENEMY_TYPES.scav_rifle = ENEMY_TYPES.scav_ranged;
 
 // ============================================
 // INITIALIZATION
@@ -300,7 +297,7 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 5,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['scav_pistol', 'scav_melee'],
+      enemyPool: ['scav_ranged', 'scav_melee'],
       levelRange: [3, 5],
       aggroType: 'conditional',
       aggroRadius: 4,
@@ -328,7 +325,7 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 6,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['critter', 'scav_pistol', 'scav_melee'],
+      enemyPool: ['critter', 'scav_ranged', 'scav_melee'],
       levelRange: [4, 7],
       aggroType: 'conditional',
       aggroRadius: 5,
@@ -355,7 +352,7 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 7,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['scav_pistol', 'scav_rifle', 'scav_melee'],
+      enemyPool: ['scav_ranged', 'scav_melee'],
       levelRange: [5, 8],
       packSize: { min: 3, max: 4 },
       alpha: { chance: 0.25, max: 1 },
@@ -385,7 +382,7 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['scav_rifle', 'trog_warrior'],
+      enemyPool: ['scav_ranged', 'trog_warrior'],
       levelRange: [8, 12],
       aggroType: 'aggressive',
       aggroRadius: 7,
@@ -413,7 +410,7 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: isTrog ? ['trog_warrior', 'trog_shaman'] : ['scav_pistol', 'scav_rifle', 'scav_melee'],
+      enemyPool: isTrog ? ['trog_warrior', 'trog_shaman'] : ['scav_ranged', 'scav_melee'],
       levelRange: [10, 14],
       packSize: { min: 4, max: 5 },
       alpha: { chance: 0.4, max: 2 },

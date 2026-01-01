@@ -43,15 +43,15 @@
       "desc": "Standard issue rifle. 8 tile range, reliable damage."
     },
     {
-      "id": "itm_pistol_green",
-      "name": "Laser Pistol",
+      "id": "itm_rifle_green",
+      "name": "Scout Rifle",
       "type": "weapon",
-      "weaponKey": "laser_pistol",
+      "weaponKey": "laser_rifle",
       "rarity": "green",
       "mods": {
         "attack": 2
       },
-      "desc": "A battered sidearm. 4 tile range, x2 damage."
+      "desc": "A lightweight rifle. 6 tile range, reliable damage."
     },
     {
       "id": "itm_armor_green",
@@ -112,7 +112,7 @@
       "name": "Verdleg Stall",
       "inventory": [
         {
-          "itemId": "itm_pistol_green",
+          "itemId": "itm_rifle_green",
           "price": 120
         },
         {
