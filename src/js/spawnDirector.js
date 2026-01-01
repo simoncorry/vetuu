@@ -12,6 +12,9 @@
 import { canMoveTo } from './collision.js';
 import { hasFlag } from './save.js';
 import { distCoords, randomRange } from './utils.js';
+import { AI } from './aiConstants.js';
+import { initEnemyAI, nowMs } from './aiUtils.js';
+import { normalizeHealthKeys, clampHP } from './entityCompat.js';
 
 // ============================================
 // CONSTANTS - DISTANCE RINGS
@@ -852,23 +855,43 @@ function executeSpawnRequests(requests) {
   });
 }
 
+/**
+ * Apply alpha modifications to an enemy ONCE at spawn time.
+ * Alpha power is purely from stats - no hidden combat multipliers.
+ */
+function applyAlphaMods(enemy) {
+  enemy.isAlpha = true;
+  
+  // Alpha stat bonuses: +35% HP, +25% ATK, +15% DEF
+  enemy.maxHP = Math.round(enemy.maxHP * 1.35);
+  enemy.hp = Math.min(enemy.hp, enemy.maxHP);
+  enemy.atk = Math.round(enemy.atk * 1.25);
+  enemy.def = Math.round(enemy.def * 1.15);
+  
+  // Keep alias synced
+  enemy.maxHp = enemy.maxHP;
+}
+
 function createEnemy(rosterEntry, position, request) {
   const typeDef = ENEMY_TYPES[rosterEntry.type] || ENEMY_TYPES.critter;
   const level = rosterEntry.level;
+  // IMPORTANT: Use Date.now() to match combat.js timing (not performance.now())
+  const t = Date.now();
   
-  // Calculate stats with level scaling
-  const hpScale = 1 + (level - 1) * 0.15;
-  const atkScale = 1 + (level - 1) * 0.12;
-  const defScale = 1 + (level - 1) * 0.10;
+  // Calculate base stats with level scaling (NO alpha mult here)
+  const hpScale = 1 + (level - 1) * 0.15;   // +15% HP per level
+  const atkScale = 1 + (level - 1) * 0.12;  // +12% ATK per level
+  const defScale = 1 + (level - 1) * 0.10;  // +10% DEF per level
   
-  // Alpha bonuses
-  const alphaMult = rosterEntry.isAlpha ? 1.5 : 1;
+  // Base stats without alpha modifier
+  const hp = Math.floor(typeDef.baseHp * hpScale);
+  const atk = Math.floor(typeDef.baseAtk * atkScale);
+  const def = Math.floor(typeDef.baseDef * defScale);
   
-  const hp = Math.floor(typeDef.baseHp * hpScale * alphaMult);
-  const atk = Math.floor(typeDef.baseAtk * atkScale * alphaMult);
-  const def = Math.floor(typeDef.baseDef * defScale * alphaMult);
+  // Home/leash point
+  const homeCenter = request.metadata.homeCenter || { x: position.x, y: position.y };
   
-  return {
+  const enemy = {
     id: `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
     spawnerId: request.spawnerId,
     packId: request.packId,
@@ -884,11 +907,15 @@ function createEnemy(rosterEntry, position, request) {
     y: position.y,
     spawnX: position.x,
     spawnY: position.y,
-    homeCenter: request.metadata.homeCenter,
     
-    // Stats
+    // Home/leash point (required for AI)
+    home: { x: homeCenter.x, y: homeCenter.y },
+    homeCenter, // Legacy compatibility
+    
+    // Stats (canonical: maxHP, legacy alias: maxHp)
     hp,
-    maxHp: hp,
+    maxHP: hp,
+    maxHp: hp,  // Legacy alias - kept for backward compatibility
     atk,
     def,
     
@@ -898,31 +925,67 @@ function createEnemy(rosterEntry, position, request) {
     projectileColor: typeDef.projectileColor,
     moveSpeed: typeDef.moveSpeed,
     
-    // Behavior
-    aggroType: request.metadata.aggroType,
-    aggroRadius: request.metadata.aggroRadius,
-    leashRadius: request.metadata.leashRadius,
-    deaggroTimeMs: request.metadata.deaggroTimeMs,
+    // Behavior parameters (from spawner or defaults)
+    // Alphas get modest aggro/leash boost, not map-wide police
+    aggroType: request.metadata.aggroType || 'aggressive',
+    aggroRadius: request.metadata.aggroRadius || (rosterEntry.isAlpha ? AI.DEFAULT_AGGRO_RADIUS + 2 : AI.DEFAULT_AGGRO_RADIUS),
+    leashRadius: request.metadata.leashRadius || (rosterEntry.isAlpha ? AI.DEFAULT_LEASH_RADIUS + 4 : AI.DEFAULT_LEASH_RADIUS),
+    deaggroTimeMs: request.metadata.deaggroTimeMs || AI.DISENGAGE_GRACE_MS,
     
-    // State
-    state: 'UNAWARE',
+    // AI State (using new state machine)
+    state: AI.STATES.UNAWARE,
     isAware: false,
     isEngaged: false,
+    isRetreating: false,
     lastSeenPlayer: 0,
+    outOfRangeSince: null,
+    targetId: null,
+    
+    // Timers
     cooldownUntil: 0,
     moveCooldown: 0,
-    deaggroAt: 0,
-    brokenOff: false,
+    nextAttackAt: 0,
+    lastAggroAt: 0,
+    lastDamagedAt: 0,
+    lastRegenTick: 0,
+    
+    // Breakoff / retreat state
+    brokenOffUntil: 0,
+    retreatReason: null,
+    retreatStartedAt: null,
+    retreatStuckSince: null,
     
     // Spawn protection - prevents spawn camping
-    spawnedAt: Date.now(),
-    spawnImmunityUntil: Date.now() + 1500, // 1.5s immunity after spawning
+    spawnedAt: t,
+    spawnImmunityUntil: t + AI.SPAWN_IMMUNITY_MS,
     
     // Flags
     isStray: request.metadata.isStray,
     isNpeCritter: request.metadata.isNpeCritter,
-    isSoloCritter: request.metadata.isNpeCritter
+    isSoloCritter: request.metadata.isNpeCritter,
+    
+    // Effects (status effects system)
+    effects: {
+      stunUntil: 0,
+      rootUntil: 0,
+      slowUntil: 0,
+      slowMult: 1,
+      vulnUntil: 0,
+      vulnMult: 1,
+      immuneUntil: 0
+    }
   };
+  
+  // Apply alpha modifications ONCE at spawn (stats only, no combat multipliers)
+  if (rosterEntry.isAlpha) {
+    applyAlphaMods(enemy);
+  }
+  
+  // Ensure health keys are normalized and HP is clamped
+  normalizeHealthKeys(enemy);
+  clampHP(enemy);
+  
+  return enemy;
 }
 
 // ============================================

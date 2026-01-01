@@ -17,12 +17,20 @@ import { saveGame } from './save.js';
 import { hasLineOfSight, canMoveTo } from './collision.js';
 import { WEAPONS, ENEMY_WEAPONS } from './weapons.js';
 import { 
-  dist, distCoords, now, shuffleArray,
-  initEffects, isImmune, isStunned, isRooted, isSlowed, isVulnerable,
-  canMove, canAct, applyEffect, tickEffects, 
-  getEffectiveMoveSpeed, getVulnMult,
-  gcdReady, skillReady, startGCD, startSkillCD
+  distCoords, shuffleArray, applyEffect, tickEffects,
+  isSlowed, isVulnerable, getEffectiveMoveSpeed, getVulnMult
 } from './utils.js';
+import { AI } from './aiConstants.js';
+import { getMaxHP, getHPPercent, normalizeHealthKeys, clampHP } from './entityCompat.js';
+import {
+  nowMs,
+  isImmune, hasSpawnImmunity as checkSpawnImmunity, isStunned, isRooted, canMove, canAct,
+  isBrokenOff, isInSpawnSettle,
+  getLeashRadius, getAggroRadius, computeDeaggroRadius,
+  startRetreat, processRetreat, finishResetAtHome,
+  shouldBreakOffFromGuards, checkLeashAndDeaggro,
+  retreatPack, initEnemyAI, ensureEffects
+} from './aiUtils.js';
 
 // Enemy type configurations
 const ENEMY_CONFIGS = {
@@ -62,10 +70,246 @@ const MAX_ENGAGED_ENEMIES = 2; // Only 2 enemies can actively attack at once
 // Passive critter threshold (critters below this level are non-aggressive)
 const PASSIVE_CRITTER_MAX_LEVEL = 5;
 
-// Level scaling constants
-const LEVEL_DAMAGE_BONUS_PER_LEVEL = 0.12;
-const LEVEL_DAMAGE_PENALTY_PER_LEVEL = 0.08;
-const ALPHA_DAMAGE_BONUS = 0.25;
+// ============================================
+// PLAN B UNIFIED DAMAGE SYSTEM
+// ============================================
+// Both player and enemies use the same formula:
+// (baseDamage + atk) * skillMult * levelMult * typeMult * defMult * variance
+//
+// To tune combat, adjust these constants in order:
+// 1. DEF_K (tankiness)
+// 2. LEVEL_ADV_PER, LEVEL_CAP_UP (level scaling)
+// 3. Weapon baseDamage in weapons.js (pace of fights)
+
+let COMBAT_DEBUG = false; // Toggle via VETUU_COMBAT_DEBUG_ON()
+
+// Defense curve: damage% = DEF_K / (DEF_K + def)
+// Lower DEF_K = stronger defense. At DEF_K=20: 10 DEF = 33% reduction
+const DEF_K = 20;
+
+// Level scaling (bounded, not exponential)
+const LEVEL_ADV_PER = 0.07;   // +7% damage per level above target
+const LEVEL_DIS_PER = 0.06;   // -6% damage per level below target
+const LEVEL_CAP_UP = 1.60;    // Max +60% from level advantage
+const LEVEL_CAP_DOWN = 0.55;  // Min 55% from level disadvantage
+
+// Crit system
+const CRIT_BASE = 0.05;       // 5% base crit chance
+const CRIT_PER_LUCK = 0.02;   // +2% per luck point
+const CRIT_MULT = 1.5;        // Crits deal 150% damage
+
+// Damage variance
+const VAR_MIN = 0.95;
+const VAR_MAX = 1.05;
+
+// Debug capture for last hit
+let __LAST_HIT_DEBUG = null;
+
+// ============================================
+// UNIFIED DAMAGE HELPERS
+// ============================================
+
+/**
+ * Defense damage multiplier using smooth curve.
+ * Returns value in (0, 1] - higher DEF = lower multiplier.
+ */
+function defenseMult(def) {
+  if (def <= 0) return 1;
+  return DEF_K / (DEF_K + def);
+}
+
+/**
+ * Level difference damage multiplier (bounded, not exponential).
+ * Positive delta = attacker is higher level than defender.
+ */
+function levelDiffMult(attackerLevel, defenderLevel) {
+  const delta = attackerLevel - defenderLevel;
+  if (delta > 0) {
+    // Attacker advantage: +7% per level, cap at +60%
+    return Math.min(LEVEL_CAP_UP, 1 + delta * LEVEL_ADV_PER);
+  } else if (delta < 0) {
+    // Attacker disadvantage: -6% per level, floor at 55%
+    return Math.max(LEVEL_CAP_DOWN, 1 + delta * LEVEL_DIS_PER);
+  }
+  return 1;
+}
+
+/**
+ * Type effectiveness multiplier (weakness/resistance).
+ */
+function typeMult(damageType, defenderConfig) {
+  if (!damageType || !defenderConfig) return 1;
+  if (defenderConfig.weakness === damageType) return 1.5;
+  if (defenderConfig.resistance === damageType) return 0.5;
+  return 1;
+}
+
+/**
+ * Roll damage variance.
+ */
+function rollVariance() {
+  return VAR_MIN + Math.random() * (VAR_MAX - VAR_MIN);
+}
+
+/**
+ * Calculate crit chance for an attacker.
+ */
+function critChance(attacker) {
+  const luck = attacker?.luck ?? 0;
+  return CRIT_BASE + luck * CRIT_PER_LUCK;
+}
+
+/**
+ * UNIFIED DAMAGE CALCULATOR
+ * Used by both player and enemy attacks.
+ * 
+ * @param {object} params
+ * @param {object} params.attacker - Attacking entity (needs level, atk)
+ * @param {object} params.defender - Defending entity (needs level, def)
+ * @param {object} params.defenderConfig - ENEMY_CONFIGS entry (for weakness/resistance), null for player
+ * @param {number} params.baseDamage - Weapon/skill base damage
+ * @param {number} params.skillMult - Skill multiplier (default 1)
+ * @param {string} params.damageType - Damage type for weakness calc (null = no type)
+ * @param {boolean} params.forceNoCrit - If true, skip crit roll (enemies don't crit by default)
+ * @param {string} params.source - "player" or "enemy" for debug
+ * @param {string} params.attackId - Attack name for debug
+ * @param {string} params.attackerName - Attacker name for debug
+ * @returns {{damage: number, isCrit: boolean, breakdown: object}}
+ */
+function computeDamage({
+  attacker,
+  defender,
+  defenderConfig = null,
+  baseDamage,
+  skillMult = 1,
+  damageType = null,
+  forceNoCrit = false,
+  source = "unknown",
+  attackId = null,
+  attackerName = null
+}) {
+  // Gather stats
+  const atkStat = attacker?.atk ?? 0;
+  const defStat = defender?.def ?? 0;
+  const atkLvl = attacker?.level ?? 1;
+  const defLvl = defender?.level ?? 1;
+  
+  // Calculate multipliers
+  const defMult = defenseMult(defStat);
+  const lvlMult = levelDiffMult(atkLvl, defLvl);
+  const tMult = typeMult(damageType, defenderConfig);
+  const variance = rollVariance();
+  
+  // Crit roll
+  let isCrit = false;
+  let critMult = 1;
+  if (!forceNoCrit) {
+    const cc = critChance(attacker);
+    if (Math.random() < cc) {
+      isCrit = true;
+      critMult = CRIT_MULT;
+    }
+  }
+  
+  // Final damage: (base + atk) * skillMult * lvlMult * tMult * defMult * variance * critMult
+  const rawDamage = (baseDamage + atkStat) * skillMult * lvlMult * tMult * defMult * variance * critMult;
+  const damage = Math.max(1, Math.floor(rawDamage));
+  
+  // Build breakdown for debugging
+  const breakdown = {
+    source,
+    attackId,
+    attackerName: attackerName || attacker?.name || "?",
+    defenderName: defender?.name || "?",
+    baseDamage,
+    atk: atkStat,
+    def: defStat,
+    atkLvl,
+    defLvl,
+    skillMult,
+    lvlMult: +lvlMult.toFixed(3),
+    tMult,
+    defMult: +defMult.toFixed(3),
+    variance: +variance.toFixed(3),
+    isCrit,
+    critMult,
+    rawDamage: +rawDamage.toFixed(1),
+    finalDamage: damage
+  };
+  
+  // Store for debug inspection
+  __LAST_HIT_DEBUG = breakdown;
+  
+  if (COMBAT_DEBUG) {
+    console.log(`[DAMAGE] ${breakdown.attackerName} → ${breakdown.defenderName}: ${damage}`, breakdown);
+  }
+  
+  return { damage, isCrit, breakdown };
+}
+
+// Expose debug tools globally
+if (typeof window !== 'undefined') {
+  window.VETUU_LAST_HIT = () => __LAST_HIT_DEBUG;
+  window.VETUU_COMBAT_DEBUG_ON = () => { COMBAT_DEBUG = true; console.log('Combat debug ON'); };
+  window.VETUU_COMBAT_DEBUG_OFF = () => { COMBAT_DEBUG = false; console.log('Combat debug OFF'); };
+  
+  /**
+   * Debug simulation harness for tuning combat balance.
+   * Run from console: VETUU_DEBUG_DAMAGE()
+   */
+  window.VETUU_DEBUG_DAMAGE = () => {
+    const SAMPLES = 50;
+    
+    // Simulate various matchups
+    const matchups = [
+      { name: "Lv1 Rex vs Lv1 Critter", atkLvl: 1, atkAtk: 5, defLvl: 1, defDef: 2, baseDmg: 10 },
+      { name: "Lv1 Rex vs Lv3 Scav", atkLvl: 1, atkAtk: 5, defLvl: 3, defDef: 5, baseDmg: 10 },
+      { name: "Lv1 Rex vs Lv5 Scav Alpha", atkLvl: 1, atkAtk: 5, defLvl: 5, defDef: 8, baseDmg: 10 },
+      { name: "Lv5 Rex vs Lv5 Scav", atkLvl: 5, atkAtk: 9, defLvl: 5, defDef: 5, baseDmg: 12 },
+      { name: "Lv5 Rex vs Lv10 Karth", atkLvl: 5, atkAtk: 9, defLvl: 10, defDef: 15, baseDmg: 12 },
+      { name: "Lv1 Critter vs Lv1 Rex", atkLvl: 1, atkAtk: 3, defLvl: 1, defDef: 3, baseDmg: 8 },
+      { name: "Lv5 Scav vs Lv1 Rex", atkLvl: 5, atkAtk: 8, defLvl: 1, defDef: 3, baseDmg: 10 },
+      { name: "Lv10 Karth vs Lv5 Rex", atkLvl: 10, atkAtk: 15, defLvl: 5, defDef: 7, baseDmg: 14 },
+    ];
+    
+    console.log("=== VETUU Combat Damage Simulation ===");
+    console.log(`Samples per matchup: ${SAMPLES}`);
+    console.log(`DEF_K=${DEF_K}, LEVEL_ADV=${LEVEL_ADV_PER}, LEVEL_DIS=${LEVEL_DIS_PER}`);
+    console.log("");
+    
+    matchups.forEach(m => {
+      const results = [];
+      let crits = 0;
+      
+      for (let i = 0; i < SAMPLES; i++) {
+        const { damage, isCrit } = computeDamage({
+          attacker: { level: m.atkLvl, atk: m.atkAtk, luck: 3 },
+          defender: { level: m.defLvl, def: m.defDef },
+          defenderConfig: null,
+          baseDamage: m.baseDmg,
+          skillMult: 1,
+          damageType: null,
+          forceNoCrit: false,
+          source: "sim",
+          attackId: "test"
+        });
+        results.push(damage);
+        if (isCrit) crits++;
+      }
+      
+      const min = Math.min(...results);
+      const max = Math.max(...results);
+      const avg = (results.reduce((a, b) => a + b, 0) / SAMPLES).toFixed(1);
+      const critRate = ((crits / SAMPLES) * 100).toFixed(1);
+      
+      console.log(`${m.name}: min=${min} max=${max} avg=${avg} crit%=${critRate}`);
+    });
+    
+    console.log("");
+    console.log("To see breakdown of any hit, call: VETUU_LAST_HIT()");
+    return "Simulation complete";
+  };
+}
 
 // ============================================
 // COMEBACK MECHANIC - Player Regeneration
@@ -167,7 +411,8 @@ function initGuardsFromNPCs() {
       y: npc.y,
       level: GUARD_LEVEL,
       hp: 100 + GUARD_LEVEL * 10, // Guards have HP now
-      maxHp: 100 + GUARD_LEVEL * 10,
+      maxHP: 100 + GUARD_LEVEL * 10,
+      maxHp: 100 + GUARD_LEVEL * 10, // Legacy alias
       cooldownUntil: 0,
       color: npc.color
     }));
@@ -215,7 +460,7 @@ function checkGuardIntercept() {
   }
 }
 
-// Enemy attacks a guard
+// Enemy attacks a guard (uses unified damage)
 function enemyAttackGuard(enemy, guard) {
   const now = Date.now();
   if (enemy.cooldownUntil > now) return;
@@ -223,11 +468,22 @@ function enemyAttackGuard(enemy, guard) {
   
   const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
   const weapon = ENEMY_WEAPONS[config.weapon];
-  const dist = distCoords(enemy.x, enemy.y, guard.x, guard.y);
+  const d = distCoords(enemy.x, enemy.y, guard.x, guard.y);
   
-  if (dist <= weapon.range && hasLineOfSight(currentState, enemy.x, enemy.y, guard.x, guard.y)) {
-    let damage = weapon.baseDamage + Math.floor(enemy.level * 0.8);
-    if (enemy.isAlpha) damage = Math.floor(damage * ALPHA_DAMAGE_MULT);
+  if (d <= weapon.range && hasLineOfSight(currentState, enemy.x, enemy.y, guard.x, guard.y)) {
+    // Use unified damage calculation (alpha bonus is already in enemy.atk)
+    const { damage } = computeDamage({
+      attacker: enemy,
+      defender: guard,
+      defenderConfig: null,
+      baseDamage: weapon.baseDamage || 10,
+      skillMult: weapon.multiplier || 1,
+      damageType: weapon.damageType || null,
+      forceNoCrit: true,
+      source: "enemy",
+      attackId: "guard_attack",
+      attackerName: enemy.name || enemy.type
+    });
     
     guard.hp -= damage;
     
@@ -266,7 +522,7 @@ function handleGuardDeath(guard) {
   
   // Respawn guard after 30 seconds
   setTimeout(() => {
-    guard.hp = guard.maxHp;
+    guard.hp = getMaxHP(guard);
     if (guardEl) {
       guardEl.style.opacity = '1';
     }
@@ -522,11 +778,12 @@ function processRegeneration(now) {
     if (now - lastRegenTick >= REGEN_OUT_OF_COMBAT_INTERVAL) {
       lastRegenTick = now;
       
-      const hpRegen = Math.ceil(player.maxHp * REGEN_OUT_OF_COMBAT_RATE);
+      const playerMax = getMaxHP(player);
+      const hpRegen = Math.ceil(playerMax * REGEN_OUT_OF_COMBAT_RATE);
       const senseRegen = Math.ceil(player.maxSense * REGEN_OUT_OF_COMBAT_RATE);
       
-      if (player.hp < player.maxHp) {
-        player.hp = Math.min(player.maxHp, player.hp + hpRegen);
+      if (player.hp < playerMax) {
+        player.hp = Math.min(playerMax, player.hp + hpRegen);
       }
       if (player.sense < player.maxSense) {
         player.sense = Math.min(player.maxSense, player.sense + senseRegen);
@@ -539,11 +796,12 @@ function processRegeneration(now) {
     if (now - lastRegenTick >= REGEN_IN_COMBAT_INTERVAL) {
       lastRegenTick = now;
       
-      const hpRegen = Math.ceil(player.maxHp * REGEN_IN_COMBAT_RATE);
+      const playerMaxCombat = getMaxHP(player);
+      const hpRegen = Math.ceil(playerMaxCombat * REGEN_IN_COMBAT_RATE);
       const senseRegen = Math.ceil(player.maxSense * REGEN_IN_COMBAT_RATE);
       
-      if (player.hp < player.maxHp) {
-        player.hp = Math.min(player.maxHp, player.hp + hpRegen);
+      if (player.hp < playerMaxCombat) {
+        player.hp = Math.min(playerMaxCombat, player.hp + hpRegen);
       }
       if (player.sense < player.maxSense) {
         player.sense = Math.min(player.maxSense, player.sense + senseRegen);
@@ -556,9 +814,20 @@ function processRegeneration(now) {
 }
 
 // ============================================
-// ENEMY AI - CLEAN REWRITE WITH LEASHING
+// ENEMY AI - STATE MACHINE WITH PROPER LEASHING
 // ============================================
-function processEnemyAI(enemy, now) {
+// States: UNAWARE -> ALERT -> ENGAGED -> RETREATING -> UNAWARE
+// Enemies "belong" to an area and will return home when leash breaks
+
+function processEnemyAI(enemy, t) {
+  // Skip dead enemies
+  if (enemy.hp <= 0) return;
+  
+  // Initialize AI fields if needed
+  if (!enemy.state) {
+    initEnemyAIFields(enemy);
+  }
+  
   // Don't engage player in ghost mode or immune
   if (isGhostMode || playerImmunityActive) {
     enemy.isEngaged = false;
@@ -566,266 +835,433 @@ function processEnemyAI(enemy, now) {
     return;
   }
   
-  // Status effect checks - stunned enemies can't do anything
-  if (isStunned(enemy)) {
-    return; // Completely incapacitated
+  // Stunned enemies can't do anything
+  if (isStunned(enemy, t)) {
+    return;
   }
-  
-  // Initialize state
-  if (!enemy.moveCooldown) enemy.moveCooldown = 0;
-  if (enemy.isAware === undefined) enemy.isAware = false;
-  if (!enemy.lastSeenPlayer) enemy.lastSeenPlayer = 0;
-  if (!enemy.state) enemy.state = 'UNAWARE';
   
   const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
   const weapon = ENEMY_WEAPONS[config.weapon];
   const player = currentState.player;
-  const dist = distCoords(enemy.x, enemy.y, player.x, player.y);
+  const dPlayer = distCoords(enemy.x, enemy.y, player.x, player.y);
   const hasLOS = hasLineOfSight(currentState, enemy.x, enemy.y, player.x, player.y);
   
-  // Get behavior params from enemy (set by spawn director) or use defaults
-  const aggroType = enemy.aggroType || (isEnemyPassive(enemy) ? 'passive' : 'aggressive');
-  const aggroRadius = enemy.aggroRadius || (enemy.isAlpha ? 12 : 8);
-  const leashRadius = enemy.leashRadius || (enemy.isAlpha ? 18 : 14);
-  const deaggroMs = enemy.deaggroTimeMs || 4000;
-  
-  // Check if broken off from guard chase - force de-aggro cooldown
-  if (enemy.brokenOff && enemy.brokenOffUntil && now < enemy.brokenOffUntil) {
-    aiReturnHome(enemy, now, weapon);
+  // ============================================
+  // STATE: RETREATING
+  // ============================================
+  if (enemy.isRetreating) {
+    handleRetreatState(enemy, t);
     return;
-  } else if (enemy.brokenOff) {
-    enemy.brokenOff = false;
-    enemy.brokenOffUntil = 0;
   }
   
-  // Check if too close to guards - smart enemies retreat
-  if (shouldRetreatFromGuards(enemy)) {
-    aiRetreatFromGuards(enemy, now, weapon);
-    // Mark as broken off to prevent re-aggro pinball
-    enemy.brokenOff = true;
-    enemy.brokenOffUntil = now + 3000;
+  // ============================================
+  // BROKEN OFF CHECK (cannot re-aggro yet)
+  // ============================================
+  if (isBrokenOff(enemy, t)) {
+    enemy.targetId = null;
     enemy.isEngaged = false;
     enemy.isAware = false;
-    enemy.state = 'UNAWARE';
-    return;
-  }
-
-  // Check if at base boundary - retreat to spawn and heal
-  if (shouldRetreatFromBase(enemy)) {
-    enemy.isEngaged = false;
-    enemy.isAware = false;
-    enemy.state = 'UNAWARE';
-    aiReturnHome(enemy, now, weapon);
-    return;
-  }
-  
-  // LEASH CHECK: If enemy is too far from home, return home
-  const homeCenter = enemy.homeCenter || { x: enemy.spawnX, y: enemy.spawnY };
-  if (homeCenter.x !== undefined && homeCenter.y !== undefined) {
-    const distFromHome = distCoords(enemy.x, enemy.y, homeCenter.x, homeCenter.y);
-    if (distFromHome > leashRadius) {
-      // Too far from home - de-aggro and return
-      enemy.isEngaged = false;
-      enemy.isAware = false;
-      enemy.state = 'UNAWARE';
-      aiReturnHome(enemy, now, weapon);
-      return;
-    }
-  }
-  
-  // Handle different aggro types
-  if (aggroType === 'passive') {
-    // Passive enemies don't engage unless provoked
-    if (!provokedEnemies.has(enemy.id)) {
-      enemy.isEngaged = false;
-      enemy.isAware = false;
-      enemy.state = 'UNAWARE';
-      // Return home if away, or idle patrol if at home
-      const homeCenter = enemy.homeCenter || { x: enemy.spawnX, y: enemy.spawnY };
-      if (homeCenter.x !== undefined) {
-        const distFromHome = distCoords(enemy.x, enemy.y, homeCenter.x, homeCenter.y);
-        if (distFromHome > 2) {
-          aiReturnHome(enemy, now, weapon);
-          return;
-        }
-      }
-      if (now >= enemy.moveCooldown && Math.random() < 0.02) {
-        aiIdle(enemy, now, weapon);
-      }
-      return;
-    }
-  } else if (aggroType === 'conditional') {
-    // Conditional aggressive - check conditions
-    const isAct3 = currentState.flags?.act3;
-    const shouldBeAggressive = isAct3 || provokedEnemies.has(enemy.id);
     
-    if (!shouldBeAggressive) {
-      // Act like passive unless provoked or conditions met
-      if (!provokedEnemies.has(enemy.id)) {
-        enemy.isEngaged = false;
-        enemy.isAware = false;
-        enemy.state = 'UNAWARE';
-        // Return home if away
-        const homeCenter = enemy.homeCenter || { x: enemy.spawnX, y: enemy.spawnY };
-        if (homeCenter.x !== undefined) {
-          const distFromHome = distCoords(enemy.x, enemy.y, homeCenter.x, homeCenter.y);
-          if (distFromHome > 2) {
-            aiReturnHome(enemy, now, weapon);
-            return;
-          }
-        }
-        if (now >= enemy.moveCooldown && Math.random() < 0.02) {
-          aiIdle(enemy, now, weapon);
-        }
-        return;
-      }
+    // Idle at home or move toward home
+    const dHome = enemy.home ? distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y) : 0;
+    if (dHome > 2) {
+      moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
+    } else if (t >= (enemy.moveCooldown ?? 0) && Math.random() < 0.02) {
+      aiIdle(enemy, t, weapon);
     }
-  }
-  
-  // Awareness logic: enemies must SEE the player to become aware
-  if (hasLOS && dist <= aggroRadius) {
-    // Spotted the player!
-    if (!enemy.isAware) {
-      enemy.isAware = true;
-      enemy.awareTime = now;
-      enemy.state = 'ALERT';
-    }
-    enemy.lastSeenPlayer = now;
-  }
-  
-  // De-aggro: Lose awareness if player has been out of sight/range for deaggroMs
-  if (enemy.isAware && (!hasLOS || dist > aggroRadius * 1.5)) {
-    if (now - enemy.lastSeenPlayer > deaggroMs) {
-      enemy.isAware = false;
-    enemy.isEngaged = false;
-      enemy.state = 'UNAWARE';
-      // Return home
-      aiReturnHome(enemy, now, weapon);
     return;
-    }
   }
   
-  // Not aware yet - return home if away, otherwise idle
-  if (!enemy.isAware || enemy.state === 'UNAWARE') {
-    enemy.isEngaged = false;
+  // ============================================
+  // SPAWN IMMUNITY / SETTLE CHECK
+  // ============================================
+  if (checkSpawnImmunity(enemy, t) || isInSpawnSettle(enemy, t)) {
+    // Just spawned - don't aggro yet
+    return;
+  }
+  
+  // ============================================
+  // GUARD BREAKOFF CHECK
+  // ============================================
+  if (shouldBreakOffFromGuards(enemy, guards, t)) {
+    startRetreat(enemy, t, 'guards');
     
-    // Check if enemy needs to return home
-    const homeCenter = enemy.homeCenter || { x: enemy.spawnX, y: enemy.spawnY };
-    if (homeCenter.x !== undefined && homeCenter.y !== undefined) {
-      const distFromHome = distCoords(enemy.x, enemy.y, homeCenter.x, homeCenter.y);
-      
-      if (distFromHome > 2) {
-        // Not at home - return and regenerate
-        aiReturnHome(enemy, now, weapon);
-        return;
-      } else {
-        // At home - regenerate health
-        if (enemy.hp < enemy.maxHp) {
-          if (!enemy.lastRegenTick || now - enemy.lastRegenTick >= ENEMY_REGEN_INTERVAL) {
-            const regenAmount = Math.ceil(enemy.maxHp * ENEMY_REGEN_RATE);
-            enemy.hp = Math.min(enemy.maxHp, enemy.hp + regenAmount);
-            updateEnemyHealthBar(enemy);
-            enemy.lastRegenTick = now;
-            
-            // Clear provoked status when fully healed
-            if (enemy.hp >= enemy.maxHp * 0.9) {
-              provokedEnemies.delete(enemy.id);
-              enemy.isRetreating = false;
-            }
-          }
-        }
-      }
+    // Retreat entire pack if in one
+    if (enemy.packId) {
+      retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'guards');
     }
     
-    // Idle behavior: occasional small movement (patrol) - only if at home
-    if (now >= enemy.moveCooldown && Math.random() < 0.03) {
-      aiIdle(enemy, now, weapon);
-    }
+    updateEnemyVisuals();
     return;
-  }
-  
-  // Alert phase: just became aware, wait a moment before engaging (warning tell)
-  const ALERT_DELAY = 400; // 400ms before engaging
-  if (enemy.state === 'ALERT' && now - enemy.awareTime < ALERT_DELAY) {
-    enemy.isEngaged = false;
-    return;
-  }
-  
-  // Transition to ENGAGED
-  enemy.state = 'ENGAGED';
-  enemy.isEngaged = true;
-
-  // Route to appropriate AI based on type
-  switch (config.aiType) {
-    case 'melee':
-      aiMelee(enemy, weapon, dist, hasLOS, now);
-      break;
-    case 'ranged':
-      aiRanged(enemy, weapon, dist, hasLOS, now);
-      break;
-    case 'aggressive':
-      aiAggressive(enemy, weapon, dist, hasLOS, now);
-      break;
-    case 'guard':
-      // Guards don't move
-      break;
-    default:
-      aiMelee(enemy, weapon, dist, hasLOS, now);
-  }
 }
 
 // ============================================
-// LEASH & RETREAT SYSTEM
+  // BASE PROXIMITY CHECK
 // ============================================
-// When enemies disengage (leash, base proximity, guard retreat), they return
-// home and regenerate health. This prevents exploit farming and adds realism.
-
-const ENEMY_REGEN_RATE = 0.05; // 5% HP per tick while retreating/at home
-const ENEMY_REGEN_INTERVAL = 500; // Regen tick every 500ms
-const SPAWN_IMMUNITY_DURATION = 1500; // 1.5s immunity after spawning
-
-// Return to home/spawn point with health regeneration
-function aiReturnHome(enemy, now, weapon) {
-  const homeCenter = enemy.homeCenter || { x: enemy.spawnX, y: enemy.spawnY };
-  
-  if (homeCenter.x === undefined || homeCenter.y === undefined) return;
-  
-  const distFromHome = distCoords(enemy.x, enemy.y, homeCenter.x, homeCenter.y);
-  
-  // Mark as retreating for health regen
-  enemy.isRetreating = true;
-  
-  // Regenerate health while retreating or at home
-  if (!enemy.lastRegenTick || now - enemy.lastRegenTick >= ENEMY_REGEN_INTERVAL) {
-    if (enemy.hp < enemy.maxHp) {
-      const regenAmount = Math.ceil(enemy.maxHp * ENEMY_REGEN_RATE);
-      enemy.hp = Math.min(enemy.maxHp, enemy.hp + regenAmount);
-      updateEnemyHealthBar(enemy);
-    }
-    enemy.lastRegenTick = now;
+  if (shouldRetreatFromBase(enemy)) {
+    startRetreat(enemy, t, 'base');
+    return;
   }
   
-  // At home - stop retreating, continue regen
-  if (distFromHome <= 2) {
-    // Clear provoked status when fully reset
-    if (enemy.hp >= enemy.maxHp * 0.9) {
-      provokedEnemies.delete(enemy.id);
-      enemy.isRetreating = false;
+  // ============================================
+  // AGGRO TYPE HANDLING
+  // ============================================
+  const aggroType = enemy.aggroType || (isEnemyPassive(enemy) ? 'passive' : 'aggressive');
+  const isProvoked = provokedEnemies.has(enemy.id);
+  
+  // Passive: only engage if provoked
+  if (aggroType === 'passive' && !isProvoked) {
+    handleUnawareState(enemy, t, weapon);
+    return;
+  }
+
+  // Conditional: check flags
+  if (aggroType === 'conditional') {
+    const isAct3 = currentState.flags?.act3;
+    if (!isAct3 && !isProvoked) {
+      handleUnawareState(enemy, t, weapon);
+      return;
+    }
+  }
+  
+  // ============================================
+  // STATE: ENGAGED - Check leash and deaggro
+  // ============================================
+  if (enemy.isEngaged || enemy.state === AI.STATES.ENGAGED) {
+    const retreatReason = checkLeashAndDeaggro(enemy, player, t);
+    
+    if (retreatReason) {
+      startRetreat(enemy, t, retreatReason);
+      
+      // If pack member exceeds leash, retreat whole pack
+      if (retreatReason === 'leash' && enemy.packId) {
+        retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'leash');
+      }
+      
+      updateEnemyVisuals();
+      return;
+    }
+    
+    // Continue combat
+    executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config);
+    return;
+  }
+  
+  // ============================================
+  // STATE: UNAWARE / ALERT - Detection logic
+  // ============================================
+  const aggroRadius = getAggroRadius(enemy);
+  
+  // Check if player is in detection range with LOS
+  if (hasLOS && dPlayer <= aggroRadius) {
+    if (!enemy.isAware) {
+      // Enter ALERT state
+      enemy.isAware = true;
+      enemy.awareTime = t;
+      enemy.state = AI.STATES.ALERT;
+      enemy.lastSeenPlayer = t;
+    } else {
+      enemy.lastSeenPlayer = t;
+    }
+  }
+  
+  // Handle ALERT -> ENGAGED transition
+  if (enemy.state === AI.STATES.ALERT) {
+    if (t - enemy.awareTime >= AI.ALERT_DURATION_MS) {
+      enemy.state = AI.STATES.ENGAGED;
+  enemy.isEngaged = true;
+      enemy.targetId = 'player';
+      executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config);
     }
     return;
   }
   
-  // Movement cooldown check
-  if (now < enemy.moveCooldown) return;
+  // Not aware - handle unaware state
+  handleUnawareState(enemy, t, weapon);
+}
+
+/**
+ * Initialize AI fields on enemy
+ */
+function initEnemyAIFields(enemy) {
+  enemy.state = AI.STATES.UNAWARE;
+  enemy.isRetreating = false;
+  enemy.isEngaged = false;
+  enemy.isAware = false;
+  enemy.moveCooldown = enemy.moveCooldown ?? 0;
+  enemy.lastSeenPlayer = 0;
+  enemy.outOfRangeSince = null;
   
-  const moveCD = (weapon?.moveSpeed || DEFAULT_MOVE_COOLDOWN) * 1.5;
+  // Set home if not set
+  if (!enemy.home) {
+    enemy.home = {
+      x: enemy.homeCenter?.x ?? enemy.spawnX ?? enemy.x,
+      y: enemy.homeCenter?.y ?? enemy.spawnY ?? enemy.y
+    };
+  }
   
-  // Move toward home
-  const dx = Math.sign(homeCenter.x - enemy.x);
-  const dy = Math.sign(homeCenter.y - enemy.y);
+  // Default ranges
+  enemy.leashRadius = enemy.leashRadius ?? (enemy.isAlpha ? 18 : AI.DEFAULT_LEASH_RADIUS);
+  enemy.aggroRadius = enemy.aggroRadius ?? (enemy.isAlpha ? 12 : AI.DEFAULT_AGGRO_RADIUS);
+  
+  ensureEffects(enemy);
+}
+
+/**
+ * Handle unaware state - idle or return home
+ */
+function handleUnawareState(enemy, t, weapon) {
+  enemy.isEngaged = false;
+  enemy.state = AI.STATES.UNAWARE;
+  
+  if (!enemy.home) return;
+  
+  const dHome = distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y);
+  
+  if (dHome > 2) {
+    // Return home and regenerate
+    moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
+    regenAtHome(enemy, t);
+  } else {
+    // At home - regenerate and maybe idle
+    regenAtHome(enemy, t);
+    
+    if (t >= (enemy.moveCooldown ?? 0) && Math.random() < 0.02) {
+      aiIdle(enemy, t, weapon);
+    }
+  }
+}
+
+/**
+ * Regenerate HP when at or near home
+ */
+function regenAtHome(enemy, t) {
+  const enemyMax = getMaxHP(enemy);
+  if (!enemyMax || enemy.hp >= enemyMax) return;
+  
+  const regenInterval = 500;
+  if (!enemy.lastRegenTick || t - enemy.lastRegenTick >= regenInterval) {
+    const regenRate = 0.05; // 5% per tick
+    const regenAmount = Math.ceil(enemyMax * regenRate);
+    enemy.hp = Math.min(enemyMax, enemy.hp + regenAmount);
+    updateEnemyHealthBar(enemy);
+    enemy.lastRegenTick = t;
+    
+    // Clear provoked when mostly healed
+    if (enemy.hp >= enemyMax * 0.9) {
+      provokedEnemies.delete(enemy.id);
+    }
+  }
+}
+
+/**
+ * Handle enemy retreat state - move toward home, heal, and finish when arrived
+ */
+function handleRetreatState(enemy, t) {
+  // Ensure home point exists
+  if (!enemy.home) {
+    enemy.home = { 
+      x: enemy.homeCenter?.x ?? enemy.spawnX ?? enemy.x, 
+      y: enemy.homeCenter?.y ?? enemy.spawnY ?? enemy.y 
+    };
+  }
+  
+  const distToHome = distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y);
+  
+  // Heal while retreating (15% per second = 1.5% per 100ms tick)
+  const retreatMax = getMaxHP(enemy);
+  if (retreatMax && enemy.hp < retreatMax) {
+    const regenRate = AI.RETREAT_REGEN_RATE;
+    const regenAmount = retreatMax * regenRate * 0.1; // ~100ms tick
+    enemy.hp = Math.min(retreatMax, enemy.hp + regenAmount);
+    updateEnemyHealthBar(enemy);
+  }
+  
+  // Check if arrived home (within 1.5 tiles)
+  if (distToHome <= 1.5) {
+    finishRetreat(enemy, t);
+    return;
+  }
+  
+  // Check if stuck too long - snap to home
+  const retreatDur = t - (enemy.retreatStartedAt ?? t);
+  if (retreatDur > AI.RETREAT_TIMEOUT_MS) {
+    // Snap to home as last resort
+    snapEnemyToHome(enemy, t);
+    return;
+  }
+  
+  // Move toward home (faster movement during retreat)
+  const moveCD = 320; // Faster than normal
+  if (t < (enemy.moveCooldown ?? 0)) return;
+  
+  const dx = Math.sign(enemy.home.x - enemy.x);
+  const dy = Math.sign(enemy.home.y - enemy.y);
+  
+  // Try to move - allow movement even through normal restrictions during retreat
+  let moved = false;
+  
+  // Try diagonal first
+  if (dx !== 0 && dy !== 0 && canEnemyMoveToRetreat(enemy.x + dx, enemy.y + dy, enemy.id)) {
+    updateEnemyPosition(enemy, enemy.x + dx, enemy.y + dy);
+    moved = true;
+  } 
+  // Try horizontal
+  else if (dx !== 0 && canEnemyMoveToRetreat(enemy.x + dx, enemy.y, enemy.id)) {
+    updateEnemyPosition(enemy, enemy.x + dx, enemy.y);
+    moved = true;
+  } 
+  // Try vertical
+  else if (dy !== 0 && canEnemyMoveToRetreat(enemy.x, enemy.y + dy, enemy.id)) {
+    updateEnemyPosition(enemy, enemy.x, enemy.y + dy);
+    moved = true;
+  }
+  
+  // If can't move normally, try any adjacent tile closer to home
+  if (!moved) {
+    const adjacentMoves = [
+      { x: enemy.x + 1, y: enemy.y },
+      { x: enemy.x - 1, y: enemy.y },
+      { x: enemy.x, y: enemy.y + 1 },
+      { x: enemy.x, y: enemy.y - 1 },
+    ];
+    
+    // Sort by distance to home
+    adjacentMoves.sort((a, b) => {
+      const distA = distCoords(a.x, a.y, enemy.home.x, enemy.home.y);
+      const distB = distCoords(b.x, b.y, enemy.home.x, enemy.home.y);
+      return distA - distB;
+    });
+    
+    for (const pos of adjacentMoves) {
+      if (canEnemyMoveToRetreat(pos.x, pos.y, enemy.id)) {
+        updateEnemyPosition(enemy, pos.x, pos.y);
+        moved = true;
+        break;
+      }
+    }
+  }
+  
+  // Track if stuck
+  if (!moved) {
+    enemy.retreatStuckSince = enemy.retreatStuckSince ?? t;
+    // If stuck for 2 seconds, snap
+    if (t - enemy.retreatStuckSince > 2000) {
+      snapEnemyToHome(enemy, t);
+      return;
+    }
+  } else {
+    enemy.retreatStuckSince = null;
+  }
+  
+  enemy.moveCooldown = t + moveCD;
+  
+  // Update visual to show retreating state
+  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  if (el && !el.classList.contains('retreating')) {
+    el.classList.add('retreating');
+  }
+}
+
+/**
+ * Movement check for retreating enemies - more lenient
+ */
+function canEnemyMoveToRetreat(x, y, enemyId) {
+  // Basic walkability check
+  if (!canMoveTo(currentState, x, y)) return false;
+  
+  // Don't collide with other enemies
+  for (const other of currentState.runtime.activeEnemies || []) {
+    if (other.id === enemyId || other.hp <= 0) continue;
+    if (other.x === x && other.y === y) return false;
+  }
+  
+  // Don't collide with player
+  const player = currentState.player;
+  if (player.x === x && player.y === y) return false;
+  
+  return true;
+}
+
+/**
+ * Snap enemy to home position (used when stuck)
+ */
+function snapEnemyToHome(enemy, t) {
+  // Update position in data
+  enemy.x = enemy.home.x;
+  enemy.y = enemy.home.y;
+  
+  // Update DOM element position immediately
+  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  if (el) {
+    // Disable transition for instant snap
+    el.style.transition = 'none';
+    el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+    // Force reflow
+    el.offsetHeight;
+    // Re-enable transition
+    el.style.transition = '';
+  }
+  
+  finishRetreat(enemy, t);
+}
+
+/**
+ * Finish retreat - enemy has arrived home
+ */
+function finishRetreat(enemy, t) {
+  enemy.isRetreating = false;
+  enemy.state = AI.STATES.UNAWARE;
+  enemy.retreatReason = null;
+  enemy.retreatStartedAt = null;
+  enemy.retreatStuckSince = null;
+  
+  // Clear combat state
+  enemy.targetId = null;
+  enemy.isEngaged = false;
+  enemy.isAware = false;
+  
+  // Full heal on arrival
+  const finishMax = getMaxHP(enemy);
+  if (finishMax) {
+    enemy.hp = finishMax;
+    updateEnemyHealthBar(enemy);
+  }
+  
+  // Brief spawn immunity (1.5s)
+  enemy.spawnImmunityUntil = t + AI.SPAWN_IMMUNITY_MS;
+  
+  // Clear provoked status
+  provokedEnemies.delete(enemy.id);
+  
+  // Update visuals
+  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  if (el) {
+    el.classList.remove('retreating');
+    el.classList.add('spawn-immune');
+    
+    // Remove spawn-immune class after immunity expires
+    setTimeout(() => {
+      el.classList.remove('spawn-immune');
+    }, AI.SPAWN_IMMUNITY_MS);
+  }
+}
+
+/**
+ * Move enemy toward home point (legacy wrapper)
+ */
+function moveEnemyTowardHome(enemy, targetX, targetY) {
+  const t = Date.now();
+  
+  // Movement cooldown
+  const moveCD = 400 * (enemy.isRetreating ? 0.8 : 1);
+  if (t < (enemy.moveCooldown ?? 0)) return;
+  
+  const dx = Math.sign(targetX - enemy.x);
+  const dy = Math.sign(targetY - enemy.y);
   
   // Try direct path first
-  if (canEnemyMoveTo(enemy.x + dx, enemy.y + dy, enemy.id)) {
+  if (dx !== 0 && dy !== 0 && canEnemyMoveTo(enemy.x + dx, enemy.y + dy, enemy.id)) {
     updateEnemyPosition(enemy, enemy.x + dx, enemy.y + dy);
   } else if (dx !== 0 && canEnemyMoveTo(enemy.x + dx, enemy.y, enemy.id)) {
     updateEnemyPosition(enemy, enemy.x + dx, enemy.y);
@@ -833,10 +1269,38 @@ function aiReturnHome(enemy, now, weapon) {
     updateEnemyPosition(enemy, enemy.x, enemy.y + dy);
   }
   
-  enemy.moveCooldown = now + moveCD;
+  enemy.moveCooldown = t + moveCD;
 }
 
-// Check if enemy should retreat due to base proximity
+/**
+ * Execute combat AI based on enemy type
+ */
+function executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config) {
+  switch (config.aiType) {
+    case 'melee':
+      aiMelee(enemy, weapon, dPlayer, hasLOS, t);
+      break;
+    case 'ranged':
+      aiRanged(enemy, weapon, dPlayer, hasLOS, t);
+      break;
+    case 'aggressive':
+      aiAggressive(enemy, weapon, dPlayer, hasLOS, t);
+      break;
+    case 'guard':
+      // Guards don't chase
+      break;
+    default:
+      aiMelee(enemy, weapon, dPlayer, hasLOS, t);
+  }
+}
+
+// ============================================
+// BASE PROXIMITY CHECK
+// ============================================
+
+/**
+ * Check if enemy should retreat due to base proximity
+ */
 function shouldRetreatFromBase(enemy) {
   if (enemy.isBoss) return false;
   
@@ -848,15 +1312,65 @@ function shouldRetreatFromBase(enemy) {
   return false;
 }
 
-// ============================================
-// SPAWN CAMPING PREVENTION
-// ============================================
-// Newly spawned enemies have brief immunity to prevent players
-// from sitting at spawn points and farming easy kills.
-
+/**
+ * Check if entity has spawn immunity (wrapper for combat.js usage)
+ */
 function hasSpawnImmunity(enemy) {
-  if (!enemy.spawnImmunityUntil) return false;
-  return Date.now() < enemy.spawnImmunityUntil;
+  return checkSpawnImmunity(enemy, Date.now());
+}
+
+/**
+ * Update enemy visuals (health bars, retreat indicators, passive state)
+ * This is the authoritative visual update function.
+ */
+function updateEnemyVisuals() {
+  if (!currentState?.runtime?.activeEnemies) return;
+  
+  const t = Date.now();
+  
+  for (const enemy of currentState.runtime.activeEnemies) {
+    if (enemy.hp <= 0) continue;
+    
+    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+    if (!el) continue;
+    
+    // Retreating visual
+    if (enemy.isRetreating) {
+      el.classList.add('retreating');
+    } else {
+      el.classList.remove('retreating');
+    }
+    
+    // Spawn immunity visual - check actual immunity state
+    const hasImmunity = (enemy.spawnImmunityUntil ?? 0) > t;
+    if (hasImmunity) {
+      el.classList.add('spawn-immune');
+    } else {
+      el.classList.remove('spawn-immune');
+    }
+    
+    // Passive state visual
+    const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
+    if (isPassive) {
+      el.classList.add('passive');
+      el.dataset.passive = 'true';
+      el.style.backgroundColor = '#B8A038'; // Yellow for passive
+    } else {
+      el.classList.remove('passive');
+      delete el.dataset.passive;
+      el.style.backgroundColor = enemy.color;
+    }
+    
+    // Update badge if present
+    const badge = el.querySelector('.enemy-level-badge');
+    if (badge) {
+      if (isPassive) {
+        badge.classList.add('passive-badge');
+      } else {
+        badge.classList.remove('passive-badge');
+      }
+    }
+  }
 }
 
 // Idle behavior - small random patrol movements
@@ -959,22 +1473,7 @@ function aggroPack(enemy) {
   }
 }
 
-// Check if enemy should retreat from nearby guards
-function shouldRetreatFromGuards(enemy) {
-  // Enemies no longer retreat from guards - they fight back!
-  // Only retreat if guard is much higher level (5+ levels above enemy)
-  if (enemy.isBoss) return false;
-  
-  for (const guard of guards) {
-    if (!guard.hp || guard.hp <= 0) continue; // Skip dead guards
-    const dist = distCoords(enemy.x, enemy.y, guard.x, guard.y);
-    // Only retreat if very close to a much higher level guard
-    if (dist <= 3 && guard.level > enemy.level + 5) {
-      return true;
-    }
-  }
-  return false;
-}
+// Note: shouldBreakOffFromGuards is now imported from aiUtils.js
 
 // ============================================
 // MELEE AI - Surround and take turns
@@ -1205,32 +1704,7 @@ function aiAggressive(enemy, weapon, dist, hasLOS, now) {
   }
 }
 
-// ============================================
-// RETREAT AI
-// ============================================
-function aiRetreatFromGuards(enemy, now, weapon) {
-  const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
-  if (now < enemy.moveCooldown) return;
-  
-  enemy.isEngaged = false;
-  
-  // Find nearest guard and move away
-  let nearestGuard = null;
-  let nearestDist = Infinity;
-  for (const guard of guards) {
-    const dist = distCoords(enemy.x, enemy.y, guard.x, guard.y);
-    if (dist < nearestDist) {
-      nearestDist = dist;
-      nearestGuard = guard;
-    }
-  }
-  
-  if (nearestGuard) {
-    moveAwayFrom(enemy, nearestGuard.x, nearestGuard.y);
-  }
-  
-  enemy.moveCooldown = now + moveCD;
-}
+// Note: aiRetreatFromGuards removed - now using startRetreat() + processRetreat() from aiUtils.js
 
 // ============================================
 // ENEMY MOVEMENT
@@ -1357,9 +1831,9 @@ function canEnemyMoveTo(x, y, excludeId) {
   return true;
 }
 
-function updateEnemyPosition(enemy, x, y) {
-  // Rooted enemies can't move
-  if (isRooted(enemy)) {
+function updateEnemyPosition(enemy, x, y, forceMove = false) {
+  // Rooted enemies can't move (unless retreating or forced)
+  if (!forceMove && !enemy.isRetreating && isRooted(enemy)) {
     return;
   }
   
@@ -1378,31 +1852,25 @@ function getEnemyMoveCooldown(enemy, baseMoveCD) {
 }
 
 // ============================================
-// ENEMY DAMAGE CALCULATION
+// ENEMY DAMAGE CALCULATION (Plan B Unified)
 // ============================================
+/**
+ * Calculate damage from enemy to player using unified formula.
+ * Alpha damage bonus is now baked into enemy.atk at spawn time.
+ */
 function calculateEnemyDamage(enemy, weapon, player) {
-  const levelDiff = enemy.level - player.level;
-  
-  let damage = weapon.baseDamage + Math.floor(enemy.level * 0.8);
-  
-  if (levelDiff > 0) {
-    const levelBonus = Math.pow(1 + LEVEL_DAMAGE_BONUS_PER_LEVEL, levelDiff);
-    damage = Math.floor(damage * levelBonus);
-    
-    if (levelDiff >= 2) {
-      damage = Math.floor(damage * (1 + (levelDiff - 1) * 0.1));
-    }
-  } else if (levelDiff < 0) {
-    const levelPenalty = Math.pow(1 - LEVEL_DAMAGE_PENALTY_PER_LEVEL, Math.abs(levelDiff));
-    damage = Math.floor(damage * levelPenalty);
-  }
-  
-  if (enemy.isAlpha) {
-    damage = Math.floor(damage * (1 + ALPHA_DAMAGE_BONUS));
-  }
-  
-  const defMitigation = Math.floor(player.def * 0.3);
-  damage = Math.max(1, damage - defMitigation);
+  const { damage } = computeDamage({
+    attacker: enemy,
+    defender: player,
+    defenderConfig: null, // Player has no type weakness
+    baseDamage: weapon.baseDamage || 10,
+    skillMult: weapon.multiplier || 1,
+    damageType: weapon.damageType || null,
+    forceNoCrit: true, // Enemies don't crit (for now)
+    source: "enemy",
+    attackId: weapon.id || weapon.name || "attack",
+    attackerName: enemy.name || enemy.type
+  });
   
   return damage;
 }
@@ -1525,7 +1993,9 @@ function executeAttack(weapon) {
 
   currentTarget.hp -= damage;
   
-  const isCrit = damage > (weapon.baseDamage || 10) * (weapon.multiplier || 1) * 1.2;
+  // Use crit flag from calculateDamage instead of heuristic
+  const isCrit = !!weapon.__lastCrit;
+  weapon.__lastCrit = false;
   showDamageNumber(currentTarget.x, currentTarget.y, damage, isCrit);
   logCombat(`${damage} damage with ${weapon.name || 'attack'}`);
 
@@ -2055,33 +2525,46 @@ export function playerSpecial() {
   useAction('3');
 }
 
+/**
+ * Calculate damage from player to enemy using unified formula.
+ * Includes rifle min-range penalty and type effectiveness.
+ * 
+ * @param {object} weapon - Current weapon object
+ * @param {object} target - Target enemy
+ * @param {number} actionDamage - Optional skill-specific damage override
+ * @returns {number} Final damage value
+ */
 function calculateDamage(weapon, target, actionDamage = null) {
   const player = currentState.player;
   const config = ENEMY_CONFIGS[target.type] || {};
-
-  // Use action damage if provided, otherwise use weapon base damage
   const baseDamage = actionDamage || weapon.baseDamage || 10;
-  let damage = baseDamage + player.atk;
-  damage *= (weapon.multiplier || 1);
-
-  // Weakness/resistance
-  if (config.weakness === weapon.damageType) {
-    damage *= 1.5;
-  } else if (config.resistance === weapon.damageType) {
-    damage *= 0.5;
+  
+  // Calculate skill multiplier with rifle min-range penalty
+  let skillMult = weapon.multiplier || 1;
+  if (currentWeapon === 'rifle') {
+    const d = distCoords(player.x, player.y, target.x, target.y);
+    if (d <= 2) {
+      skillMult *= 0.65; // -35% damage when rifle is too close
+    }
   }
-
-  // Defense mitigation
-  const targetDef = target.def || 0;
-  damage = Math.max(1, damage - Math.floor(targetDef / 2));
-
-  // Crit chance
-  const critChance = 0.05 + (player.luck || 0) * 0.02;
-  if (Math.random() < critChance) {
-    damage = Math.floor(damage * 1.5);
-  }
-
-  return Math.floor(damage);
+  
+  const { damage, isCrit } = computeDamage({
+    attacker: player,
+    defender: target,
+    defenderConfig: config,
+    baseDamage,
+    skillMult,
+    damageType: weapon.damageType || null,
+    forceNoCrit: false,
+    source: "player",
+    attackId: weapon.id || weapon.name || "attack",
+    attackerName: "Rex"
+  });
+  
+  // Store crit flag for UI effects
+  weapon.__lastCrit = isCrit;
+  
+  return damage;
 }
 
 function getAdjacentEnemies(x, y) {
@@ -2312,11 +2795,6 @@ export function getCurrentTarget() {
 }
 
 // ============================================
-// ALPHA DAMAGE (for enemy attacks)
-// ============================================
-const ALPHA_DAMAGE_MULT = 1.35;
-
-// ============================================
 // BASE ZONE UTILITY
 // ============================================
 /**
@@ -2339,7 +2817,8 @@ export function spawnBoss(state, bossDef) {
     x: bossDef.x,
     y: bossDef.y,
     hp: calculateEnemyHP(bossDef.level) * 3,
-    maxHp: calculateEnemyHP(bossDef.level) * 3,
+    maxHP: calculateEnemyHP(bossDef.level) * 3,
+    maxHp: calculateEnemyHP(bossDef.level) * 3, // Legacy alias
     atk: calculateEnemyAtk(bossDef.level) * 1.5,
     def: calculateEnemyDef(bossDef.level),
     cooldownUntil: 0,
@@ -2545,7 +3024,7 @@ export async function reviveAtBase() {
   const spawnX = DRYCROSS_CENTER.x;
   const spawnY = DRYCROSS_CENTER.y;
   
-    currentState.player.hp = Math.floor(currentState.player.maxHp / 2);
+    currentState.player.hp = Math.floor(getMaxHP(currentState.player) / 2);
   currentState.player.x = spawnX;
   currentState.player.y = spawnY;
 
@@ -2617,7 +3096,7 @@ async function reviveAtCorpse() {
   isGhostMode = false;
   
   // Revive at corpse with FULL HP (reward for corpse run)
-  currentState.player.hp = currentState.player.maxHp;
+  currentState.player.hp = getMaxHP(currentState.player);
   currentState.player.x = corpseLocation.x;
   currentState.player.y = corpseLocation.y;
 
@@ -2792,7 +3271,7 @@ export function renderEnemies(state) {
 
     const hpBar = document.createElement('div');
     hpBar.className = 'enemy-hp-bar';
-    hpBar.innerHTML = `<span class="enemy-hp-fill" style="width: ${(enemy.hp / enemy.maxHp) * 100}%"></span>`;
+    hpBar.innerHTML = `<span class="enemy-hp-fill" style="width: ${getHPPercent(enemy)}%"></span>`;
     el.appendChild(hpBar);
 
     el.addEventListener('click', (e) => {
@@ -2815,41 +3294,12 @@ export function renderEnemies(state) {
   });
 }
 
-// Update enemy visuals (called when provoked status changes)
-function updateEnemyVisuals() {
-  for (const enemy of currentState.runtime.activeEnemies || []) {
-    if (enemy.hp <= 0) continue;
-    
-    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
-    if (!el) continue;
-    
-    const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
-    
-    if (isPassive) {
-      el.classList.add('passive');
-      el.dataset.passive = 'true';
-      el.style.backgroundColor = '#B8A038';
-    } else {
-      el.classList.remove('passive');
-      delete el.dataset.passive;
-      el.style.backgroundColor = enemy.color;
-    }
-    
-    const badge = el.querySelector('.enemy-level-badge');
-    if (badge) {
-      if (isPassive) {
-        badge.classList.add('passive-badge');
-      } else {
-        badge.classList.remove('passive-badge');
-      }
-    }
-  }
-}
+// Note: updateEnemyVisuals() is defined earlier in the file with comprehensive logic
 
 function updateEnemyHealthBar(enemy) {
   const fill = document.querySelector(`[data-enemy-id="${enemy.id}"] .enemy-hp-fill`);
   if (fill) {
-    fill.style.width = `${Math.max(0, (enemy.hp / enemy.maxHp) * 100)}%`;
+    fill.style.width = `${getHPPercent(enemy)}%`;
   }
 }
 
@@ -2868,10 +3318,33 @@ function updateEnemyStatusEffects(enemy) {
 
 // Tick all enemy effects and update visuals
 function tickAllEnemyEffects() {
+  // IMPORTANT: Use Date.now() to match combat tick timing (not performance.now())
+  const t = Date.now();
+  
   for (const enemy of currentState.runtime.activeEnemies || []) {
     if (enemy.hp <= 0) continue;
+    
+    // Tick status effects
     tickEffects(enemy);
     updateEnemyStatusEffects(enemy);
+    
+    // Sync spawn immunity visual state
+    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+    if (el) {
+      const hasImmunity = (enemy.spawnImmunityUntil ?? 0) > t;
+      if (hasImmunity) {
+        el.classList.add('spawn-immune');
+      } else {
+        el.classList.remove('spawn-immune');
+      }
+      
+      // Sync retreating visual
+      if (enemy.isRetreating) {
+        el.classList.add('retreating');
+      } else {
+        el.classList.remove('retreating');
+      }
+    }
   }
 }
 
@@ -2880,15 +3353,18 @@ function tickAllEnemyEffects() {
 // ============================================
 function updatePlayerHealthBar() {
   const player = currentState.player;
+  const max = getMaxHP(player);
+  const pct = getHPPercent(player);
+  
   const fill = document.getElementById('player-hp-fill');
   const text = document.getElementById('player-hp-text');
-  if (fill) fill.style.width = `${(player.hp / player.maxHp) * 100}%`;
-  if (text) text.textContent = `${player.hp}/${player.maxHp}`;
+  if (fill) fill.style.width = `${pct}%`;
+  if (text) text.textContent = `${player.hp}/${max}`;
 
   const mainFill = document.getElementById('hp-fill');
   const mainText = document.getElementById('hp-text');
-  if (mainFill) mainFill.style.setProperty('--pct', (player.hp / player.maxHp) * 100);
-  if (mainText) mainText.textContent = `${player.hp}/${player.maxHp}`;
+  if (mainFill) mainFill.style.setProperty('--pct', pct);
+  if (mainText) mainText.textContent = `${player.hp}/${max}`;
 }
 
 function updatePlayerSenseBar() {
@@ -2920,10 +3396,11 @@ function updateTargetFrame() {
   const hpText = frame.querySelector('.frame-hp-text');
   const weaknessType = frame.querySelector('.weakness-type');
 
+  const targetMax = getMaxHP(currentTarget);
   if (nameEl) nameEl.textContent = currentTarget.name;
   if (levelEl) levelEl.textContent = `Lv.${currentTarget.level}`;
-  if (hpFill) hpFill.style.width = `${(currentTarget.hp / currentTarget.maxHp) * 100}%`;
-  if (hpText) hpText.textContent = `${Math.max(0, currentTarget.hp)}/${currentTarget.maxHp}`;
+  if (hpFill) hpFill.style.width = `${getHPPercent(currentTarget)}%`;
+  if (hpText) hpText.textContent = `${Math.max(0, currentTarget.hp)}/${targetMax}`;
 
   const config = ENEMY_CONFIGS[currentTarget.type];
   if (weaknessType && config?.weakness) {
@@ -2960,9 +3437,10 @@ function updateTargetFrame() {
     }
     
     // NPCs with HP (like guards) show health, others show full bar
-    if (currentNpcTarget.hp !== undefined && currentNpcTarget.maxHp) {
-      if (hpFill) hpFill.style.width = `${(currentNpcTarget.hp / currentNpcTarget.maxHp) * 100}%`;
-      if (hpText) hpText.textContent = `${Math.max(0, currentNpcTarget.hp)}/${currentNpcTarget.maxHp}`;
+    const npcMax = getMaxHP(currentNpcTarget);
+    if (currentNpcTarget.hp !== undefined && npcMax) {
+      if (hpFill) hpFill.style.width = `${getHPPercent(currentNpcTarget)}%`;
+      if (hpText) hpText.textContent = `${Math.max(0, currentNpcTarget.hp)}/${npcMax}`;
     } else {
       if (hpFill) hpFill.style.width = '100%';
       if (hpText) hpText.textContent = '—';

@@ -14,6 +14,7 @@ import { initCombat, handleTargeting, renderEnemies, playerSpecial, cycleWeapon,
 import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap, toExpandedCoords, BASE_CENTER } from './mapGenerator.js';
+import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
 
 // ============================================
 // GAME STATE
@@ -26,7 +27,8 @@ export const state = {
     x: 56,
     y: 42,
     hp: 100,
-    maxHp: 100,
+    maxHP: 100,   // Canonical key
+    maxHp: 100,   // Legacy alias
     sense: 20,
     maxSense: 20,
     atk: 5,
@@ -142,8 +144,11 @@ function levelUp() {
   state.player.level++;
   state.player.xpToNext = XP_TABLE[state.player.level] || 9999;
 
-  state.player.maxHp += 10;
-  state.player.hp = state.player.maxHp;
+  // Use setMaxHP to keep both keys in sync
+  const newMaxHP = getMaxHP(state.player) + 10;
+  setMaxHP(state.player, newMaxHP);
+  state.player.hp = newMaxHP;
+  
   state.player.maxSense += 2;
   state.player.sense = state.player.maxSense;
   state.player.atk += 1;
@@ -239,11 +244,14 @@ export function showToast(message, type = '') {
 // ============================================
 export function updateHUD() {
   const p = state.player;
+  const maxHP = getMaxHP(p);
+  const hpPct = getHPPercent(p);
+  const sensePct = p.maxSense > 0 ? (p.sense / p.maxSense) * 100 : 0;
 
   // Main HUD
-  document.getElementById('hp-fill')?.style.setProperty('--pct', (p.hp / p.maxHp) * 100);
-  document.getElementById('hp-text').textContent = `${p.hp}/${p.maxHp}`;
-  document.getElementById('sense-fill')?.style.setProperty('--pct', (p.sense / p.maxSense) * 100);
+  document.getElementById('hp-fill')?.style.setProperty('--pct', hpPct);
+  document.getElementById('hp-text').textContent = `${p.hp}/${maxHP}`;
+  document.getElementById('sense-fill')?.style.setProperty('--pct', sensePct);
   document.getElementById('sense-text').textContent = `${p.sense}/${p.maxSense}`;
   document.getElementById('atk-val').textContent = p.atk;
   document.getElementById('def-val').textContent = p.def;
@@ -261,16 +269,16 @@ export function updateHUD() {
   const playerSenseText = document.getElementById('player-sense-text');
   const playerFrameLevel = document.getElementById('player-frame-level');
 
-  if (playerHpFill) playerHpFill.style.width = `${(p.hp / p.maxHp) * 100}%`;
-  if (playerHpText) playerHpText.textContent = `${p.hp}/${p.maxHp}`;
-  if (playerSenseFill) playerSenseFill.style.width = `${(p.sense / p.maxSense) * 100}%`;
+  if (playerHpFill) playerHpFill.style.width = `${hpPct}%`;
+  if (playerHpText) playerHpText.textContent = `${p.hp}/${maxHP}`;
+  if (playerSenseFill) playerSenseFill.style.width = `${sensePct}%`;
   if (playerSenseText) playerSenseText.textContent = `${p.sense}/${p.maxSense}`;
   if (playerFrameLevel) playerFrameLevel.textContent = p.level;
 
   // Player sprite health bar
   const playerEl = document.getElementById('player');
   if (playerEl) {
-    playerEl.style.setProperty('--player-hp-pct', (p.hp / p.maxHp) * 100);
+    playerEl.style.setProperty('--player-hp-pct', hpPct);
   }
 
   updateLocation();
@@ -781,6 +789,10 @@ async function init() {
 
     const savedFlags = loadFlags();
     Object.assign(state.flags, savedFlags);
+
+    // Normalize player health keys (maxHP/maxHp consistency)
+    normalizeHealthKeys(state.player);
+    clampHP(state.player);
 
     window.__vetuuState = state;
     window.__vetuuGame = { showToast, grantXP, addItem, updateHUD, equipItem, updateQuestProgress };
