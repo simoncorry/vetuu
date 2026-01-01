@@ -5136,9 +5136,22 @@ export function renderEnemies(state) {
 // Note: updateEnemyVisuals() is defined earlier in the file with comprehensive logic
 
 function updateEnemyHealthBar(enemy) {
+  // Update the health bar on the enemy sprite
   const fill = document.querySelector(`[data-enemy-id="${enemy.id}"] .enemy-hp-fill`);
   if (fill) {
     fill.style.setProperty('--hp-pct', getHPPercent(enemy));
+  }
+  
+  // If this enemy is the current target, also update the target frame
+  if (currentTarget && currentTarget.id === enemy.id) {
+    const frame = document.getElementById('target-frame');
+    if (frame) {
+      const hpFill = frame.querySelector('.frame-hp-fill');
+      const hpText = frame.querySelector('.frame-hp-text');
+      const targetMax = getMaxHP(enemy);
+      if (hpFill) hpFill.style.setProperty('--hp-pct', getHPPercent(enemy));
+      if (hpText) hpText.textContent = `${Math.max(0, enemy.hp)}/${targetMax}`;
+    }
   }
 }
 
