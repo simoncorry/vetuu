@@ -743,11 +743,14 @@ function startCombatTick() {
     // Use performance.now() for all simulation timing
     const now = nowMs();
 
-    // Update player cooldowns
+    // Update player cooldowns (weapon abilities)
     for (const key of Object.keys(actionCooldowns)) {
       if (actionCooldowns[key] > 0) actionCooldowns[key] -= 100;
     }
     updateCooldownUI();
+    
+    // Update utility cooldowns (sprint, heal)
+    tickUtilityCooldowns(100);
 
     // Try to execute combat intent (handles immunity expiry, movement completion)
     tryExecuteCombatIntent();
@@ -2903,16 +2906,260 @@ export function useSenseAbility(slot) {
 }
 
 // ============================================
-// UTILITY ABILITIES (Sprint, Heal) - Stub for later commit
+// UTILITY ABILITIES (Sprint, Heal)
 // ============================================
+const UTILITY_COOLDOWNS = {
+  sprint: { current: 0, max: 30000 },  // 30s cooldown
+  heal: { current: 0, max: 120000 }     // 120s cooldown
+};
+
 export function useUtilityAbility(id) {
-  if (isGhostMode && id === 'heal') {
+  switch (id) {
+    case 'sprint':
+      executeSprint();
+      break;
+    case 'heal':
+      executeHeal();
+      break;
+    default:
+      logCombat(`Unknown utility: ${id}`);
+  }
+}
+
+/**
+ * Sprint: 5-tile dash in the direction player is facing (or toward target)
+ * CD: 30s, collision-safe
+ */
+function executeSprint() {
+  if (isGhostMode) {
+    // Allow sprinting in ghost mode for corpse retrieval
+  }
+  
+  if (playerImmunityActive) {
+    logCombat('Cannot sprint during immunity');
+    return;
+  }
+  
+  // Check cooldown
+  if (UTILITY_COOLDOWNS.sprint.current > 0) {
+    const remaining = (UTILITY_COOLDOWNS.sprint.current / 1000).toFixed(1);
+    logCombat(`Sprint on cooldown (${remaining}s)`);
+    return;
+  }
+  
+  const player = currentState.player;
+  const dashTiles = 5;
+  
+  // Determine dash direction - toward target if exists, else based on last movement
+  let dx = 0, dy = 0;
+  
+  if (currentTarget && currentTarget.hp > 0) {
+    // Dash toward target
+    const tdx = currentTarget.x - player.x;
+    const tdy = currentTarget.y - player.y;
+    const dist = Math.hypot(tdx, tdy);
+    if (dist > 0) {
+      dx = tdx / dist;
+      dy = tdy / dist;
+    }
+  } else {
+    // No target - dash in a random direction or use last movement direction
+    // For now, try to dash away from nearest enemy (defensive)
+    const enemies = currentState.runtime.activeEnemies?.filter(e => e.hp > 0) || [];
+    if (enemies.length > 0) {
+      enemies.sort((a, b) => {
+        const distA = distCoords(a.x, a.y, player.x, player.y);
+        const distB = distCoords(b.x, b.y, player.x, player.y);
+        return distA - distB;
+      });
+      const nearestEnemy = enemies[0];
+      dx = player.x - nearestEnemy.x;
+      dy = player.y - nearestEnemy.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0) {
+        dx /= dist;
+        dy /= dist;
+      }
+    } else {
+      // No enemies - dash forward (positive y)
+      dy = -1;
+    }
+  }
+  
+  // Find furthest valid position
+  let finalX = player.x;
+  let finalY = player.y;
+  
+  for (let i = 1; i <= dashTiles; i++) {
+    const testX = Math.round(player.x + dx * i);
+    const testY = Math.round(player.y + dy * i);
+    
+    if (canMoveTo(currentState, testX, testY)) {
+      finalX = testX;
+      finalY = testY;
+    } else {
+      break; // Stop at first collision
+    }
+  }
+  
+  // Check if we actually moved
+  if (finalX === player.x && finalY === player.y) {
+    logCombat('Cannot sprint - blocked');
+    return;
+  }
+  
+  // Execute the dash
+  player.x = finalX;
+  player.y = finalY;
+  
+  // Update player position visually with quick transition
+  const playerEl = document.getElementById('player');
+  if (playerEl) {
+    playerEl.style.transition = 'transform 0.15s ease-out';
+    playerEl.style.transform = `translate3d(${player.x * 24}px, ${player.y * 24}px, 0)`;
+    
+    // Reset transition after animation
+    setTimeout(() => {
+      playerEl.style.transition = '';
+    }, 150);
+  }
+  
+  // Update camera
+  updateCamera(currentState, 150);
+  
+  // Set cooldown
+  UTILITY_COOLDOWNS.sprint.current = UTILITY_COOLDOWNS.sprint.max;
+  
+  // Update UI
+  updateUtilityCooldownUI('sprint');
+  
+  logCombat(`Sprint! Dashed ${distCoords(player.x, player.y, finalX, finalY) || dashTiles} tiles`);
+}
+
+/**
+ * Heal: Restore 75% max HP
+ * CD: 120s, disabled in ghost mode
+ */
+function executeHeal() {
+  if (isGhostMode) {
     logCombat('You are a spirit... find your corpse to revive.');
     return;
   }
   
-  // TODO: Implement in Commit 6
-  logCombat(`Utility ability '${id}' not yet implemented`);
+  if (playerImmunityActive) {
+    logCombat('Cannot heal during immunity');
+    return;
+  }
+  
+  // Check cooldown
+  if (UTILITY_COOLDOWNS.heal.current > 0) {
+    const remaining = (UTILITY_COOLDOWNS.heal.current / 1000).toFixed(1);
+    logCombat(`Heal on cooldown (${remaining}s)`);
+    return;
+  }
+  
+  const player = currentState.player;
+  const maxHp = getMaxHP(player);
+  const healAmount = Math.floor(maxHp * 0.75);
+  const actualHeal = Math.min(healAmount, maxHp - player.hp);
+  
+  if (actualHeal <= 0) {
+    logCombat('Already at full health');
+    return;
+  }
+  
+  // Apply heal
+  player.hp = Math.min(maxHp, player.hp + healAmount);
+  
+  // Visual feedback
+  const playerEl = document.getElementById('player');
+  if (playerEl) {
+    playerEl.style.filter = 'brightness(1.5) saturate(1.3)';
+    playerEl.style.boxShadow = '0 0 20px #5DAD5D, 0 0 40px rgba(93, 173, 93, 0.5)';
+    
+    setTimeout(() => {
+      playerEl.style.filter = '';
+      playerEl.style.boxShadow = '';
+    }, 500);
+  }
+  
+  // Show heal number
+  showHealNumber(player.x, player.y, actualHeal);
+  
+  // Update UI
+  updatePlayerHealthBar();
+  updatePlayerFrame();
+  
+  // Set cooldown
+  UTILITY_COOLDOWNS.heal.current = UTILITY_COOLDOWNS.heal.max;
+  updateUtilityCooldownUI('heal');
+  
+  logCombat(`Healed for ${actualHeal} HP!`);
+}
+
+/**
+ * Show heal number floating up from position
+ */
+function showHealNumber(x, y, amount) {
+  const world = document.getElementById('world');
+  if (!world) return;
+  
+  const heal = document.createElement('div');
+  heal.className = 'damage-number heal-number';
+  heal.textContent = `+${amount}`;
+  heal.style.cssText = `
+    left: ${x * 24 + 12}px;
+    top: ${y * 24}px;
+    color: #5DAD5D;
+    text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.9);
+  `;
+  
+  world.appendChild(heal);
+  setTimeout(() => heal.remove(), 1000);
+}
+
+/**
+ * Update utility cooldown UI display
+ */
+function updateUtilityCooldownUI(utilityId) {
+  const slot = document.querySelector(`[data-slot="${utilityId}"]`);
+  if (!slot) return;
+  
+  const cooldown = UTILITY_COOLDOWNS[utilityId];
+  if (!cooldown) return;
+  
+  const overlay = slot.querySelector('.cooldown-overlay');
+  const timer = slot.querySelector('.cooldown-timer');
+  
+  if (cooldown.current > 0) {
+    slot.classList.add('on-cooldown');
+    if (overlay) {
+      overlay.style.setProperty('--cooldown-pct', (cooldown.current / cooldown.max) * 100);
+    }
+    if (timer) {
+      timer.textContent = Math.ceil(cooldown.current / 1000);
+    }
+  } else {
+    slot.classList.remove('on-cooldown');
+    if (overlay) {
+      overlay.style.setProperty('--cooldown-pct', 0);
+    }
+    if (timer) {
+      timer.textContent = '';
+    }
+  }
+}
+
+/**
+ * Tick utility cooldowns - called from game loop
+ */
+export function tickUtilityCooldowns(deltaMs) {
+  for (const [id, cooldown] of Object.entries(UTILITY_COOLDOWNS)) {
+    if (cooldown.current > 0) {
+      cooldown.current = Math.max(0, cooldown.current - deltaMs);
+      updateUtilityCooldownUI(id);
+    }
+  }
 }
 
 function checkRangeAndLOS(weapon, actionType = null) {

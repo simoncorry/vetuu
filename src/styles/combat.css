@@ -127,6 +127,11 @@
   color: var(--danger);
 }
 
+.damage-number.heal-number {
+  color: var(--success);
+  font-size: 1.2rem;
+}
+
 @keyframes damage-float {
   0% { opacity: 1; transform: translate3d(0, 0, 0) scale3d(1, 1, 1); }
   100% { opacity: 0; transform: translate3d(0, -40px, 0) scale3d(0.8, 0.8, 1); }
