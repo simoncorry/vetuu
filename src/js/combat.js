@@ -1663,6 +1663,11 @@ function isEnemyPassive(enemy) {
 export function provokeEnemy(enemy, t = nowMs(), reason = 'player_attack') {
   if (!enemy || enemy.hp <= 0) return;
   
+  // Skip if already provoked (prevents infinite recursion)
+  if (provokedEnemies.has(enemy.id) && !isExpired(enemy.provokedUntil, t)) {
+    return;
+  }
+  
   // Mark as provoked for 15 seconds
   provokedEnemies.add(enemy.id);
   enemy.provokedUntil = t + 15000;
@@ -1683,8 +1688,10 @@ export function provokeEnemy(enemy, t = nowMs(), reason = 'player_attack') {
     enemy.pendingAggro = true;
   }
   
-  // Aggro the entire pack
-  aggroPack(enemy, t);
+  // Aggro the entire pack (only on initial provoke, not pack propagation)
+  if (reason === 'player_attack') {
+    aggroPack(enemy, t);
+  }
   
   updateEnemyVisuals();
 }
