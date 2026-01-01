@@ -1552,6 +1552,14 @@ function updateEnemyVisuals() {
       el.style.backgroundColor = enemy.color;
     }
     
+    // In-combat visual (flashing red glow) - when enemy is actively engaged/provoked
+    const isInCombat = enemy.isEngaged || enemy.isAware || provokedEnemies.has(enemy.id);
+    if (isInCombat && !enemy.isRetreating) {
+      el.classList.add('in-combat');
+    } else {
+      el.classList.remove('in-combat');
+    }
+    
     // Update badge if present
     const badge = el.querySelector('.enemy-level-badge');
     if (badge) {

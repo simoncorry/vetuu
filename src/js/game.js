@@ -262,6 +262,16 @@ export function updateHUD() {
   document.getElementById('xp-fill')?.style.setProperty('--pct', Math.max(0, xpProgress));
   document.getElementById('xp-text').textContent = p.level >= 25 ? 'MAX' : `${p.xp}/${p.xpToNext}`;
 
+  // WoW-style XP bar (bottom bar)
+  const xpBarFill = document.getElementById('xp-bar-fill');
+  const xpBarLevel = document.getElementById('xp-bar-level');
+  const xpBarProgress = document.getElementById('xp-bar-progress');
+  if (xpBarFill) xpBarFill.style.width = `${Math.max(0, xpProgress)}%`;
+  if (xpBarLevel) xpBarLevel.textContent = `Lv.${p.level}`;
+  if (xpBarProgress) {
+    xpBarProgress.textContent = p.level >= 25 ? 'MAX LEVEL' : `${p.xp} / ${p.xpToNext} XP`;
+  }
+
   // Player frame
   const playerHpFill = document.getElementById('player-hp-fill');
   const playerHpText = document.getElementById('player-hp-text');
