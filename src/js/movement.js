@@ -14,6 +14,7 @@ import { tryExecuteCombatIntent, cancelCombatPursuit } from './combat.js';
 // ============================================
 const TILE_SIZE = 24;
 const MOVE_DURATION = 280; // ms per tile - Classic WoW pacing (slower, tactical)
+const DIAGONAL_MULTIPLIER = Math.SQRT2; // ~1.414 - diagonal moves take longer to maintain consistent speed
 const SPRINT_BUFF_MULTIPLIER = 0.59; // Sprint buff: 70% faster (1/1.7 ≈ 0.59)
 const GHOST_MULTIPLIER = 0.5; // Ghost mode is 2x faster (corpse run)
 const SPRINT_BUFF_DURATION = 8000; // Sprint buff lasts 8 seconds
@@ -148,6 +149,27 @@ function processMovementInput() {
 // ============================================
 // MOVEMENT EXECUTION
 // ============================================
+
+/**
+ * Check if a diagonal move would cut through a corner.
+ * For diagonal moves, both adjacent cardinal directions must be passable.
+ * Example: Moving NE requires both N and E to be passable.
+ */
+function wouldCutCorner(fromX, fromY, dx, dy) {
+  // Only check for diagonal moves
+  if (dx === 0 || dy === 0) return false;
+  
+  // Check the two cardinal tiles adjacent to the diagonal path
+  const cardinalX = fromX + dx; // Horizontal neighbor
+  const cardinalY = fromY + dy; // Vertical neighbor
+  
+  // If either adjacent cardinal tile is blocked, diagonal would cut corner
+  const horizontalBlocked = !canMoveTo(cardinalX, fromY);
+  const verticalBlocked = !canMoveTo(fromX, cardinalY);
+  
+  return horizontalBlocked || verticalBlocked;
+}
+
 function attemptMove(dx, dy) {
   if (isMoving) return false;
   
@@ -158,8 +180,13 @@ function attemptMove(dx, dy) {
   const newX = state.player.x + dx;
   const newY = state.player.y + dy;
   
-  // Check collision
+  // Check collision at target
   if (!canMoveTo(newX, newY)) {
+    return false;
+  }
+  
+  // Check corner cutting for diagonal moves
+  if (wouldCutCorner(state.player.x, state.player.y, dx, dy)) {
     return false;
   }
   
@@ -171,15 +198,25 @@ function attemptMove(dx, dy) {
 function startMove(targetX, targetY) {
   isMoving = true;
   
+  // Check if this is a diagonal move
+  const dx = targetX - state.player.x;
+  const dy = targetY - state.player.y;
+  const isDiagonal = dx !== 0 && dy !== 0;
+  
   // Check if in ghost mode (corpse run) for 2x speed
   const isGhost = playerEl?.classList.contains('ghost');
   
-  // Calculate duration: ghost mode > sprint buff > normal
+  // Calculate base duration: ghost mode > sprint buff > normal
   let duration = MOVE_DURATION;
   if (isGhost) {
     duration = MOVE_DURATION * GHOST_MULTIPLIER; // 2x faster during corpse run
   } else if (sprintBuffActive) {
     duration = MOVE_DURATION * SPRINT_BUFF_MULTIPLIER; // 70% faster with sprint buff
+  }
+  
+  // Scale for diagonal movement (maintains consistent speed)
+  if (isDiagonal) {
+    duration *= DIAGONAL_MULTIPLIER;
   }
   
   // Update logical position immediately
@@ -263,6 +300,7 @@ function canMoveTo(x, y) {
 // ============================================
 // KEYBOARD INPUT
 // ============================================
+// Individual direction key mappings
 const DIRECTION_KEYS = {
   'KeyW': { dx: 0, dy: -1 },
   'KeyS': { dx: 0, dy: 1 },
@@ -274,6 +312,33 @@ const DIRECTION_KEYS = {
   'ArrowRight': { dx: 1, dy: 0 }
 };
 
+/**
+ * Calculate combined direction from all held direction keys.
+ * Allows diagonal movement by combining two perpendicular directions.
+ */
+function calculateDirectionFromHeldKeys() {
+  let dx = 0;
+  let dy = 0;
+  
+  for (const key of keysHeld) {
+    const dir = DIRECTION_KEYS[key];
+    if (dir) {
+      dx += dir.dx;
+      dy += dir.dy;
+    }
+  }
+  
+  // Clamp to -1, 0, 1 (handles opposing keys canceling out)
+  dx = Math.max(-1, Math.min(1, dx));
+  dy = Math.max(-1, Math.min(1, dy));
+  
+  if (dx === 0 && dy === 0) {
+    return null;
+  }
+  
+  return { dx, dy };
+}
+
 function handleKeyDown(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   
@@ -284,7 +349,8 @@ function handleKeyDown(e) {
     e.preventDefault();
     cancelPath(); // Keyboard cancels any pathfinding
     cancelCombatPursuit(); // Cancel move-to-range pursuit, but keep auto-attack for kiting
-    lastKeyDirection = DIRECTION_KEYS[code];
+    // Recalculate direction from all held keys (enables diagonal)
+    lastKeyDirection = calculateDirectionFromHeldKeys();
   }
 }
 
@@ -292,16 +358,9 @@ function handleKeyUp(e) {
   const code = e.code;
   keysHeld.delete(code);
   
-  // Check if any other direction key is still held
+  // Recalculate direction from remaining held keys
   if (DIRECTION_KEYS[code]) {
-    lastKeyDirection = null;
-    
-    for (const key of keysHeld) {
-      if (DIRECTION_KEYS[key]) {
-        lastKeyDirection = DIRECTION_KEYS[key];
-        break;
-      }
-    }
+    lastKeyDirection = calculateDirectionFromHeldKeys();
   }
 }
 
@@ -360,7 +419,14 @@ export function createPathTo(targetX, targetY, shouldInteract = false) {
 function findPath(startX, startY, endX, endY) {
   const openSet = [{ x: startX, y: startY, g: 0, h: 0, f: 0, parent: null }];
   const closedSet = new Set();
-  const heuristic = (ax, ay, bx, by) => Math.abs(bx - ax) + Math.abs(by - ay);
+  
+  // Octile distance heuristic (optimal for 8-directional movement)
+  const heuristic = (ax, ay, bx, by) => {
+    const dx = Math.abs(bx - ax);
+    const dy = Math.abs(by - ay);
+    // D = 1 (cardinal cost), D2 = √2 (diagonal cost)
+    return dx + dy + (Math.SQRT2 - 2) * Math.min(dx, dy);
+  };
   
   let iterations = 0;
   const maxIter = 5000;
@@ -390,12 +456,18 @@ function findPath(startX, startY, endX, endY) {
     
     closedSet.add(`${current.x},${current.y}`);
     
-    // Check neighbors (4-directional)
+    // Check neighbors (8-directional: cardinal + diagonal)
     const neighbors = [
-      { x: current.x, y: current.y - 1 },
-      { x: current.x, y: current.y + 1 },
-      { x: current.x - 1, y: current.y },
-      { x: current.x + 1, y: current.y }
+      // Cardinal directions (cost: 1)
+      { x: current.x, y: current.y - 1, cost: 1 },     // N
+      { x: current.x, y: current.y + 1, cost: 1 },     // S
+      { x: current.x - 1, y: current.y, cost: 1 },     // W
+      { x: current.x + 1, y: current.y, cost: 1 },     // E
+      // Diagonal directions (cost: √2)
+      { x: current.x - 1, y: current.y - 1, cost: Math.SQRT2 }, // NW
+      { x: current.x + 1, y: current.y - 1, cost: Math.SQRT2 }, // NE
+      { x: current.x - 1, y: current.y + 1, cost: Math.SQRT2 }, // SW
+      { x: current.x + 1, y: current.y + 1, cost: Math.SQRT2 }  // SE
     ];
     
     for (const n of neighbors) {
@@ -403,7 +475,17 @@ function findPath(startX, startY, endX, endY) {
       if (closedSet.has(key)) continue;
       if (!canMoveTo(n.x, n.y)) continue;
       
-      const g = current.g + 1;
+      // Check for corner cutting on diagonal moves
+      const dx = n.x - current.x;
+      const dy = n.y - current.y;
+      if (dx !== 0 && dy !== 0) {
+        // Diagonal move - check both adjacent cardinal tiles
+        if (!canMoveTo(current.x + dx, current.y) || !canMoveTo(current.x, current.y + dy)) {
+          continue; // Would cut corner
+        }
+      }
+      
+      const g = current.g + n.cost;
       const h = heuristic(n.x, n.y, endX, endY);
       const f = g + h;
       
@@ -424,11 +506,18 @@ function findPath(startX, startY, endX, endY) {
 }
 
 function findAdjacentWalkable(targetX, targetY, fromX, fromY) {
+  // Include diagonal adjacent tiles
   const adjacent = [
+    // Cardinal
     { x: targetX, y: targetY - 1 },
     { x: targetX, y: targetY + 1 },
     { x: targetX - 1, y: targetY },
-    { x: targetX + 1, y: targetY }
+    { x: targetX + 1, y: targetY },
+    // Diagonal
+    { x: targetX - 1, y: targetY - 1 },
+    { x: targetX + 1, y: targetY - 1 },
+    { x: targetX - 1, y: targetY + 1 },
+    { x: targetX + 1, y: targetY + 1 }
   ];
   
   let best = null;
@@ -436,7 +525,10 @@ function findAdjacentWalkable(targetX, targetY, fromX, fromY) {
   
   for (const adj of adjacent) {
     if (canMoveTo(adj.x, adj.y)) {
-      const d = Math.abs(adj.x - fromX) + Math.abs(adj.y - fromY);
+      // Use actual distance (accounts for diagonal being √2)
+      const dx = adj.x - fromX;
+      const dy = adj.y - fromY;
+      const d = Math.sqrt(dx * dx + dy * dy);
       if (d < bestDist) {
         bestDist = d;
         best = adj;

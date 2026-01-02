@@ -1943,9 +1943,9 @@ function moveEnemyTowardHome(enemy, targetX, targetY) {
     }
   }
   
-  // Second pass: allow footprint entry if necessary
+  // Second pass: allow footprint entry if necessary (still check corner cutting)
   for (const move of moves) {
-    if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
+    if (canEnemyMoveFromTo(enemy, move.x, move.y)) {
       updateEnemyPosition(enemy, move.x, move.y);
       enemy.moveCooldown = t + moveCD;
       return;
@@ -2275,9 +2275,9 @@ function moveToSurroundPosition(enemy) {
         }
       }
       
-      // Second pass: allow footprint entry if needed
+      // Second pass: allow footprint entry if needed (still check corner cutting)
       for (const move of moves) {
-        if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
+        if (canEnemyMoveFromTo(enemy, move.x, move.y)) {
           updateEnemyPosition(enemy, move.x, move.y);
           return;
         }
@@ -2325,9 +2325,9 @@ function moveToFlankPosition(enemy) {
           }
         }
         
-        // Second pass: allow footprint entry if needed
+        // Second pass: allow footprint entry if needed (still check corner cutting)
         for (const move of moves) {
-          if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
+          if (canEnemyMoveFromTo(enemy, move.x, move.y)) {
             updateEnemyPosition(enemy, move.x, move.y);
             return;
           }
@@ -2446,9 +2446,9 @@ function moveTowardPlayer(enemy) {
     }
   }
   
-  // Second pass: allow entering footprints if necessary
+  // Second pass: allow entering footprints if necessary (still check corner cutting)
   for (const move of moves) {
-    if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
+    if (canEnemyMoveFromTo(enemy, move.x, move.y)) {
       updateEnemyPosition(enemy, move.x, move.y);
       return;
     }
@@ -2480,10 +2480,10 @@ function moveTowardPlayerRanged(enemy, maxRange) {
     }
   }
   
-  // Second pass: allow footprint entry if needed
+  // Second pass: allow footprint entry if needed (still check corner cutting)
   for (const move of moves) {
     const newDist = distCoords(move.x, move.y, player.x, player.y);
-    if (newDist >= preferredDist - 1 && canEnemyMoveTo(move.x, move.y, enemy.id)) {
+    if (newDist >= preferredDist - 1 && canEnemyMoveFromTo(enemy, move.x, move.y)) {
       updateEnemyPosition(enemy, move.x, move.y);
       return;
     }
@@ -2515,9 +2515,9 @@ function moveAwayFrom(enemy, targetX, targetY) {
     }
   }
   
-  // Second pass: allow footprint entry if needed
+  // Second pass: allow footprint entry if needed (still check corner cutting)
   for (const move of moves) {
-    if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
+    if (canEnemyMoveFromTo(enemy, move.x, move.y)) {
       updateEnemyPosition(enemy, move.x, move.y);
       return;
     }
@@ -2576,6 +2576,16 @@ function canEnemyMoveTo(x, y, excludeId) {
 }
 
 /**
+ * Check if enemy can move from current position to target, including corner check.
+ * Use this for movement decisions where diagonal moves are possible.
+ */
+function canEnemyMoveFromTo(enemy, toX, toY) {
+  if (!canEnemyMoveTo(toX, toY, enemy.id)) return false;
+  if (wouldEnemyCutCorner(enemy.x, enemy.y, toX, toY, enemy.id)) return false;
+  return true;
+}
+
+/**
  * Check if a tile is inside another pack member's 3×3 footprint.
  * @param {object} enemy - The enemy trying to move
  * @param {number} x - Target x coordinate
@@ -2605,6 +2615,24 @@ function isInPackMemberFootprint(enemy, x, y) {
 }
 
 /**
+ * Check if a diagonal move would cut through a corner (for enemies).
+ * For diagonal moves, both adjacent cardinal directions must be passable.
+ */
+function wouldEnemyCutCorner(fromX, fromY, toX, toY, enemyId) {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  
+  // Only check for diagonal moves
+  if (dx === 0 || dy === 0) return false;
+  
+  // Check the two cardinal tiles adjacent to the diagonal path
+  const horizontalBlocked = !canEnemyMoveTo(fromX + dx, fromY, enemyId);
+  const verticalBlocked = !canEnemyMoveTo(fromX, fromY + dy, enemyId);
+  
+  return horizontalBlocked || verticalBlocked;
+}
+
+/**
  * Check if enemy can move to tile, with optional footprint avoidance.
  * @param {number} x - Target x
  * @param {number} y - Target y
@@ -2615,6 +2643,9 @@ function isInPackMemberFootprint(enemy, x, y) {
 function canEnemyMoveToEx(x, y, enemy, respectFootprints = false) {
   // Basic movement check
   if (!canEnemyMoveTo(x, y, enemy.id)) return false;
+  
+  // Corner cutting check for diagonal moves
+  if (wouldEnemyCutCorner(enemy.x, enemy.y, x, y, enemy.id)) return false;
   
   // Footprint check (if requested)
   if (respectFootprints && isInPackMemberFootprint(enemy, x, y)) {
