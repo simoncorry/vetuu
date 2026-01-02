@@ -556,15 +556,9 @@ export function activateSprintBuff() {
   
   sprintBuffActive = true;
   
-  // Add visual indicators
+  // Add visual indicator
   if (playerEl) {
     playerEl.classList.add('sprinting');
-  }
-  
-  // Add action bar indicator
-  const sprintSlot = document.querySelector('[data-slot="sprint"]');
-  if (sprintSlot) {
-    sprintSlot.classList.add('ability-active');
   }
   
   // Auto-deactivate after duration
@@ -573,11 +567,6 @@ export function activateSprintBuff() {
     sprintBuffTimeout = null;
     if (playerEl) {
       playerEl.classList.remove('sprinting');
-    }
-    // Remove action bar indicator
-    const slot = document.querySelector('[data-slot="sprint"]');
-    if (slot) {
-      slot.classList.remove('ability-active');
     }
   }, SPRINT_BUFF_DURATION);
   
