@@ -70,11 +70,34 @@ export function initFog(state) {
 // REVEAL MECHANICS
 // ============================================
 
+// Fog visual states
+const FOG_STATE = {
+  REVEALED: 0,
+  INNER_DITHER: 1,  // 8/16 pixels (sparse)
+  OUTER_DITHER: 2,  // 12/16 pixels (dense)
+  SOLID: 3
+};
+
 /**
- * Create a temporary DOM element that fades out to smooth fog reveal.
- * CSS handles the animation; element is removed after animation completes.
+ * Get the visual fog state for a tile based on current fogMask.
  */
-function createFogFadeElement(x, y) {
+function getTileState(x, y) {
+  if (fogMask[y]?.[x]) return FOG_STATE.REVEALED;
+  const dist = getDistanceToRevealed(x, y, 2);
+  if (dist === 1) return FOG_STATE.INNER_DITHER;
+  if (dist === 2) return FOG_STATE.OUTER_DITHER;
+  return FOG_STATE.SOLID;
+}
+
+/**
+ * Create a fade element for a state transition.
+ * The fade shows what's DISAPPEARING (the old state pixels that won't be in new state).
+ */
+function createFogFadeElement(x, y, fromState, toState) {
+  // No fade needed if state didn't change visually
+  if (fromState === toState) return;
+  if (fromState === FOG_STATE.REVEALED) return; // Can't fade from revealed
+  
   const fogLayer = document.getElementById('fog-layer');
   if (!fogLayer) return;
   
@@ -83,6 +106,24 @@ function createFogFadeElement(x, y) {
   el.style.left = `${x * tileSize}px`;
   el.style.top = `${y * tileSize}px`;
   
+  // Choose the right dither pattern based on transition
+  if (toState === FOG_STATE.REVEALED) {
+    // Inner dither → revealed: fade out the sparse inner pattern
+    el.classList.add('fog-fade-inner');
+  } else if (fromState === FOG_STATE.OUTER_DITHER && toState === FOG_STATE.INNER_DITHER) {
+    // Outer dither → inner dither: fade out the 4 extra pixels
+    el.classList.add('fog-fade-mid');
+  } else if (fromState === FOG_STATE.SOLID && toState === FOG_STATE.OUTER_DITHER) {
+    // Solid → outer dither: fade out the 4 pixels that become transparent
+    el.classList.add('fog-fade-outer');
+  } else if (fromState === FOG_STATE.SOLID && toState === FOG_STATE.INNER_DITHER) {
+    // Solid → inner dither (skipped outer): fade the inner pattern
+    el.classList.add('fog-fade-inner');
+  } else if (fromState === FOG_STATE.INNER_DITHER && toState === FOG_STATE.REVEALED) {
+    // This is handled by the first case
+    el.classList.add('fog-fade-inner');
+  }
+  
   fogLayer.appendChild(el);
   
   // Remove after animation completes (400ms)
@@ -90,14 +131,28 @@ function createFogFadeElement(x, y) {
 }
 
 export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
-  let changed = false;
-  const newlyRevealed = [];
-
   // Ensure runtime.revealedTiles exists
   if (!state.runtime.revealedTiles) {
     state.runtime.revealedTiles = new Set();
   }
 
+  // Expand scan area to include dither margin
+  const ditherMargin = 3;
+  const scanStartX = Math.max(0, centerX - radius - ditherMargin);
+  const scanStartY = Math.max(0, centerY - radius - ditherMargin);
+  const scanEndX = Math.min(mapWidth, centerX + radius + 1 + ditherMargin);
+  const scanEndY = Math.min(mapHeight, centerY + radius + 1 + ditherMargin);
+  
+  // 1. Capture BEFORE states for all tiles in affected area
+  const beforeStates = new Map();
+  for (let y = scanStartY; y < scanEndY; y++) {
+    for (let x = scanStartX; x < scanEndX; x++) {
+      beforeStates.set(`${x},${y}`, getTileState(x, y));
+    }
+  }
+  
+  // 2. Update fogMask with newly revealed tiles
+  let changed = false;
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
       const x = centerX + dx;
@@ -112,7 +167,6 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
         if (!fogMask[y][x]) {
           fogMask[y][x] = true;
           state.runtime.revealedTiles.add(`${x},${y}`);
-          newlyRevealed.push({ x, y });
           changed = true;
         }
       }
@@ -122,10 +176,17 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
   if (changed) {
     saveFogMask();
     
-    // Create fade elements for newly revealed tiles
-    // Only create for edge tiles to reduce DOM overhead
-    for (const tile of newlyRevealed) {
-      createFogFadeElement(tile.x, tile.y);
+    // 3. Create fade elements for tiles whose state changed
+    for (let y = scanStartY; y < scanEndY; y++) {
+      for (let x = scanStartX; x < scanEndX; x++) {
+        const key = `${x},${y}`;
+        const beforeState = beforeStates.get(key);
+        const afterState = getTileState(x, y);
+        
+        if (beforeState !== afterState) {
+          createFogFadeElement(x, y, beforeState, afterState);
+        }
+      }
     }
   }
 }
