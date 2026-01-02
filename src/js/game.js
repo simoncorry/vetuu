@@ -853,7 +853,51 @@ function initLightingCanvas(gameState) {
       intensity: obj.light.intensity || 0.8
     }));
   
+  // Create DOM-based player torch (follows player with CSS transitions)
+  createPlayerTorch();
+  
   console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights`);
+}
+
+// Player torch as DOM element for smooth movement
+function createPlayerTorch() {
+  const player = document.getElementById('player');
+  if (!player) return;
+  
+  const torch = document.createElement('div');
+  torch.id = 'player-torch';
+  torch.style.cssText = `
+    position: absolute;
+    width: ${8 * lightingTileSize}px;
+    height: ${8 * lightingTileSize}px;
+    top: 50%;
+    left: 50%;
+    transform: translate3d(-50%, -50%, 0);
+    pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      rgba(255, 240, 220, 0.95) 0%,
+      rgba(255, 230, 200, 0.7) 15%,
+      rgba(255, 220, 180, 0.4) 35%,
+      rgba(255, 200, 150, 0.15) 60%,
+      rgba(255, 180, 120, 0.05) 80%,
+      transparent 100%
+    );
+    mix-blend-mode: screen;
+    opacity: 0;
+    z-index: 7;
+  `;
+  
+  player.appendChild(torch);
+}
+
+// Update torch visibility based on night intensity
+function updatePlayerTorch(nightIntensity) {
+  const torch = document.getElementById('player-torch');
+  if (torch) {
+    torch.style.opacity = nightIntensity > 0.05 ? nightIntensity.toFixed(3) : '0';
+  }
 }
 
 function updateLighting() {
@@ -863,7 +907,10 @@ function updateLighting() {
   // Night intensity: 0 at noon, ~0.85 at midnight
   const nightIntensity = Math.pow(1 - Math.sin(timeOfDay * Math.PI), 1.5) * 0.85;
   
-  // Skip rendering if it's basically daytime
+  // Update DOM-based player torch
+  updatePlayerTorch(nightIntensity);
+  
+  // Skip canvas rendering if it's basically daytime
   if (nightIntensity < 0.05) {
     lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
     return;
@@ -907,25 +954,7 @@ function updateLighting() {
   // Cut out light circles using destination-out
   lightCtx.globalCompositeOperation = 'destination-out';
   
-  // Draw player torch
-  const playerX = (state.player.x + 0.5) * lightingTileSize;
-  const playerY = (state.player.y + 0.5) * lightingTileSize;
-  const torchRadius = 4 * lightingTileSize;
-  
-  const playerGradient = lightCtx.createRadialGradient(
-    playerX, playerY, 0,
-    playerX, playerY, torchRadius
-  );
-  playerGradient.addColorStop(0, `rgba(255, 255, 255, ${nightIntensity * 0.9})`);
-  playerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${nightIntensity * 0.5})`);
-  playerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  
-  lightCtx.fillStyle = playerGradient;
-  lightCtx.beginPath();
-  lightCtx.arc(playerX, playerY, torchRadius, 0, Math.PI * 2);
-  lightCtx.fill();
-  
-  // Draw static lights (only visible ones)
+  // Draw static lights (only visible ones) with smooth gradients
   for (const light of staticLights) {
     // Cull lights outside visible area
     if (light.x < visibleLeft - light.radius || 
@@ -935,12 +964,18 @@ function updateLighting() {
       continue;
     }
     
+    // Create smooth gradient with more stops for natural falloff
     const gradient = lightCtx.createRadialGradient(
       light.x, light.y, 0,
       light.x, light.y, light.radius
     );
-    gradient.addColorStop(0, `rgba(255, 255, 255, ${nightIntensity * light.intensity})`);
-    gradient.addColorStop(0.4, `rgba(255, 255, 255, ${nightIntensity * light.intensity * 0.6})`);
+    const intensity = nightIntensity * light.intensity;
+    gradient.addColorStop(0, `rgba(255, 255, 255, ${intensity})`);
+    gradient.addColorStop(0.1, `rgba(255, 255, 255, ${intensity * 0.95})`);
+    gradient.addColorStop(0.25, `rgba(255, 255, 255, ${intensity * 0.8})`);
+    gradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.55})`);
+    gradient.addColorStop(0.6, `rgba(255, 255, 255, ${intensity * 0.3})`);
+    gradient.addColorStop(0.8, `rgba(255, 255, 255, ${intensity * 0.1})`);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     
     lightCtx.fillStyle = gradient;
