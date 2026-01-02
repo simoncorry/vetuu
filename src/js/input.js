@@ -231,34 +231,11 @@ function onKeyDown(e) {
 // ============================================
 // MOUSE INPUT
 // ============================================
-let lastClickTime = 0;
-let lastClickPos = { x: 0, y: 0 };
-const DOUBLE_CLICK_DELAY = 300;
-const DOUBLE_CLICK_DISTANCE = 30;
-
 function onLeftClick(e) {
   // Ignore clicks on UI elements
   if (e.target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #controls-hint, #dialogue-panel, #inventory-panel')) {
     return;
   }
-
-  const now = Date.now();
-  const clickX = e.clientX;
-  const clickY = e.clientY;
-  
-  // Check for double-click
-  const timeSinceLastClick = now - lastClickTime;
-  const distFromLastClick = Math.hypot(clickX - lastClickPos.x, clickY - lastClickPos.y);
-  
-  if (timeSinceLastClick < DOUBLE_CLICK_DELAY && distFromLastClick < DOUBLE_CLICK_DISTANCE) {
-    // Double-click detected
-    onDoubleClick(clickX, clickY, e.target);
-    lastClickTime = 0; // Reset
-    return;
-  }
-  
-  lastClickTime = now;
-  lastClickPos = { x: clickX, y: clickY };
 
   const worldPos = screenToWorld(e.clientX, e.clientY);
   if (!worldPos) return;
@@ -294,39 +271,6 @@ function onLeftClick(e) {
   // Path to empty tile - cancel move-to-range pursuit, but keep auto-attack for kiting
   cancelCombatPursuit();
   createPathTo(x, y, false);
-}
-
-function onDoubleClick(clientX, clientY, target) {
-  // Ignore clicks on UI elements
-  if (target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #controls-hint, #dialogue-panel, #inventory-panel')) {
-    return;
-  }
-
-  const worldPos = screenToWorld(clientX, clientY);
-  const state = window.__vetuuState;
-  if (!state) return;
-  
-  // Check for enemy at click location first
-  if (worldPos) {
-    const enemy = findEnemyAt(state, worldPos.x, worldPos.y);
-    if (enemy && enemy.hp > 0) {
-      targetCallback('attack', enemy);
-      return;
-    }
-  }
-  
-  // No enemy at click - find nearest enemy and attack
-  const player = state.player;
-  const enemies = state.runtime.activeEnemies.filter(e => e.hp > 0);
-  
-  if (enemies.length > 0) {
-    enemies.sort((a, b) => {
-      const distA = Math.hypot(a.x - player.x, a.y - player.y);
-      const distB = Math.hypot(b.x - player.x, b.y - player.y);
-      return distA - distB;
-    });
-    targetCallback('attack', enemies[0]);
-  }
 }
 
 function onRightClick(e) {
@@ -367,10 +311,6 @@ function onRightClick(e) {
 // TOUCH INPUT
 // ============================================
 let touchStart = null;
-let lastTapTime = 0;
-let lastTapPos = { x: 0, y: 0 };
-const DOUBLE_TAP_DELAY = 300; // ms between taps for double-tap
-const DOUBLE_TAP_DISTANCE = 30; // max pixels between taps
 
 function onTouchStart(e) {
   if (e.touches.length === 1) {
@@ -390,61 +330,16 @@ function onTouchEnd(e) {
   const dy = touch.clientY - touchStart.y;
   const duration = Date.now() - touchStart.time;
 
-  // Tap detection
+  // Tap detection - treat as click
   if (duration < 300 && Math.abs(dx) < 20 && Math.abs(dy) < 20) {
-    const now = Date.now();
-    const tapX = touch.clientX;
-    const tapY = touch.clientY;
-    
-    // Check for double-tap
-    const timeSinceLastTap = now - lastTapTime;
-    const distFromLastTap = Math.hypot(tapX - lastTapPos.x, tapY - lastTapPos.y);
-    
-    if (timeSinceLastTap < DOUBLE_TAP_DELAY && distFromLastTap < DOUBLE_TAP_DISTANCE) {
-      // Double-tap detected - initiate auto-attack on nearest enemy
-      onDoubleTap(tapX, tapY);
-      lastTapTime = 0; // Reset to prevent triple-tap
-    } else {
-      // Single tap - handle normally
-      onLeftClick({
-        clientX: tapX,
-        clientY: tapY,
-        target: document.elementFromPoint(tapX, tapY)
-      });
-      lastTapTime = now;
-      lastTapPos = { x: tapX, y: tapY };
-    }
+    onLeftClick({
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      target: document.elementFromPoint(touch.clientX, touch.clientY)
+    });
   }
 
   touchStart = null;
-}
-
-function onDoubleTap(clientX, clientY) {
-  const worldPos = screenToWorld(clientX, clientY);
-  const state = window.__vetuuState;
-  if (!state) return;
-  
-  // Check for enemy at tap location first
-  if (worldPos) {
-    const enemy = findEnemyAt(state, worldPos.x, worldPos.y);
-    if (enemy && enemy.hp > 0) {
-      targetCallback('attack', enemy);
-      return;
-    }
-  }
-  
-  // No enemy at tap - find nearest enemy and attack
-  const player = state.player;
-  const enemies = state.runtime.activeEnemies.filter(e => e.hp > 0);
-  
-  if (enemies.length > 0) {
-    enemies.sort((a, b) => {
-      const distA = Math.hypot(a.x - player.x, a.y - player.y);
-      const distB = Math.hypot(b.x - player.x, b.y - player.y);
-      return distA - distB;
-    });
-    targetCallback('attack', enemies[0]);
-  }
 }
 
 // ============================================
