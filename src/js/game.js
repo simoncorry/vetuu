@@ -15,7 +15,7 @@ import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
-import { initDayCycle, updateDayCycle, getTimeOfDay } from './time.js';
+import { initDayCycle, updateDayCycle, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
 
 // ============================================
 // GAME STATE
@@ -821,6 +821,65 @@ let torchAnim = {
   currentY: 0
 };
 
+// Torch on/off state (T key to toggle)
+let torchEnabled = true;
+
+/**
+ * Toggle player torch on/off
+ * @returns {boolean} New torch state
+ */
+export function toggleTorch() {
+  torchEnabled = !torchEnabled;
+  const torch = document.getElementById('player-torch');
+  if (torch) {
+    torch.style.display = torchEnabled ? 'block' : 'none';
+  }
+  console.log(`[Torch] ${torchEnabled ? 'ON' : 'OFF'}`);
+  return torchEnabled;
+}
+
+/**
+ * Check if torch is enabled
+ */
+export function isTorchEnabled() {
+  return torchEnabled;
+}
+
+/**
+ * Check if a position is illuminated by any light source (lamp or player torch)
+ * Used for NPC sight range calculations
+ * @param {number} x - Tile X coordinate
+ * @param {number} y - Tile Y coordinate
+ * @returns {boolean} True if position is within a light source
+ */
+export function isPositionIlluminated(x, y) {
+  // Convert to pixel coordinates
+  const px = (x + 0.5) * lightingTileSize;
+  const py = (y + 0.5) * lightingTileSize;
+  
+  // Check player torch (if enabled)
+  if (torchEnabled && state?.player) {
+    const playerPx = (state.player.x + 0.5) * lightingTileSize;
+    const playerPy = (state.player.y + 0.5) * lightingTileSize;
+    const torchRadius = 7.2 * lightingTileSize * 1.15; // Mid layer radius
+    const distToPlayer = Math.hypot(px - playerPx, py - playerPy);
+    if (distToPlayer <= torchRadius) {
+      return true;
+    }
+  }
+  
+  // Check static lights (lamp posts)
+  for (const light of staticLights) {
+    const distToLight = Math.hypot(px - light.x, py - light.y);
+    const effectiveRadius = light.radius * 1.15; // Mid layer radius
+    if (distToLight <= effectiveRadius) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 function startTorchMovement(targetX, targetY, duration) {
   torchAnim.startX = torchAnim.currentX;
   torchAnim.startY = torchAnim.currentY;
@@ -961,9 +1020,8 @@ function updatePlayerTorch(nightIntensity) {
 function updateLighting() {
   if (!lightCtx || !lightCanvas) return;
   
-  const timeOfDay = getTimeOfDay();
-  // Night intensity: 0 at noon, ~0.85 at midnight
-  const nightIntensity = Math.pow(1 - Math.sin(timeOfDay * Math.PI), 1.5) * 0.85;
+  // Use time module's night intensity (handles new transition schedule)
+  const nightIntensity = getNightIntensity();
   
   // Update DOM-based player torch
   updatePlayerTorch(nightIntensity);
@@ -1098,65 +1156,67 @@ function updateLighting() {
     lightCtx.fill();
   }
   
-  // Draw player torch on canvas (actually cuts through darkness)
-  // Use interpolated position for smooth movement
-  updateTorchPosition();
-  const playerX = torchAnim.currentX;
-  const playerY = torchAnim.currentY;
-  const torchBaseRadius = 7.2 * lightingTileSize; // 10% smaller than before
-  const now = Date.now();
-  
-  // Player torch: steady electronic hum (well-maintained equipment)
-  const hum = Math.sin(now * 0.004) * 0.05; // Subtle ±5% brightness pulse
-  const torchIntensity = Math.min(1, nightIntensity * 1.2 * (1 + hum));
-  
-  // Slight size variation synced with hum
-  const flicker = 1 + Math.sin(now * 0.004) * 0.015;
-  
-  // Layer 1: Outer ambient (largest, softest)
-  const torchOuterRadius = torchBaseRadius * 1.5 * flicker;
-  const torchOuterGradient = lightCtx.createRadialGradient(
-    playerX - 3, playerY + 2, 0,
-    playerX - 3, playerY + 2, torchOuterRadius
-  );
-  torchOuterGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
-  torchOuterGradient.addColorStop(0.4, `rgba(255, 255, 255, ${torchIntensity * 0.15})`);
-  torchOuterGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.05})`);
-  torchOuterGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  lightCtx.fillStyle = torchOuterGradient;
-  lightCtx.beginPath();
-  lightCtx.arc(playerX - 2, playerY + 1, torchOuterRadius, 0, Math.PI * 2);
-  lightCtx.fill();
-  
-  // Layer 2: Mid diffusion
-  const torchMidRadius = torchBaseRadius * 1.15 * flicker;
-  const torchMidGradient = lightCtx.createRadialGradient(
-    playerX + 2, playerY - 2, 0,
-    playerX + 2, playerY - 2, torchMidRadius
-  );
-  torchMidGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.5})`);
-  torchMidGradient.addColorStop(0.3, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
-  torchMidGradient.addColorStop(0.6, `rgba(255, 255, 255, ${torchIntensity * 0.1})`);
-  torchMidGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  lightCtx.fillStyle = torchMidGradient;
-  lightCtx.beginPath();
-  lightCtx.arc(playerX + 2, playerY - 2, torchMidRadius, 0, Math.PI * 2);
-  lightCtx.fill();
-  
-  // Layer 3: Core bright center - this is the main illumination
-  const torchCoreRadius = torchBaseRadius * 0.7;
-  const torchCoreGradient = lightCtx.createRadialGradient(
-    playerX, playerY, 0,
-    playerX, playerY, torchCoreRadius
-  );
-  torchCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.95})`);
-  torchCoreGradient.addColorStop(0.2, `rgba(255, 255, 255, ${torchIntensity * 0.7})`);
-  torchCoreGradient.addColorStop(0.5, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
-  torchCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  lightCtx.fillStyle = torchCoreGradient;
-  lightCtx.beginPath();
-  lightCtx.arc(playerX, playerY, torchCoreRadius, 0, Math.PI * 2);
-  lightCtx.fill();
+  // Draw player torch on canvas (only if enabled)
+  if (torchEnabled) {
+    // Use interpolated position for smooth movement
+    updateTorchPosition();
+    const playerX = torchAnim.currentX;
+    const playerY = torchAnim.currentY;
+    const torchBaseRadius = 7.2 * lightingTileSize;
+    const now = Date.now();
+    
+    // Player torch: steady electronic hum (well-maintained equipment)
+    const hum = Math.sin(now * 0.004) * 0.05;
+    const torchIntensity = Math.min(1, nightIntensity * 1.2 * (1 + hum));
+    
+    // Slight size variation synced with hum
+    const flicker = 1 + Math.sin(now * 0.004) * 0.015;
+    
+    // Layer 1: Outer ambient (largest, softest)
+    const torchOuterRadius = torchBaseRadius * 1.5 * flicker;
+    const torchOuterGradient = lightCtx.createRadialGradient(
+      playerX - 3, playerY + 2, 0,
+      playerX - 3, playerY + 2, torchOuterRadius
+    );
+    torchOuterGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
+    torchOuterGradient.addColorStop(0.4, `rgba(255, 255, 255, ${torchIntensity * 0.15})`);
+    torchOuterGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.05})`);
+    torchOuterGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    lightCtx.fillStyle = torchOuterGradient;
+    lightCtx.beginPath();
+    lightCtx.arc(playerX - 2, playerY + 1, torchOuterRadius, 0, Math.PI * 2);
+    lightCtx.fill();
+    
+    // Layer 2: Mid diffusion
+    const torchMidRadius = torchBaseRadius * 1.15 * flicker;
+    const torchMidGradient = lightCtx.createRadialGradient(
+      playerX + 2, playerY - 2, 0,
+      playerX + 2, playerY - 2, torchMidRadius
+    );
+    torchMidGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.5})`);
+    torchMidGradient.addColorStop(0.3, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
+    torchMidGradient.addColorStop(0.6, `rgba(255, 255, 255, ${torchIntensity * 0.1})`);
+    torchMidGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    lightCtx.fillStyle = torchMidGradient;
+    lightCtx.beginPath();
+    lightCtx.arc(playerX + 2, playerY - 2, torchMidRadius, 0, Math.PI * 2);
+    lightCtx.fill();
+    
+    // Layer 3: Core bright center - this is the main illumination
+    const torchCoreRadius = torchBaseRadius * 0.7;
+    const torchCoreGradient = lightCtx.createRadialGradient(
+      playerX, playerY, 0,
+      playerX, playerY, torchCoreRadius
+    );
+    torchCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.95})`);
+    torchCoreGradient.addColorStop(0.2, `rgba(255, 255, 255, ${torchIntensity * 0.7})`);
+    torchCoreGradient.addColorStop(0.5, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
+    torchCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    lightCtx.fillStyle = torchCoreGradient;
+    lightCtx.beginPath();
+    lightCtx.arc(playerX, playerY, torchCoreRadius, 0, Math.PI * 2);
+    lightCtx.fill();
+  }
   
   // Reset composite operation
   lightCtx.globalCompositeOperation = 'source-over';

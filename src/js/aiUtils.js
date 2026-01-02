@@ -7,7 +7,8 @@
  */
 
 import { AI } from './aiConstants.js';
-import { nowMs, toPerfTime, isExpired, remainingMs } from './time.js';
+import { nowMs, toPerfTime, isExpired, remainingMs, isDeepNight } from './time.js';
+import { isPositionIlluminated, isTorchEnabled } from './game.js';
 
 // Re-export nowMs for convenience
 export { nowMs, toPerfTime, isExpired, remainingMs };
@@ -156,9 +157,26 @@ export function getLeashRadius(enemy) {
   return enemy.leashRadius ?? AI.DEFAULT_LEASH_RADIUS;
 }
 
-/** Get enemy's aggro radius */
+/** 
+ * Get enemy's effective aggro radius
+ * During deep night (00:00-06:00), aggressive enemies have 50% reduced sight
+ * UNLESS they are standing in a light source (lamp or player torch)
+ */
 export function getAggroRadius(enemy) {
-  return enemy.aggroRadius ?? AI.DEFAULT_AGGRO_RADIUS;
+  const baseRadius = enemy.aggroRadius ?? AI.DEFAULT_AGGRO_RADIUS;
+  
+  // Only reduce sight during deep night (00:00-06:00)
+  if (isDeepNight()) {
+    // Check if enemy is illuminated by any light source
+    if (isPositionIlluminated(enemy.x, enemy.y)) {
+      // In light - full sight range
+      return baseRadius;
+    }
+    // In darkness - 50% reduced sight
+    return baseRadius * 0.5;
+  }
+  
+  return baseRadius;
 }
 
 // ============================================

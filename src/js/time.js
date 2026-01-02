@@ -185,7 +185,12 @@ export function validateTimer(value, name = 'timer') {
 // ============================================
 
 // Cycle configuration
-const DAY_DURATION_MS = 600000;  // 10 minutes real time = 1 full day
+// 8 minute cycle total:
+// 00:00-06:00 (night): 2 min
+// 06:00-12:00 (dawn transition): 2 min  
+// 12:00-18:00 (day): 2 min
+// 18:00-00:00 (dusk transition): 2 min
+const DAY_DURATION_MS = 480000;  // 8 minutes real time = 1 full day
 let dayStartTime = 0;  // When the current day started
 let timeOfDay = 0.35;  // Start at morning (0 = midnight, 0.5 = noon)
 let paused = false;
@@ -255,25 +260,61 @@ export function setTimeScale(scale) {
 
 /**
  * Get ambient light level (0-1) based on time of day
- * Useful for non-WebGL fallback
+ * New schedule:
+ * 00:00-06:00 (0.00-0.25): Night - darkest
+ * 06:00-12:00 (0.25-0.50): Dawn transition - getting brighter
+ * 12:00-18:00 (0.50-0.75): Day - brightest
+ * 18:00-00:00 (0.75-1.00): Dusk transition - getting darker
  */
 export function getAmbientLevel() {
-  // Sinusoidal curve: darkest at 0/1, brightest at 0.5
-  return 0.2 + 0.8 * Math.sin(timeOfDay * Math.PI);
+  const hour = timeOfDay * 24;
+  
+  if (hour < 6) {
+    // Night (00:00-06:00): darkest, slight variation
+    return 0.15 + 0.05 * (hour / 6);
+  } else if (hour < 12) {
+    // Dawn transition (06:00-12:00): 0.2 -> 1.0
+    const t = (hour - 6) / 6;
+    return 0.2 + 0.8 * t;
+  } else if (hour < 18) {
+    // Day (12:00-18:00): full brightness
+    return 1.0;
+  } else {
+    // Dusk transition (18:00-00:00): 1.0 -> 0.15
+    const t = (hour - 18) / 6;
+    return 1.0 - 0.85 * t;
+  }
 }
 
 /**
- * Check if it's nighttime
+ * Get night intensity for lighting (0 = full day, 1 = full night)
+ */
+export function getNightIntensity() {
+  return 1 - getAmbientLevel();
+}
+
+/**
+ * Check if it's deep nighttime (00:00-06:00) - for NPC sight reduction
+ */
+export function isDeepNight() {
+  const hour = timeOfDay * 24;
+  return hour < 6;
+}
+
+/**
+ * Check if it's nighttime (includes transitions)
  */
 export function isNight() {
-  return timeOfDay < 0.25 || timeOfDay > 0.80;
+  const hour = timeOfDay * 24;
+  return hour < 6 || hour >= 18;
 }
 
 /**
- * Check if it's daytime (for gameplay effects)
+ * Check if it's daytime (12:00-18:00 full day)
  */
 export function isDay() {
-  return timeOfDay >= 0.30 && timeOfDay <= 0.70;
+  const hour = timeOfDay * 24;
+  return hour >= 12 && hour < 18;
 }
 
 /**
@@ -288,16 +329,21 @@ export function formatTimeOfDay(t = timeOfDay) {
 }
 
 /**
+ * Get the current in-game hour (0-23)
+ */
+export function getHour() {
+  return Math.floor(timeOfDay * 24);
+}
+
+/**
  * Get the current phase name
  */
 export function getDayPhase() {
-  if (timeOfDay < 0.20) return 'night';
-  if (timeOfDay < 0.30) return 'dawn';
-  if (timeOfDay < 0.50) return 'morning';
-  if (timeOfDay < 0.70) return 'afternoon';
-  if (timeOfDay < 0.80) return 'evening';
-  if (timeOfDay < 0.90) return 'dusk';
-  return 'night';
+  const hour = timeOfDay * 24;
+  if (hour < 6) return 'night';
+  if (hour < 12) return 'dawn';
+  if (hour < 18) return 'day';
+  return 'dusk';
 }
 
 // Expose debug tools

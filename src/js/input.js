@@ -6,6 +6,7 @@
 
 import { createPathTo, cancelPath } from './movement.js';
 import { cancelCombatPursuit } from './combat.js';
+import { toggleTorch } from './game.js';
 
 // ============================================
 // STATE
@@ -186,6 +187,15 @@ function onKeyDown(e) {
     e.preventDefault(); 
     if (!dialogueOpen) targetCallback('utility', 'heal'); 
     return; 
+  }
+
+  // ============================================
+  // TORCH TOGGLE (T)
+  // ============================================
+  if (code === 'KeyT') {
+    e.preventDefault();
+    if (!dialogueOpen) toggleTorch();
+    return;
   }
 
   // ============================================
