@@ -1083,21 +1083,23 @@ function updateLighting() {
   updateTorchPosition();
   const playerX = torchAnim.currentX;
   const playerY = torchAnim.currentY;
-  const torchBaseRadius = 4 * lightingTileSize;
-  const torchIntensity = nightIntensity * 0.9;
+  const torchBaseRadius = 5 * lightingTileSize;
+  // Torch needs high intensity to actually cut through darkness
+  // nightIntensity determines darkness level, torch should fully illuminate
+  const torchIntensity = Math.min(1, nightIntensity * 1.2);
   
   // Use slight time-based variation for organic feel
   const flicker = 1 + Math.sin(Date.now() * 0.003) * 0.02;
   
   // Layer 1: Outer ambient (largest, softest)
-  const torchOuterRadius = torchBaseRadius * 1.4 * flicker;
+  const torchOuterRadius = torchBaseRadius * 1.5 * flicker;
   const torchOuterGradient = lightCtx.createRadialGradient(
-    playerX - 2, playerY + 1, 0,
-    playerX - 2, playerY + 1, torchOuterRadius
+    playerX - 3, playerY + 2, 0,
+    playerX - 3, playerY + 2, torchOuterRadius
   );
-  torchOuterGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.12})`);
-  torchOuterGradient.addColorStop(0.5, `rgba(255, 255, 255, ${torchIntensity * 0.05})`);
-  torchOuterGradient.addColorStop(0.8, `rgba(255, 255, 255, ${torchIntensity * 0.015})`);
+  torchOuterGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
+  torchOuterGradient.addColorStop(0.4, `rgba(255, 255, 255, ${torchIntensity * 0.15})`);
+  torchOuterGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.05})`);
   torchOuterGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   lightCtx.fillStyle = torchOuterGradient;
   lightCtx.beginPath();
@@ -1105,29 +1107,29 @@ function updateLighting() {
   lightCtx.fill();
   
   // Layer 2: Mid diffusion
-  const torchMidRadius = torchBaseRadius * 1.1 * flicker;
+  const torchMidRadius = torchBaseRadius * 1.15 * flicker;
   const torchMidGradient = lightCtx.createRadialGradient(
-    playerX + 1, playerY - 1, 0,
-    playerX + 1, playerY - 1, torchMidRadius
+    playerX + 2, playerY - 2, 0,
+    playerX + 2, playerY - 2, torchMidRadius
   );
-  torchMidGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.25})`);
-  torchMidGradient.addColorStop(0.4, `rgba(255, 255, 255, ${torchIntensity * 0.1})`);
-  torchMidGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.03})`);
+  torchMidGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.5})`);
+  torchMidGradient.addColorStop(0.3, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
+  torchMidGradient.addColorStop(0.6, `rgba(255, 255, 255, ${torchIntensity * 0.1})`);
   torchMidGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   lightCtx.fillStyle = torchMidGradient;
   lightCtx.beginPath();
-  lightCtx.arc(playerX + 1, playerY - 1, torchMidRadius, 0, Math.PI * 2);
+  lightCtx.arc(playerX + 2, playerY - 2, torchMidRadius, 0, Math.PI * 2);
   lightCtx.fill();
   
-  // Layer 3: Core bright center
-  const torchCoreRadius = torchBaseRadius * 0.6;
+  // Layer 3: Core bright center - this is the main illumination
+  const torchCoreRadius = torchBaseRadius * 0.7;
   const torchCoreGradient = lightCtx.createRadialGradient(
     playerX, playerY, 0,
     playerX, playerY, torchCoreRadius
   );
-  torchCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.4})`);
-  torchCoreGradient.addColorStop(0.3, `rgba(255, 255, 255, ${torchIntensity * 0.15})`);
-  torchCoreGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.04})`);
+  torchCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.95})`);
+  torchCoreGradient.addColorStop(0.2, `rgba(255, 255, 255, ${torchIntensity * 0.7})`);
+  torchCoreGradient.addColorStop(0.5, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
   torchCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   lightCtx.fillStyle = torchCoreGradient;
   lightCtx.beginPath();
