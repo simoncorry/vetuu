@@ -628,16 +628,7 @@
   filter: drop-shadow(0 0 6px var(--success));
 }
 
-/* Sense ability slots */
-.sense-slot {
-  border-color: var(--sense-color);
-}
-
-.sense-slot:hover:not(.on-cooldown):not(:disabled) {
-  border-color: var(--sense-color);
-  background: rgba(75, 156, 214, 0.15);
-  box-shadow: 0 0 6px var(--sense-color);
-}
+/* Sense ability slots - same style as weapon abilities */
 
 /* Locked slot (slot 6) */
 .locked-slot {
@@ -657,15 +648,55 @@
   filter: grayscale(1);
 }
 
-/* Utility slots */
-.utility-slot {
-  border-color: var(--success);
+/* Utility slots - same style as weapon abilities */
+
+/* ============================================
+   SPRINT TIMER (SVG stroke - GPU accelerated)
+   ============================================ */
+.sprint-slot-wrapper {
+  position: relative;
 }
 
-.utility-slot:hover:not(.on-cooldown) {
-  border-color: var(--success);
-  background: rgba(93, 173, 93, 0.15);
-  box-shadow: 0 0 6px var(--success);
+.sprint-timer-border {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  /* Force GPU layer */
+  transform: translate3d(0, 0, 0);
+  will-change: opacity;
+}
+
+/* Show when sprint buff is active */
+.sprint-slot-wrapper.sprint-active .sprint-timer-border {
+  opacity: 1;
+}
+
+/* Background track (subtle) */
+.sprint-timer-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Progress fill stroke */
+.sprint-timer-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* GPU layer for performance */
+  transform: translate3d(0, 0, 0);
+  will-change: stroke-dashoffset;
+  filter: drop-shadow(0 0 3px var(--accent));
+  /* Transition set dynamically by JS for precise timing */
 }
 
 /* ============================================

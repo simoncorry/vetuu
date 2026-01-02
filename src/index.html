@@ -185,13 +185,21 @@
       
       <!-- Utility Abilities -->
       <div id="utility-abilities" class="action-group">
-        <button class="action-slot utility-slot" data-slot="sprint" data-action-type="utility" title="Sprint (9, E)">
-          <span class="slot-icon">🏃</span>
-          <span class="slot-label">Sprint</span>
-          <span class="slot-key">9</span>
-          <div class="cooldown-overlay"></div>
-          <span class="cooldown-timer"></span>
-        </button>
+        <!-- Sprint slot with duration timer (like weapon slot) -->
+        <div class="sprint-slot-wrapper">
+          <button class="action-slot utility-slot" data-slot="sprint" data-action-type="utility" title="Sprint (9, R)">
+            <span class="slot-icon">🏃</span>
+            <span class="slot-label">Sprint</span>
+            <span class="slot-key">R</span>
+            <div class="cooldown-overlay"></div>
+            <span class="cooldown-timer"></span>
+          </button>
+          <!-- SVG stroke border for sprint duration (GPU accelerated) -->
+          <svg id="sprint-timer-svg" class="sprint-timer-border" viewBox="0 0 48 48">
+            <path class="sprint-timer-track" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+            <path class="sprint-timer-fill" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+          </svg>
+        </div>
         <button class="action-slot utility-slot" data-slot="heal" data-action-type="utility" title="Heal (0, Q)">
           <span class="slot-icon">💚</span>
           <span class="slot-label">Heal</span>

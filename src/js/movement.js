@@ -545,6 +545,21 @@ export function getPlayerPosition() {
   return state ? { x: state.player.x, y: state.player.y } : null;
 }
 
+// Sprint timer SVG state
+let sprintTimerPathLength = null;
+
+/**
+ * Initialize sprint timer SVG (called once on first use)
+ */
+function initSprintTimer() {
+  const fillPath = document.querySelector('#sprint-timer-svg .sprint-timer-fill');
+  if (!fillPath || sprintTimerPathLength) return;
+  
+  sprintTimerPathLength = fillPath.getTotalLength();
+  fillPath.style.strokeDasharray = sprintTimerPathLength;
+  fillPath.style.strokeDashoffset = sprintTimerPathLength;
+}
+
 /**
  * Activate sprint buff - increases movement speed by 70% for 8 seconds
  */
@@ -556,17 +571,43 @@ export function activateSprintBuff() {
   
   sprintBuffActive = true;
   
-  // Add visual indicator
+  // Add visual indicator on player
   if (playerEl) {
     playerEl.classList.add('sprinting');
+  }
+  
+  // Initialize and animate sprint timer SVG
+  initSprintTimer();
+  const wrapper = document.querySelector('.sprint-slot-wrapper');
+  const fillPath = document.querySelector('#sprint-timer-svg .sprint-timer-fill');
+  
+  if (wrapper && fillPath && sprintTimerPathLength) {
+    wrapper.classList.add('sprint-active');
+    
+    // Reset to full (start of animation)
+    fillPath.style.transition = 'none';
+    fillPath.style.strokeDashoffset = '0';
+    
+    // Force reflow to ensure transition starts fresh
+    fillPath.getBoundingClientRect();
+    
+    // Animate to empty over the buff duration
+    fillPath.style.transition = `stroke-dashoffset ${SPRINT_BUFF_DURATION}ms linear`;
+    fillPath.style.strokeDashoffset = sprintTimerPathLength;
   }
   
   // Auto-deactivate after duration
   sprintBuffTimeout = setTimeout(() => {
     sprintBuffActive = false;
     sprintBuffTimeout = null;
+    
     if (playerEl) {
       playerEl.classList.remove('sprinting');
+    }
+    
+    // Remove sprint timer visual
+    if (wrapper) {
+      wrapper.classList.remove('sprint-active');
     }
   }, SPRINT_BUFF_DURATION);
   
