@@ -70,9 +70,9 @@ export function expandMap(originalMap) {
           if (weatheredTile !== null) {
             tile = weatheredTile;
           }
-          // null means show underlying terrain - use sand for gaps
+          // null means transparent - show world background
           else {
-            tile = '0';
+            tile = ' ';
           }
         }
         row += tile;
@@ -216,10 +216,19 @@ function generateTerrain(x, y, width, height) {
   const centerX = BASE_CENTER.x;
   const centerY = BASE_CENTER.y;
   
-  // Check for road first - roads extend to map edges
-  const roadTile = getRoadTile(x, y, centerX, centerY);
-  if (roadTile) {
-    return roadTile;
+  // Check if this position is on the road path
+  const distToVertical = Math.abs(x - centerX);
+  const distToHorizontal = Math.abs(y - centerY);
+  const onRoadPath = distToVertical <= ROAD_TOTAL_HALF || distToHorizontal <= ROAD_TOTAL_HALF;
+  
+  if (onRoadPath) {
+    // Get road tile (may be null for "missing" tiles)
+    const roadTile = getRoadTile(x, y, centerX, centerY);
+    if (roadTile) {
+      return roadTile;
+    }
+    // Missing road tile - return space for transparent (not in legend = not rendered)
+    return ' ';
   }
   
   const distFromCenter = Math.hypot(x - centerX, y - centerY);
