@@ -207,43 +207,54 @@
   mix-blend-mode: multiply;
 }
 
-/* Lamp post glow effect */
+/* Lamp post glow effect - sits ABOVE darkness overlay */
 .lamp-glow {
   position: absolute;
   width: var(--tile-size);
   height: var(--tile-size);
   pointer-events: none;
-  z-index: 9;
+  z-index: 11;
 }
 
-/* Glow visible based on night intensity */
+/* Glow that brightens the area */
 .lamp-glow::before {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
-  width: var(--glow-radius, 144px);
-  height: var(--glow-radius, 144px);
+  width: var(--glow-radius, 192px);
+  height: var(--glow-radius, 192px);
   transform: translate3d(-50%, -50%, 0);
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--glow-color, #FFE4B5) calc(var(--night-intensity) * 60%), transparent) 0%,
-    color-mix(in srgb, var(--glow-color, #FFE4B5) calc(var(--night-intensity) * 30%), transparent) 40%,
+    rgba(255, 228, 181, 0.5) 0%,
+    rgba(255, 220, 160, 0.3) 25%,
+    rgba(255, 200, 120, 0.15) 50%,
     transparent 70%
   );
   border-radius: 50%;
-  opacity: calc(var(--night-intensity) * 0.8);
-  transition: opacity 2s ease;
+  mix-blend-mode: screen;
+  opacity: var(--night-intensity, 0);
+  transition: opacity 1s ease;
 }
 
-/* Subtle flicker animation for lamp glows */
-@keyframes lamp-flicker {
-  0%, 100% { opacity: calc(var(--night-intensity) * 0.8); }
-  50% { opacity: calc(var(--night-intensity) * 0.75); }
-  75% { opacity: calc(var(--night-intensity) * 0.85); }
-}
-
-.lamp-glow::before {
-  animation: lamp-flicker 4s ease-in-out infinite;
+/* Inner bright core */
+.lamp-glow::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--tile-size) * 2);
+  height: calc(var(--tile-size) * 2);
+  transform: translate3d(-50%, -50%, 0);
+  background: radial-gradient(
+    circle,
+    rgba(255, 240, 200, 0.8) 0%,
+    rgba(255, 228, 181, 0.4) 40%,
+    transparent 70%
+  );
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  opacity: var(--night-intensity, 0);
 }
 
