@@ -235,34 +235,47 @@ function generateTerrain(x, y, width, height) {
   const maxDist = Math.hypot(width / 2, height / 2);
   const normalizedDist = distFromCenter / maxDist;
 
-  // Add some noise for variety
+  // Add noise for variety
   const noise = seededRandom(x * 1000 + y);
+  const noise2 = seededRandom(x * 7777 + y * 3333);
   
-  // Desert near center, transitions to rocky/ash further out
-  if (normalizedDist < 0.3) {
-    // Inner desert zone
+  // Determine quadrant for biome accents
+  const inNorth = y < centerY;
+  const inWest = x < centerX;
+  
+  // Sand is ALWAYS the dominant tile (desert world)
+  // 75-85% sand everywhere, with biome-specific accents
+  
+  if (normalizedDist < 0.25) {
+    // Inner zone (near base walls): pure desert sand
     return TERRAIN.DESERT[Math.floor(noise * TERRAIN.DESERT.length)];
-  } else if (normalizedDist < 0.5) {
-    // Mixed desert/rock zone
-    if (noise < 0.7) {
-      return TERRAIN.DESERT[Math.floor(noise * TERRAIN.DESERT.length)];
-    }
-    return TERRAIN.ROCK[0];
-  } else if (normalizedDist < 0.7) {
-    // Ash wastes
-    if (noise < 0.6) {
-      return TERRAIN.ASH[0];
-    }
-    return TERRAIN.ROCK[0];
-  } else {
-    // Salt flats at edges
-    if (noise < 0.4) {
-      return TERRAIN.SALT[0];
-    } else if (noise < 0.7) {
-      return TERRAIN.ASH[0];
-    }
-    return TERRAIN.ROCK[0];
   }
+  
+  // Determine accent chance based on distance (more accents further out)
+  const accentChance = Math.min(0.25, (normalizedDist - 0.25) * 0.5); // 0% at 0.25, max 25% at edges
+  
+  // Roll for accent tile
+  if (noise < accentChance) {
+    // Quadrant-based biome accents
+    if (inNorth && inWest) {
+      // NW: Ash wastes accent
+      return noise2 < 0.7 ? TERRAIN.ASH[0] : TERRAIN.ROCK[0];
+    } else if (inNorth && !inWest) {
+      // NE: Rocky desert accent
+      return noise2 < 0.6 ? TERRAIN.ROCK[0] : TERRAIN.ASH[0];
+    } else if (!inNorth && inWest) {
+      // SW: Salt flats accent  
+      return noise2 < 0.7 ? TERRAIN.SALT[0] : TERRAIN.ASH[0];
+    } else {
+      // SE: Mixed wastes accent
+      if (noise2 < 0.4) return TERRAIN.ASH[0];
+      if (noise2 < 0.7) return TERRAIN.SALT[0];
+      return TERRAIN.ROCK[0];
+    }
+  }
+  
+  // Default: sand (75-85% of tiles)
+  return TERRAIN.DESERT[Math.floor(noise2 * TERRAIN.DESERT.length)];
 }
 
 /**
