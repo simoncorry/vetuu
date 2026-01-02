@@ -4256,9 +4256,23 @@ function clearCombatIntent() {
 }
 
 /**
- * Cancel combat engagement (called when player manually moves away).
- * Clears intent, auto-attack, and pending attack.
- * Exported for use by movement.js when movement keys override combat pathing.
+ * Cancel combat pursuit (move-to-range) but preserve basic auto-attack.
+ * Used when player manually moves - allows kiting while maintaining auto-attack.
+ * Only clears weaponAbility intents; basic auto-attack continues.
+ */
+export function cancelCombatPursuit() {
+  // Only cancel if we're in a move-to-range pursuit (weaponAbility intent)
+  if (combatIntent?.type === 'weaponAbility') {
+    clearCombatIntent();
+  }
+  // Clear any pending movement for attack
+  pendingAttack = null;
+  // Keep autoAttackEnabled and inCombat - player can kite while attacking
+}
+
+/**
+ * Cancel combat engagement completely (Escape key, explicit disengage).
+ * Clears all intent, auto-attack, and pending attack.
  */
 export function cancelCombatEngagement() {
   clearCombatIntent();
@@ -4777,8 +4791,9 @@ function clearTarget() {
   }
   currentTarget = null;
   
-  // Clear combat intent when target is cleared
+  // Full disengage when target is explicitly cleared (Escape key)
   clearCombatIntent();
+  autoAttackEnabled = false;
   
   // Don't end combat here - let processAutoAttack handle combat state
   // It will check for engaged/provoked enemies and end combat when appropriate

@@ -7,7 +7,7 @@
  * Always use translate3d() for transforms, never translate().
  */
 
-import { tryExecuteCombatIntent, cancelCombatEngagement } from './combat.js';
+import { tryExecuteCombatIntent, cancelCombatPursuit } from './combat.js';
 
 // ============================================
 // CONSTANTS
@@ -278,7 +278,7 @@ function handleKeyDown(e) {
   if (DIRECTION_KEYS[code]) {
     e.preventDefault();
     cancelPath(); // Keyboard cancels any pathfinding
-    cancelCombatEngagement(); // Also cancel "moving to range" combat pursuit
+    cancelCombatPursuit(); // Cancel move-to-range pursuit, but keep auto-attack for kiting
     lastKeyDirection = DIRECTION_KEYS[code];
   }
 }

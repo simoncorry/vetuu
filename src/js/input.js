@@ -5,7 +5,7 @@
  */
 
 import { createPathTo, cancelPath } from './movement.js';
-import { cancelCombatEngagement } from './combat.js';
+import { cancelCombatPursuit } from './combat.js';
 
 // ============================================
 // STATE
@@ -281,8 +281,8 @@ function onLeftClick(e) {
     return;
   }
 
-  // Path to empty tile - cancel any combat pursuit
-  cancelCombatEngagement();
+  // Path to empty tile - cancel move-to-range pursuit, but keep auto-attack for kiting
+  cancelCombatPursuit();
   createPathTo(x, y, false);
 }
 
