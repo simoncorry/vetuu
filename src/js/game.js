@@ -15,6 +15,8 @@ import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
+import { initLighting, setStaticLights, renderLighting, updateLightingCamera, addDynamicLight, updateDynamicLight } from './lighting.js';
+import { initDayCycle, updateDayCycle, getTimeOfDay, formatTimeOfDay, getDayPhase } from './time.js';
 
 // ============================================
 // GAME STATE
@@ -798,6 +800,9 @@ function hardReset() {
 // ============================================
 // GAME LOOP
 // ============================================
+// Player torch light ID
+let playerTorchId = null;
+
 function gameLoop() {
   state.tick++;
   checkPendingAttack(); // Check if player reached attack range
@@ -805,6 +810,19 @@ function gameLoop() {
   // Guard patrol tick (every ~60 frames = ~1 second)
   if (state.tick % 60 === 0) {
     tickGuardPatrol();
+  }
+  
+  // Update day/night cycle and lighting (every frame)
+  updateDayCycle();
+  
+  // Update player torch position
+  if (playerTorchId) {
+    updateDynamicLight(playerTorchId, state.player.x, state.player.y);
+  }
+  
+  // Render lighting (throttle to every 2 frames for performance)
+  if (state.tick % 2 === 0) {
+    renderLighting(getTimeOfDay());
   }
   
   requestAnimationFrame(gameLoop);
@@ -958,6 +976,41 @@ async function init() {
     updateCamera(state);
     revealAround(state, state.player.x, state.player.y);
     renderFog(state);
+    
+    // Initialize WebGL lighting system
+    const worldEl = document.getElementById('world');
+    const tileSize = state.map.meta.tileSize || 24;
+    const lightingInitialized = initLighting(
+      worldEl,
+      state.map.meta.width * tileSize,
+      state.map.meta.height * tileSize,
+      tileSize
+    );
+    
+    if (lightingInitialized) {
+      // Register all lamp posts as static lights
+      setStaticLights(state.map.objects);
+      
+      // Add player torch (small radius, warm color)
+      playerTorchId = addDynamicLight(
+        state.player.x, 
+        state.player.y, 
+        4,      // radius
+        0.7,    // intensity
+        '#FFEEDD'  // warm white
+      );
+      
+      // Initialize day/night cycle (start at morning)
+      initDayCycle(0.35);
+      
+      // Initial lighting render
+      renderLighting(getTimeOfDay());
+      
+      console.log('[Game] Lighting system active');
+    } else {
+      console.log('[Game] WebGL lighting unavailable, using CSS fallback');
+    }
+    
     initMinimap();
     updateHUD();
     renderQuestTracker(state);

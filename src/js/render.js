@@ -9,6 +9,7 @@
 
 import { hasFlag } from './save.js';
 import { getNpcQuestMarker } from './quests.js';
+import { updateLightingCamera } from './lighting.js';
 
 let viewport = null;
 let world = null;
@@ -283,6 +284,9 @@ export function updateCamera(state, duration = null) {
 
   // Use translate3d for GPU acceleration
   world.style.transform = `translate3d(${-x}px, ${-y}px, 0)`;
+  
+  // Update lighting camera for WebGL shader
+  updateLightingCamera(x, y);
 }
 
 // ============================================

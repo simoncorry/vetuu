@@ -180,6 +180,126 @@ export function validateTimer(value, name = 'timer') {
   return value;
 }
 
+// ============================================
+// DAY/NIGHT CYCLE
+// ============================================
+
+// Cycle configuration
+const DAY_DURATION_MS = 600000;  // 10 minutes real time = 1 full day
+let dayStartTime = 0;  // When the current day started
+let timeOfDay = 0.35;  // Start at morning (0 = midnight, 0.5 = noon)
+let paused = false;
+let timeScale = 1.0;  // Speed multiplier (1 = normal, 2 = 2x speed)
+
+/**
+ * Initialize the day/night cycle
+ * @param {number} startTime - Initial time of day (0-1, default 0.35 = morning)
+ */
+export function initDayCycle(startTime = 0.35) {
+  timeOfDay = startTime;
+  dayStartTime = nowMs() - (startTime * DAY_DURATION_MS);
+  console.log(`[Time] Day cycle initialized at ${formatTimeOfDay(timeOfDay)}`);
+}
+
+/**
+ * Update the day/night cycle - call this each frame
+ */
+export function updateDayCycle() {
+  if (paused) return;
+  
+  const elapsed = (nowMs() - dayStartTime) * timeScale;
+  timeOfDay = (elapsed % DAY_DURATION_MS) / DAY_DURATION_MS;
+}
+
+/**
+ * Get current time of day (0-1)
+ * 0.00 = midnight
+ * 0.25 = 6 AM (dawn)
+ * 0.50 = noon
+ * 0.75 = 6 PM (dusk)
+ */
+export function getTimeOfDay() {
+  return timeOfDay;
+}
+
+/**
+ * Set time of day directly (for debugging/cutscenes)
+ */
+export function setTimeOfDay(t) {
+  timeOfDay = Math.max(0, Math.min(1, t));
+  dayStartTime = nowMs() - (timeOfDay * DAY_DURATION_MS);
+}
+
+/**
+ * Pause/resume the day cycle
+ */
+export function pauseDayCycle(pause = true) {
+  if (pause && !paused) {
+    paused = true;
+  } else if (!pause && paused) {
+    // Adjust start time to maintain current time of day
+    dayStartTime = nowMs() - (timeOfDay * DAY_DURATION_MS);
+    paused = false;
+  }
+}
+
+/**
+ * Set time scale (speed multiplier)
+ */
+export function setTimeScale(scale) {
+  // Adjust start time to maintain current position
+  const currentOffset = timeOfDay * DAY_DURATION_MS;
+  timeScale = Math.max(0.1, Math.min(10, scale));
+  dayStartTime = nowMs() - (currentOffset / timeScale);
+}
+
+/**
+ * Get ambient light level (0-1) based on time of day
+ * Useful for non-WebGL fallback
+ */
+export function getAmbientLevel() {
+  // Sinusoidal curve: darkest at 0/1, brightest at 0.5
+  return 0.2 + 0.8 * Math.sin(timeOfDay * Math.PI);
+}
+
+/**
+ * Check if it's nighttime
+ */
+export function isNight() {
+  return timeOfDay < 0.25 || timeOfDay > 0.80;
+}
+
+/**
+ * Check if it's daytime (for gameplay effects)
+ */
+export function isDay() {
+  return timeOfDay >= 0.30 && timeOfDay <= 0.70;
+}
+
+/**
+ * Format time of day as human-readable string
+ */
+export function formatTimeOfDay(t = timeOfDay) {
+  const hours = Math.floor(t * 24);
+  const minutes = Math.floor((t * 24 - hours) * 60);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
+/**
+ * Get the current phase name
+ */
+export function getDayPhase() {
+  if (timeOfDay < 0.20) return 'night';
+  if (timeOfDay < 0.30) return 'dawn';
+  if (timeOfDay < 0.50) return 'morning';
+  if (timeOfDay < 0.70) return 'afternoon';
+  if (timeOfDay < 0.80) return 'evening';
+  if (timeOfDay < 0.90) return 'dusk';
+  return 'night';
+}
+
 // Expose debug tools
 if (typeof window !== 'undefined') {
   /**
@@ -204,6 +324,29 @@ if (typeof window !== 'undefined') {
       offsetDrift: Math.abs((wallNow - now) - offset),
       warningsIssued: warnedTimers.size
     };
+  };
+  
+  /**
+   * Day/night cycle controls
+   */
+  window.VETUU_DAY_CYCLE = () => ({
+    timeOfDay,
+    formatted: formatTimeOfDay(),
+    phase: getDayPhase(),
+    ambientLevel: getAmbientLevel(),
+    isNight: isNight(),
+    paused,
+    timeScale
+  });
+  
+  window.VETUU_SET_HOUR = (hour) => {
+    setTimeOfDay(hour / 24);
+    return `Set to ${formatTimeOfDay()} (${getDayPhase()})`;
+  };
+  
+  window.VETUU_TIME_SPEED = (scale) => {
+    setTimeScale(scale);
+    return `Time scale set to ${timeScale}x`;
   };
 }
 
