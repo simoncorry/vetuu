@@ -533,9 +533,16 @@
   align-items: center;
 }
 
+/* Weapon slot wrapper (contains button + SVG timer) */
+.weapon-slot-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
 /* Weapon toggle slot */
 .weapon-slot {
-  border-color: var(--accent);
+  position: relative;
+  border-color: var(--frame-border);
   background: rgba(105, 210, 214, 0.05);
 }
 
@@ -547,6 +554,62 @@
 
 .weapon-slot .slot-icon {
   font-size: 1.4rem;
+}
+
+/* ============================================
+   SWING TIMER (SVG stroke - GPU accelerated)
+   ============================================ */
+.swing-timer-border {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  /* Force GPU layer */
+  transform: translate3d(0, 0, 0);
+  will-change: opacity;
+}
+
+/* Show when auto-attacking */
+.weapon-slot.auto-attacking + .swing-timer-border {
+  opacity: 1;
+}
+
+/* Background track (subtle) */
+.swing-timer-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Progress fill stroke */
+.swing-timer-fill {
+  fill: none;
+  stroke: var(--swing-color, var(--accent));
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* GPU layer for performance */
+  transform: translate3d(0, 0, 0);
+  will-change: stroke-dashoffset;
+  filter: drop-shadow(0 0 3px var(--swing-color, var(--accent)));
+  /* Transition set dynamically by JS for precise timing */
+}
+
+/* Cooldown state: accent color */
+.weapon-slot.swing-cooldown + .swing-timer-border .swing-timer-fill {
+  --swing-color: var(--accent);
+}
+
+/* Ready state: green with glow */
+.weapon-slot.swing-ready + .swing-timer-border .swing-timer-fill {
+  --swing-color: var(--success);
+  filter: drop-shadow(0 0 6px var(--success));
 }
 
 /* Sense ability slots */

@@ -7,7 +7,17 @@
  * - No pistols, no casters, no damage types, no weaknesses/resistances
  * - Melee: hits harder and faster, moves faster
  * - Ranged: hits softer, can kite if played well
+ * 
+ * Basic Attack System:
+ * - All weapons share a 1.5s auto-attack cadence
+ * - Basic attack (right-click) is separate from weapon abilities (1-3)
+ * - Each weapon has a `basic` property defining damage, range, LOS requirements
  */
+
+// ============================================
+// BASIC ATTACK CONSTANT (shared cadence)
+// ============================================
+export const BASIC_ATTACK_CD_MS = 1500;
 
 // ============================================
 // PLAYER WEAPONS (only 2)
@@ -26,6 +36,14 @@ export const WEAPONS = {
     moveSpeed: 450,
     projectileColor: '#00FF88',
     icon: '🔫',
+    
+    // Basic attack (right-click auto-attack) - lower damage, ranged
+    basic: {
+      damage: 8,
+      range: 6,
+      requiresLOS: true,
+      cooldownMs: BASIC_ATTACK_CD_MS
+    },
     
     // Weapon abilities (1-3) - no Sense cost
     abilities: {
@@ -71,6 +89,14 @@ export const WEAPONS = {
     moveSpeed: 350, // Faster movement for melee
     projectileColor: '#FF00FF',
     icon: '⚔️',
+    
+    // Basic attack (right-click auto-attack) - higher damage, melee
+    basic: {
+      damage: 12,
+      range: 2,
+      requiresLOS: true, // Keep consistent with existing system
+      cooldownMs: BASIC_ATTACK_CD_MS
+    },
     
     // Weapon abilities (1-3) - no Sense cost
     abilities: {

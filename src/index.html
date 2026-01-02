@@ -114,12 +114,20 @@
 
     <!-- Action Bar (center bottom) -->
     <nav id="action-bar" aria-label="Actions">
-      <!-- Weapon Toggle Slot (far left) -->
-      <button id="weapon-toggle-slot" class="action-slot weapon-slot" title="Toggle weapon (~, Space)">
-        <span id="weapon-slot-icon" class="slot-icon">🔫</span>
-        <span id="weapon-slot-label" class="slot-label">Rifle</span>
-        <span class="slot-key">~</span>
-      </button>
+      <!-- Weapon Toggle Slot (with swing timer border) -->
+      <div class="weapon-slot-wrapper">
+        <button id="weapon-toggle-slot" class="action-slot weapon-slot" title="Toggle weapon (~, Space)">
+          <span id="weapon-slot-icon" class="slot-icon">🔫</span>
+          <span id="weapon-slot-label" class="slot-label">Rifle</span>
+          <span class="slot-key">~</span>
+        </button>
+        <!-- SVG stroke border for swing timer (GPU accelerated) -->
+        <svg id="swing-timer-svg" class="swing-timer-border" viewBox="0 0 48 48">
+          <!-- Path starts from top-center, goes clockwise -->
+          <path class="swing-timer-track" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+          <path class="swing-timer-fill" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+        </svg>
+      </div>
       
       <div class="bar-divider"></div>
       

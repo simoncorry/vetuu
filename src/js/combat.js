@@ -15,7 +15,7 @@
 
 import { saveGame } from './save.js';
 import { hasLineOfSight, canMoveTo } from './collision.js';
-import { WEAPONS, ENEMY_WEAPONS } from './weapons.js';
+import { WEAPONS, ENEMY_WEAPONS, BASIC_ATTACK_CD_MS } from './weapons.js';
 import { 
   distCoords, shuffleArray, applyEffect, tickEffects,
   isSlowed, isVulnerable
@@ -787,6 +787,8 @@ function startCombatTick() {
 // ============================================
 // AUTO-ATTACK SYSTEM
 // ============================================
+// NOTE: Attack execution is now handled by the Combat Intent System (executeBasicIntent).
+// This function only manages combat state and target acquisition.
 function processAutoAttack() {
   // Check if we should stay in combat:
   // 1. We have a valid living target
@@ -836,26 +838,13 @@ function processAutoAttack() {
   // Ensure target is still valid after selection
   if (!currentTarget || currentTarget.hp <= 0) return;
   
-  if (actionCooldowns[1] > 0) return;
-  
-  const weapon = WEAPONS[currentWeapon];
-  if (!weapon) return;
-  
-  const player = currentState.player;
-  const targetDist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
-  
-  if (targetDist > weapon.range) {
-    if (!pendingAttack) {
-      moveToAttackRange(currentTarget, weapon.range, 'attack');
-    }
-    return;
+  // Ensure we have a basic attack intent if auto-attack is enabled
+  // The intent system (executeBasicIntent) handles the actual attack execution
+  if (!combatIntent || combatIntent.type !== 'basic') {
+    setAutoAttackIntent(currentTarget);
   }
   
-  if (!hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y)) {
-    return;
-  }
-  
-  executeAttack(weapon);
+  // Attack execution is handled by tryExecuteCombatIntent() called elsewhere in the tick
 }
 
 // Get all enemies that are actively engaged with the player
@@ -2169,7 +2158,7 @@ function autoTargetClosestAttacker() {
 }
 
 // ============================================
-// PLAYER ATTACK
+// PLAYER ATTACK (legacy - delegates to intent system)
 // ============================================
 export function playerAttack() {
   if (isGhostMode) {
@@ -2182,30 +2171,16 @@ export function playerAttack() {
     return;
   }
   
-  const weapon = WEAPONS[currentWeapon];
-  if (!weapon) return;
-
-  if (actionCooldowns[1] > 0) return;
-
   if (!currentTarget || currentTarget.hp <= 0) {
     logCombat('No target selected. Press Tab to target.');
     return;
   }
 
-  const player = currentState.player;
-  const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
-
-  if (dist > weapon.range) {
-    moveToAttackRange(currentTarget, weapon.range, 'attack');
-    return;
-  }
-
-  if (!hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y)) {
-    logCombat('No line of sight!');
-    return;
-  }
-
-  executeAttack(weapon);
+  // Delegate to the new intent system for basic attacks
+  autoAttackEnabled = true;
+  inCombat = true;
+  setAutoAttackIntent(currentTarget);
+  tryExecuteCombatIntent();
 }
 
 function executeAttack(weapon) {
@@ -2296,7 +2271,7 @@ export function checkPendingAttack() {
   // This prevents race conditions between the two systems
   if (combatIntent) {
     // Intent system will handle this via tryExecuteCombatIntent()
-    // Just ensure pendingAttack is synced
+    pendingAttack = null; // Clear pendingAttack since intent system owns execution
     return;
   }
   
@@ -2323,11 +2298,13 @@ export function checkPendingAttack() {
     if (hasLineOfSight(currentState, player.x, player.y, pendingAttack.target.x, pendingAttack.target.y)) {
       const actionType = pendingAttack.actionType;
       
-      // Handle basic attack
+      // Handle basic attack - delegate to intent system (NOT executeAttack!)
       if (actionType === 'basic' || actionType === 'attack') {
-        if (actionCooldowns[1] <= 0) {
-          pendingAttack = null;
-          executeAttack(weapon);
+        pendingAttack = null;
+        // Create intent and execute via new system
+        if (currentTarget && currentTarget.hp > 0) {
+          setAutoAttackIntent(currentTarget);
+          tryExecuteCombatIntent();
         }
       }
       // Handle weapon ability (weaponAbility_1, weaponAbility_2, weaponAbility_3)
@@ -4040,6 +4017,38 @@ export function getWeapons() {
   return WEAPONS;
 }
 
+/**
+ * Get swing timer state for UI display
+ * Returns { progress: 0-1, remainingMs: number, isReady: boolean }
+ */
+export function getSwingTimerState() {
+  const now = nowMs();
+  
+  // If no basic intent active, timer is ready
+  if (!combatIntent || combatIntent.type !== 'basic') {
+    return { progress: 1, remainingMs: 0, isReady: true };
+  }
+  
+  const nextAttackAt = combatIntent.nextAttackAt || 0;
+  const cooldownStartedAt = combatIntent.cooldownStartedAt || 0;
+  
+  // Ready to attack (nextAttackAt = 0 means ready immediately)
+  if (nextAttackAt <= now) {
+    return { progress: 1, remainingMs: 0, isReady: true };
+  }
+  
+  // Calculate progress based on when cooldown started (more accurate)
+  const elapsed = now - cooldownStartedAt;
+  const progress = Math.min(1, elapsed / BASIC_ATTACK_CD_MS);
+  const remainingMs = Math.max(0, nextAttackAt - now);
+  
+  return {
+    progress: Math.max(0, progress),
+    remainingMs,
+    isReady: false
+  };
+}
+
 // ============================================
 // COMBAT INTENT SYSTEM
 // ============================================
@@ -4052,14 +4061,15 @@ const INTENT_TIMEOUT_MS = 10000; // 10s - clear intent if no successful attack
  * Combat Intent Schema:
  * {
  *   type: 'basic' | 'weaponAbility',
- *   slot: number (1-3 for abilities),
+ *   slot: number (1-3 for abilities, not used for basic),
  *   targetId: string,
  *   createdAt: number,
  *   retryAt: number,
  *   lastSuccessAt: number,
  *   expiresAt: number,
  *   requiresLOS: boolean,
- *   requiredRange: number
+ *   requiredRange: number,
+ *   nextAttackAt: number (only for basic - timer-gated auto-attack)
  * }
  */
 let combatIntent = null;
@@ -4067,24 +4077,36 @@ let combatIntent = null;
 /**
  * Set basic auto-attack intent on a target.
  * Intent persists until target dies, player cancels, or timeout.
+ * Uses weapon.basic spec for damage/range/LOS (NOT slot 1 ability).
+ * Timer-gated: attacks occur every BASIC_ATTACK_CD_MS (1.5s shared cadence).
  */
 function setAutoAttackIntent(target) {
   if (!target || target.hp <= 0) return;
   
   const weapon = WEAPONS[currentWeapon];
-  const range = weapon?.range || 1;
-  const requiresLOS = weapon?.combatType === 'ranged';
+  const basic = weapon?.basic;
+  const range = basic?.range || weapon?.range || 1;
+  const requiresLOS = basic?.requiresLOS ?? (weapon?.combatType === 'ranged');
+  
+  // Preserve existing timer state if target hasn't changed (prevents timer reset on spam)
+  const now = nowMs();
+  const preserveTimer = combatIntent?.type === 'basic' && 
+                        combatIntent?.targetId === target.id &&
+                        combatIntent?.nextAttackAt > now;
   
   combatIntent = {
     type: 'basic',
-    slot: 1,
     targetId: target.id,
-    createdAt: nowMs(),
+    createdAt: now,
     retryAt: 0,
     lastSuccessAt: 0,
-    expiresAt: nowMs() + INTENT_TIMEOUT_MS,
+    expiresAt: now + INTENT_TIMEOUT_MS,
     requiresLOS,
-    requiredRange: range
+    requiredRange: range,
+    // Timer: 0 = ready to attack immediately, otherwise wait until this time
+    nextAttackAt: preserveTimer ? combatIntent.nextAttackAt : 0,
+    // Preserve cooldown start time for accurate UI progress
+    cooldownStartedAt: preserveTimer ? combatIntent.cooldownStartedAt : 0
   };
 }
 
@@ -4186,7 +4208,8 @@ export function tryExecuteCombatIntent() {
 }
 
 /**
- * Execute basic auto-attack intent
+ * Execute basic auto-attack intent (timer-gated, 1.5s shared cadence)
+ * Uses weapon.basic.damage - NOT slot 1 ability damage
  */
 function executeBasicIntent(now) {
   let target = getIntentTarget();
@@ -4198,6 +4221,7 @@ function executeBasicIntent(now) {
       combatIntent.targetId = nextTarget.id;
       combatIntent.lastSuccessAt = 0; // Reset timeout
       combatIntent.expiresAt = now + INTENT_TIMEOUT_MS;
+      combatIntent.nextAttackAt = 0; // Ready to attack new target immediately
       target = nextTarget;
       selectTarget(target);
     } else {
@@ -4239,16 +4263,105 @@ function executeBasicIntent(now) {
     return;
   }
   
-  // Check cooldown
-  if (actionCooldowns[1] > 0) {
-    combatIntent.retryAt = now + 100;
+  // Timer gating: check if enough time has passed since last basic attack
+  if (combatIntent.nextAttackAt > now) {
+    // Not ready yet - schedule retry after remaining time
+    combatIntent.retryAt = combatIntent.nextAttackAt;
     return;
   }
   
-  // Ready to attack
-  playerAttack();
+  // Ready to attack - execute basic attack (NOT slot 1 ability)
+  executeBasicAttack(weapon, target);
+  
+  // Set next attack time (1.5s cadence) and track when cooldown started
+  combatIntent.cooldownStartedAt = now;
+  combatIntent.nextAttackAt = now + BASIC_ATTACK_CD_MS;
   combatIntent.lastSuccessAt = now;
   combatIntent.expiresAt = now + INTENT_TIMEOUT_MS; // Refresh timeout on success
+  
+  // Start CSS-driven swing timer animation (GPU accelerated)
+  startSwingTimerAnimation();
+  updateSwingTimerUI();
+}
+
+/**
+ * Execute a basic attack using weapon.basic.damage
+ * This is separate from weapon abilities (1-3)
+ */
+function executeBasicAttack(weapon, target) {
+  if (!target || target.hp <= 0) return;
+  if (!weapon) return;
+  
+  // Check spawn immunity
+  if (hasSpawnImmunity(target)) {
+    logCombat('Enemy is still materializing...');
+    return;
+  }
+  
+  // Provoke the target if passive
+  provokeEnemy(target);
+  
+  const player = currentState.player;
+  const basic = weapon.basic || {};
+  
+  // Calculate damage using basic attack damage (not ability damage)
+  const baseDamage = basic.damage || weapon.baseDamage || 10;
+  let damage = calculateBasicDamage(weapon, target, baseDamage);
+  
+  // Visual effects
+  if (weapon.type === 'ranged') {
+    showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+  } else {
+    showMeleeSwipe(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+  }
+  
+  // Apply damage
+  target.hp -= damage;
+  markCombatEvent(); // Track combat activity for regen gating
+  
+  // Use crit flag from calculateBasicDamage
+  const isCrit = !!weapon.__lastCrit;
+  weapon.__lastCrit = false;
+  showDamageNumber(target.x, target.y, damage, isCrit);
+  logCombat(`${damage} damage with ${weapon.name || 'attack'}`);
+  
+  updateEnemyHealthBar(target);
+  updateTargetFrame();
+  
+  if (target.hp <= 0) {
+    handleEnemyDeath(target);
+  }
+}
+
+/**
+ * Calculate damage for basic attacks (uses weapon.basic.damage)
+ * Simplified version of calculateDamage for basic attacks
+ */
+function calculateBasicDamage(weapon, target, baseDamage) {
+  const player = currentState.player;
+  const atk = player.atk || 0;
+  const levelMult = 1 + (player.level - 1) * 0.05;
+  
+  // Get defense
+  const defRaw = target.def ?? 0;
+  const defMult = 100 / (100 + defRaw * DEF_K);
+  
+  // Vulnerability check
+  const vulnMult = isVulnerable(target) ? 1.3 : 1.0;
+  
+  // Variance
+  const variance = 0.9 + Math.random() * 0.2;
+  
+  // Crit check
+  const luck = player.luck || 0;
+  const critChance = 0.05 + luck * 0.02;
+  const isCrit = Math.random() < critChance;
+  const critMult = isCrit ? 1.5 : 1.0;
+  weapon.__lastCrit = isCrit;
+  
+  // Final damage
+  let damage = (baseDamage + atk) * levelMult * defMult * vulnMult * variance * critMult;
+  return Math.max(1, Math.round(damage));
 }
 
 /**
@@ -5291,6 +5404,82 @@ function updateCooldownUI() {
       timer?.remove();
     }
   }
+  
+  // Update swing timer UI
+  updateSwingTimerUI();
+}
+
+// Cache for SVG path length
+let swingTimerPathLength = null;
+let swingTimerInitialized = false;
+// Cumulative offset for continuous loop (only changes on attack)
+let swingTimerBaseOffset = 0;
+
+/**
+ * Initialize the swing timer SVG (called once)
+ */
+function initSwingTimer() {
+  const fillPath = document.querySelector('#swing-timer-svg .swing-timer-fill');
+  if (!fillPath || swingTimerInitialized) return;
+  
+  swingTimerPathLength = fillPath.getTotalLength();
+  // Fixed dasharray: stroke = pathLength, gap = pathLength
+  fillPath.style.strokeDasharray = `${swingTimerPathLength} ${swingTimerPathLength}`;
+  // Start with full stroke visible (offset = 0)
+  fillPath.style.strokeDashoffset = 0;
+  swingTimerInitialized = true;
+}
+
+/**
+ * Start the swing timer animation (called when attack fires)
+ * Uses CSS transition for GPU-accelerated animation
+ */
+function startSwingTimerAnimation() {
+  const fillPath = document.querySelector('#swing-timer-svg .swing-timer-fill');
+  if (!fillPath || !swingTimerPathLength) return;
+  
+  const len = swingTimerPathLength;
+  
+  // Calculate start and end offsets
+  // Start: stroke hidden (offset = baseOffset + len)
+  // End: stroke visible (offset = baseOffset)
+  const startOffset = swingTimerBaseOffset + len;
+  const endOffset = swingTimerBaseOffset;
+  
+  // Shift base for next cycle (continuous loop)
+  swingTimerBaseOffset -= len;
+  
+  // Instantly set to start position (no transition)
+  fillPath.style.transition = 'none';
+  fillPath.style.strokeDashoffset = startOffset;
+  
+  // Force reflow to apply instant change
+  fillPath.getBoundingClientRect();
+  
+  // Enable transition and animate to end position
+  fillPath.style.transition = `stroke-dashoffset ${BASIC_ATTACK_CD_MS}ms linear`;
+  fillPath.style.strokeDashoffset = endOffset;
+}
+
+/**
+ * Update swing timer visual state classes (called every tick, lightweight)
+ */
+function updateSwingTimerUI() {
+  const weaponSlot = document.getElementById('weapon-toggle-slot');
+  if (!weaponSlot) return;
+  
+  // Initialize if needed
+  if (!swingTimerInitialized) {
+    initSwingTimer();
+  }
+  
+  const isAutoAttacking = combatIntent?.type === 'basic' && autoAttackEnabled;
+  const state = getSwingTimerState();
+  
+  // Only update classes, not the animation (CSS handles that)
+  weaponSlot.classList.toggle('auto-attacking', isAutoAttacking);
+  weaponSlot.classList.toggle('swing-cooldown', isAutoAttacking && !state.isReady);
+  weaponSlot.classList.toggle('swing-ready', isAutoAttacking && state.isReady);
 }
 
 function logCombat(msg) {
