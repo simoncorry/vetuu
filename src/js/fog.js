@@ -70,10 +70,20 @@ export function initFog(state) {
 }
 
 /**
+ * Simple seeded random for consistent jagged edges.
+ */
+function seededRandom(x, y) {
+  const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+/**
  * Reveal the Drycross base and surrounding area on game start.
+ * Uses jagged edges for a natural look.
  */
 function revealDrycrossBase(state) {
   const BASE_BUFFER = 6; // Extra tiles around the base
+  const JAGGED_ZONE = 4; // How many tiles from edge get randomized
   
   // Find Drycross region
   const drycross = state.map.regions?.find(r => r.id === 'region_drycross');
@@ -82,24 +92,45 @@ function revealDrycrossBase(state) {
   // Get map offset for expanded coordinates
   const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
   
-  // Calculate expanded bounds with buffer
-  const bounds = {
-    x0: drycross.bounds.x0 + offset.x - BASE_BUFFER,
-    y0: drycross.bounds.y0 + offset.y - BASE_BUFFER,
-    x1: drycross.bounds.x1 + offset.x + BASE_BUFFER,
-    y1: drycross.bounds.y1 + offset.y + BASE_BUFFER
+  // Core bounds (always revealed)
+  const core = {
+    x0: drycross.bounds.x0 + offset.x - (BASE_BUFFER - JAGGED_ZONE),
+    y0: drycross.bounds.y0 + offset.y - (BASE_BUFFER - JAGGED_ZONE),
+    x1: drycross.bounds.x1 + offset.x + (BASE_BUFFER - JAGGED_ZONE),
+    y1: drycross.bounds.y1 + offset.y + (BASE_BUFFER - JAGGED_ZONE)
   };
   
-  // Clamp to map bounds
-  bounds.x0 = Math.max(0, bounds.x0);
-  bounds.y0 = Math.max(0, bounds.y0);
-  bounds.x1 = Math.min(mapWidth - 1, bounds.x1);
-  bounds.y1 = Math.min(mapHeight - 1, bounds.y1);
+  // Outer bounds (with buffer for jagged edges)
+  const outer = {
+    x0: Math.max(0, drycross.bounds.x0 + offset.x - BASE_BUFFER - 2),
+    y0: Math.max(0, drycross.bounds.y0 + offset.y - BASE_BUFFER - 2),
+    x1: Math.min(mapWidth - 1, drycross.bounds.x1 + offset.x + BASE_BUFFER + 2),
+    y1: Math.min(mapHeight - 1, drycross.bounds.y1 + offset.y + BASE_BUFFER + 2)
+  };
   
-  // Reveal all tiles in the region (skip animation for initial load)
-  for (let y = bounds.y0; y <= bounds.y1; y++) {
-    for (let x = bounds.x0; x <= bounds.x1; x++) {
-      if (!fogMask[y][x]) {
+  // Reveal tiles with jagged edges
+  for (let y = outer.y0; y <= outer.y1; y++) {
+    for (let x = outer.x0; x <= outer.x1; x++) {
+      if (fogMask[y][x]) continue; // Already revealed
+      
+      // Calculate distance from core bounds
+      let distFromCore = 0;
+      if (x < core.x0) distFromCore = Math.max(distFromCore, core.x0 - x);
+      if (x > core.x1) distFromCore = Math.max(distFromCore, x - core.x1);
+      if (y < core.y0) distFromCore = Math.max(distFromCore, core.y0 - y);
+      if (y > core.y1) distFromCore = Math.max(distFromCore, y - core.y1);
+      
+      // Inside core = always reveal
+      if (distFromCore === 0) {
+        fogMask[y][x] = true;
+        state.runtime.revealedTiles.add(`${x},${y}`);
+        continue;
+      }
+      
+      // In jagged zone = random chance based on distance
+      // Closer to core = higher chance
+      const revealChance = 1 - (distFromCore / (JAGGED_ZONE + 3));
+      if (revealChance > 0 && seededRandom(x, y) < revealChance) {
         fogMask[y][x] = true;
         state.runtime.revealedTiles.add(`${x},${y}`);
       }
