@@ -914,9 +914,9 @@ function processAutoAttack() {
   // Ensure target is still valid after selection
   if (!currentTarget || currentTarget.hp <= 0) return;
   
-  // Ensure we have a basic attack intent if auto-attack is enabled
-  // The intent system (executeBasicIntent) handles the actual attack execution
-  if (!combatIntent || combatIntent.type !== 'basic') {
+  // Ensure we have a combat intent if auto-attack is enabled
+  // Only create basic intent if NO intent exists - don't overwrite weaponAbility intents!
+  if (!combatIntent) {
     setAutoAttackIntent(currentTarget);
   }
   
