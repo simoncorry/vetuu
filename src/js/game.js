@@ -859,15 +859,14 @@ function initLightingCanvas(gameState) {
   console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights`);
 }
 
-// Player torch - placed in #world directly, above darkness canvas (z-index 6), below actors (z-index 10)
+// DOM torch provides subtle warm color tint (canvas does actual darkness-cutting)
 function createPlayerTorch() {
   const world = document.getElementById('world');
   if (!world) return;
   
-  // Create layered torch for natural light diffusion
-  const torchSize = 8 * lightingTileSize;
+  const torchSize = 5 * lightingTileSize;
   
-  // Main torch container - z-index 8 (above darkness at 6, below actors at 10)
+  // Subtle warm glow overlay - purely aesthetic color tint
   const torch = document.createElement('div');
   torch.id = 'player-torch';
   torch.style.cssText = `
@@ -876,98 +875,44 @@ function createPlayerTorch() {
     height: ${torchSize}px;
     pointer-events: none;
     opacity: 0;
-    z-index: 8;
+    z-index: 9;
     transition: transform var(--move-duration, 200ms) linear;
     will-change: transform;
-  `;
-  
-  // Layer 1: Core bright center (small, warm)
-  const core = document.createElement('div');
-  core.style.cssText = `
-    position: absolute;
-    width: 100%;
-    height: 100%;
     border-radius: 50%;
     background: radial-gradient(
-      ellipse 45% 50% at 52% 48%,
-      rgba(255, 250, 240, 0.25) 0%,
-      rgba(255, 245, 230, 0.1) 30%,
-      transparent 70%
-    );
-    mix-blend-mode: screen;
-  `;
-  
-  // Layer 2: Mid diffusion (slightly offset, irregular)
-  const mid = document.createElement('div');
-  mid.style.cssText = `
-    position: absolute;
-    width: 110%;
-    height: 105%;
-    top: -2%;
-    left: -5%;
-    border-radius: 50%;
-    background: radial-gradient(
-      ellipse 55% 48% at 48% 52%,
-      rgba(255, 240, 220, 0.2) 0%,
-      rgba(255, 230, 200, 0.1) 40%,
-      rgba(255, 220, 180, 0.03) 70%,
+      ellipse 50% 55% at 50% 50%,
+      rgba(255, 220, 180, 0.08) 0%,
+      rgba(255, 200, 150, 0.03) 50%,
       transparent 100%
     );
-    mix-blend-mode: screen;
+    mix-blend-mode: overlay;
+    filter: blur(4px);
   `;
   
-  // Layer 3: Outer ambient glow (large, soft, asymmetric)
-  const outer = document.createElement('div');
-  outer.style.cssText = `
-    position: absolute;
-    width: 130%;
-    height: 125%;
-    top: -12%;
-    left: -15%;
-    border-radius: 50%;
-    background: radial-gradient(
-      ellipse 60% 52% at 50% 50%,
-      rgba(255, 235, 210, 0.12) 0%,
-      rgba(255, 225, 195, 0.06) 50%,
-      rgba(255, 215, 180, 0.02) 80%,
-      transparent 100%
-    );
-    mix-blend-mode: screen;
-    filter: blur(2px);
-  `;
-  
-  torch.appendChild(outer);
-  torch.appendChild(mid);
-  torch.appendChild(core);
-  
-  // Insert into world
   world.appendChild(torch);
-  
-  // Initial position sync
   syncTorchPosition();
 }
 
-// Sync torch position with player (call on player move)
+// Sync torch position with player
 function syncTorchPosition() {
   const torch = document.getElementById('player-torch');
   if (!torch || !state.player) return;
   
-  const torchSize = 8 * lightingTileSize;
+  const torchSize = 5 * lightingTileSize;
   const halfTorch = torchSize / 2;
   const halfTile = lightingTileSize / 2;
   
-  // Center torch on player tile
   const x = state.player.x * lightingTileSize + halfTile - halfTorch;
   const y = state.player.y * lightingTileSize + halfTile - halfTorch;
   
   torch.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 }
 
-// Update torch visibility based on night intensity
+// Update torch visibility
 function updatePlayerTorch(nightIntensity) {
   const torch = document.getElementById('player-torch');
   if (torch) {
-    torch.style.opacity = nightIntensity > 0.05 ? nightIntensity.toFixed(3) : '0';
+    torch.style.opacity = nightIntensity > 0.1 ? (nightIntensity * 0.8).toFixed(3) : '0';
   }
 }
 
@@ -1090,6 +1035,60 @@ function updateLighting() {
     lightCtx.arc(light.x, light.y, coreRadius, 0, Math.PI * 2);
     lightCtx.fill();
   }
+  
+  // Draw player torch on canvas (actually cuts through darkness)
+  const playerX = (state.player.x + 0.5) * lightingTileSize;
+  const playerY = (state.player.y + 0.5) * lightingTileSize;
+  const torchBaseRadius = 4 * lightingTileSize;
+  const torchIntensity = nightIntensity * 0.9;
+  
+  // Use slight time-based variation for organic feel
+  const flicker = 1 + Math.sin(Date.now() * 0.003) * 0.02;
+  
+  // Layer 1: Outer ambient (largest, softest)
+  const torchOuterRadius = torchBaseRadius * 1.4 * flicker;
+  const torchOuterGradient = lightCtx.createRadialGradient(
+    playerX - 2, playerY + 1, 0,
+    playerX - 2, playerY + 1, torchOuterRadius
+  );
+  torchOuterGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.12})`);
+  torchOuterGradient.addColorStop(0.5, `rgba(255, 255, 255, ${torchIntensity * 0.05})`);
+  torchOuterGradient.addColorStop(0.8, `rgba(255, 255, 255, ${torchIntensity * 0.015})`);
+  torchOuterGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  lightCtx.fillStyle = torchOuterGradient;
+  lightCtx.beginPath();
+  lightCtx.arc(playerX - 2, playerY + 1, torchOuterRadius, 0, Math.PI * 2);
+  lightCtx.fill();
+  
+  // Layer 2: Mid diffusion
+  const torchMidRadius = torchBaseRadius * 1.1 * flicker;
+  const torchMidGradient = lightCtx.createRadialGradient(
+    playerX + 1, playerY - 1, 0,
+    playerX + 1, playerY - 1, torchMidRadius
+  );
+  torchMidGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.25})`);
+  torchMidGradient.addColorStop(0.4, `rgba(255, 255, 255, ${torchIntensity * 0.1})`);
+  torchMidGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.03})`);
+  torchMidGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  lightCtx.fillStyle = torchMidGradient;
+  lightCtx.beginPath();
+  lightCtx.arc(playerX + 1, playerY - 1, torchMidRadius, 0, Math.PI * 2);
+  lightCtx.fill();
+  
+  // Layer 3: Core bright center
+  const torchCoreRadius = torchBaseRadius * 0.6;
+  const torchCoreGradient = lightCtx.createRadialGradient(
+    playerX, playerY, 0,
+    playerX, playerY, torchCoreRadius
+  );
+  torchCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.4})`);
+  torchCoreGradient.addColorStop(0.3, `rgba(255, 255, 255, ${torchIntensity * 0.15})`);
+  torchCoreGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.04})`);
+  torchCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  lightCtx.fillStyle = torchCoreGradient;
+  lightCtx.beginPath();
+  lightCtx.arc(playerX, playerY, torchCoreRadius, 0, Math.PI * 2);
+  lightCtx.fill();
   
   // Reset composite operation
   lightCtx.globalCompositeOperation = 'source-over';
