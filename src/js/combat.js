@@ -2025,7 +2025,7 @@ function moveToSurroundPosition(enemy) {
   // Shuffle to prevent clumping on same side
   shuffleArray(surroundPositions);
   
-  // Find an unoccupied position
+  // Find an unoccupied position, preferring ones outside pack footprints
   for (const pos of surroundPositions) {
     if (canEnemyMoveTo(pos.x, pos.y, enemy.id)) {
       // Move toward this position
@@ -2038,10 +2038,19 @@ function moveToSurroundPosition(enemy) {
         { x: enemy.x, y: enemy.y + dy }
       ];
       
+      // First pass: prefer moves outside pack footprints
+      for (const move of moves) {
+        if (canEnemyMoveToEx(move.x, move.y, enemy, true)) {
+          updateEnemyPosition(enemy, move.x, move.y);
+          return;
+        }
+      }
+      
+      // Second pass: allow footprint entry if needed
       for (const move of moves) {
         if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
           updateEnemyPosition(enemy, move.x, move.y);
-      return;
+          return;
         }
       }
     }
@@ -2079,10 +2088,19 @@ function moveToFlankPosition(enemy) {
           { x: enemy.x, y: enemy.y + dy }
         ];
         
+        // First pass: prefer moves outside pack footprints
+        for (const move of moves) {
+          if (canEnemyMoveToEx(move.x, move.y, enemy, true)) {
+            updateEnemyPosition(enemy, move.x, move.y);
+            return;
+          }
+        }
+        
+        // Second pass: allow footprint entry if needed
         for (const move of moves) {
           if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
             updateEnemyPosition(enemy, move.x, move.y);
-    return;
+            return;
           }
         }
       }
@@ -2191,6 +2209,15 @@ function moveTowardPlayer(enemy) {
     ];
   }
 
+  // First pass: prefer moves that don't enter pack member footprints
+  for (const move of moves) {
+    if (canEnemyMoveToEx(move.x, move.y, enemy, true)) {
+      updateEnemyPosition(enemy, move.x, move.y);
+      return;
+    }
+  }
+  
+  // Second pass: allow entering footprints if necessary
   for (const move of moves) {
     if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
       updateEnemyPosition(enemy, move.x, move.y);
@@ -2215,10 +2242,20 @@ function moveTowardPlayerRanged(enemy, maxRange) {
     { x: enemy.x + dx, y: enemy.y + dy }
   ];
 
-    for (const move of moves) {
-      const newDist = distCoords(move.x, move.y, player.x, player.y);
+  // First pass: prefer moves outside pack footprints
+  for (const move of moves) {
+    const newDist = distCoords(move.x, move.y, player.x, player.y);
+    if (newDist >= preferredDist - 1 && canEnemyMoveToEx(move.x, move.y, enemy, true)) {
+      updateEnemyPosition(enemy, move.x, move.y);
+      return;
+    }
+  }
+  
+  // Second pass: allow footprint entry if needed
+  for (const move of moves) {
+    const newDist = distCoords(move.x, move.y, player.x, player.y);
     if (newDist >= preferredDist - 1 && canEnemyMoveTo(move.x, move.y, enemy.id)) {
-        updateEnemyPosition(enemy, move.x, move.y);
+      updateEnemyPosition(enemy, move.x, move.y);
       return;
     }
   }
@@ -2241,6 +2278,15 @@ function moveAwayFrom(enemy, targetX, targetY) {
     { x: enemy.x + dy, y: enemy.y - dx }
   ];
 
+  // First pass: prefer moves outside pack footprints
+  for (const move of moves) {
+    if (canEnemyMoveToEx(move.x, move.y, enemy, true)) {
+      updateEnemyPosition(enemy, move.x, move.y);
+      return;
+    }
+  }
+  
+  // Second pass: allow footprint entry if needed
   for (const move of moves) {
     if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
       updateEnemyPosition(enemy, move.x, move.y);
@@ -2256,6 +2302,19 @@ function moveToGetLOS(enemy) {
     { dx: 0, dy: 1 }, { dx: 0, dy: -1 }
   ]);
 
+  // First pass: prefer moves outside pack footprints
+  for (const dir of directions) {
+    const nx = enemy.x + dir.dx;
+    const ny = enemy.y + dir.dy;
+    if (canEnemyMoveToEx(nx, ny, enemy, true)) {
+      if (hasLineOfSight(currentState, nx, ny, player.x, player.y)) {
+        updateEnemyPosition(enemy, nx, ny);
+        return;
+      }
+    }
+  }
+  
+  // Second pass: allow footprint entry if needed
   for (const dir of directions) {
     const nx = enemy.x + dir.dx;
     const ny = enemy.y + dir.dy;
@@ -2284,6 +2343,55 @@ function canEnemyMoveTo(x, y, excludeId) {
       if (other.x === x && other.y === y) return false;
   }
 
+  return true;
+}
+
+/**
+ * Check if a tile is inside another pack member's 3×3 footprint.
+ * @param {object} enemy - The enemy trying to move
+ * @param {number} x - Target x coordinate
+ * @param {number} y - Target y coordinate
+ * @returns {boolean} True if tile is in a pack member's footprint
+ */
+function isInPackMemberFootprint(enemy, x, y) {
+  if (!enemy.packId) return false; // Solo enemies don't have pack footprint concerns
+  
+  for (const other of currentState.runtime.activeEnemies || []) {
+    if (other.id === enemy.id) continue;
+    if (other.hp <= 0) continue;
+    if (other.packId !== enemy.packId) continue; // Only check same pack
+    
+    // Check if (x,y) is within other's 3×3 footprint (Chebyshev distance <= 1 from spawn)
+    const spawnX = other.spawnX ?? other.x;
+    const spawnY = other.spawnY ?? other.y;
+    const dx = Math.abs(x - spawnX);
+    const dy = Math.abs(y - spawnY);
+    
+    if (dx <= 1 && dy <= 1) {
+      return true; // This tile is in another pack member's footprint
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Check if enemy can move to tile, with optional footprint avoidance.
+ * @param {number} x - Target x
+ * @param {number} y - Target y
+ * @param {object} enemy - The enemy (object, not just ID)
+ * @param {boolean} respectFootprints - If true, avoid pack member footprints
+ * @returns {boolean} True if move is allowed
+ */
+function canEnemyMoveToEx(x, y, enemy, respectFootprints = false) {
+  // Basic movement check
+  if (!canEnemyMoveTo(x, y, enemy.id)) return false;
+  
+  // Footprint check (if requested)
+  if (respectFootprints && isInPackMemberFootprint(enemy, x, y)) {
+    return false;
+  }
+  
   return true;
 }
 
