@@ -402,7 +402,7 @@ export function shouldBreakOffFromGuards(enemy, guards, _t = nowMs()) {
     
     const d = dist(enemy.x, enemy.y, guard.x, guard.y);
     if (d <= AI.GUARD_THREAT_RADIUS) {
-      const guardLevel = guard.level ?? 25;
+      const guardLevel = guard.level ?? 50; // Guards are max level in the 50-cap world
       if (guardLevel >= enemyLevel + AI.GUARD_LEVEL_DELTA_BREAKOFF) {
         return true;
       }

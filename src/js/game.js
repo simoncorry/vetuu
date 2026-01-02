@@ -120,19 +120,60 @@ async function loadData() {
 }
 
 // ============================================
-// XP & LEVELING
+// XP & LEVELING - Level Cap 50
 // ============================================
-const XP_TABLE = [
-  0, 100, 220, 360, 520, 700, 900, 1120, 1360, 1620,
-  1900, 2200, 2520, 2860, 3220, 3600, 4000, 4420, 4860, 5320,
-  5800, 6300, 6820, 7360, 7920
-];
+const LEVEL_CAP = 50;
+
+/**
+ * Generate XP required to reach each level.
+ * Curve: xpToNext(level) = round(80 + level² × 6 + level × 20)
+ * 
+ * This creates a progression where:
+ * - Early levels (1-10): Fast, ~100-300 XP each
+ * - Mid levels (10-25): Moderate, ~300-800 XP each
+ * - Late levels (25-40): Slow, ~900-1400 XP each
+ * - Endgame (40-50): Grind, ~1500-2000 XP each
+ * 
+ * Total XP to 50: ~42,000 (a real campaign, not an afternoon)
+ */
+function generateXPTable() {
+  const table = [0]; // Level 1 starts at 0 cumulative XP
+  let cumulative = 0;
+  
+  for (let level = 1; level <= LEVEL_CAP; level++) {
+    // XP needed for this level → next level
+    const xpForLevel = Math.round(80 + (level * level) * 6 + level * 20);
+    cumulative += xpForLevel;
+    table.push(cumulative);
+  }
+  
+  return table;
+}
+
+const XP_TABLE = generateXPTable();
+
+/**
+ * Get XP required to reach a specific level (cumulative).
+ */
+export function getXPForLevel(level) {
+  if (level < 1) return 0;
+  if (level > LEVEL_CAP) return XP_TABLE[LEVEL_CAP];
+  return XP_TABLE[level] || 0;
+}
+
+/**
+ * Get XP needed from current level to next level.
+ */
+export function getXPToNextLevel(level) {
+  if (level >= LEVEL_CAP) return 0;
+  return (XP_TABLE[level + 1] || 0) - (XP_TABLE[level] || 0);
+}
 
 export function grantXP(amount) {
   state.player.xp += amount;
   showToast(`+${amount} XP`, 'xp');
 
-  while (state.player.level < 25 && state.player.xp >= state.player.xpToNext) {
+  while (state.player.level < LEVEL_CAP && state.player.xp >= state.player.xpToNext) {
     levelUp();
   }
 
@@ -140,20 +181,49 @@ export function grantXP(amount) {
   saveGame(state);
 }
 
+/**
+ * Level up the player with new stat scaling for 50-level progression.
+ * 
+ * Stat gains per level (gentler to prevent inflation):
+ * - HP: +6 per level (was +10)
+ * - Sense: +1 per level (was +2)
+ * - ATK: +0.5 per level (accumulated, +1 every 2 levels)
+ * - DEF: +0.5 per level (accumulated, +1 every 2 levels)
+ * - Luck: +1 every 5 levels (unchanged)
+ * 
+ * At level 50:
+ * - HP: 100 + 49*6 = 394 (was 100 + 24*10 = 340 at 25)
+ * - ATK: 5 + 24 = 29 (was 5 + 24 = 29 at 25)
+ * - DEF: 3 + 24 = 27 (was 3 + 24 = 27 at 25)
+ */
 function levelUp() {
+  const oldLevel = state.player.level;
   state.player.level++;
-  state.player.xpToNext = XP_TABLE[state.player.level] || 9999;
+  const newLevel = state.player.level;
+  
+  // Update XP threshold
+  state.player.xpToNext = XP_TABLE[newLevel + 1] || XP_TABLE[LEVEL_CAP];
 
-  // Use setMaxHP to keep both keys in sync
-  const newMaxHP = getMaxHP(state.player) + 10;
+  // HP: +6 per level
+  const newMaxHP = getMaxHP(state.player) + 6;
   setMaxHP(state.player, newMaxHP);
   state.player.hp = newMaxHP;
   
-  state.player.maxSense += 2;
+  // Sense: +1 per level (slower than before)
+  state.player.maxSense += 1;
   state.player.sense = state.player.maxSense;
-  state.player.atk += 1;
-  state.player.def += 1;
-  if (state.player.level % 5 === 0) state.player.luck += 1;
+  
+  // ATK/DEF: +1 every 2 levels (half rate)
+  // Use floor division to get accumulated bonuses
+  if (newLevel % 2 === 0) {
+    state.player.atk += 1;
+    state.player.def += 1;
+  }
+  
+  // Luck: +1 every 5 levels
+  if (newLevel % 5 === 0) {
+    state.player.luck += 1;
+  }
 
   showToast(`Level Up! Now Lv. ${state.player.level}`, 'quest');
 }
@@ -258,18 +328,25 @@ export function updateHUD() {
   document.getElementById('luck-val').textContent = p.luck;
   document.getElementById('level-val').textContent = p.level;
 
-  const xpProgress = p.level >= 25 ? 100 : ((p.xp - (XP_TABLE[p.level - 1] || 0)) / (p.xpToNext - (XP_TABLE[p.level - 1] || 0))) * 100;
-  document.getElementById('xp-fill')?.style.setProperty('--pct', Math.max(0, xpProgress));
-  document.getElementById('xp-text').textContent = p.level >= 25 ? 'MAX' : `${p.xp}/${p.xpToNext}`;
+  // XP progress calculation - works with generated XP table
+  const isMaxLevel = p.level >= LEVEL_CAP;
+  const currentLevelXP = XP_TABLE[p.level] || 0;       // XP needed to reach current level
+  const nextLevelXP = XP_TABLE[p.level + 1] || currentLevelXP; // XP needed to reach next level
+  const xpIntoLevel = p.xp - currentLevelXP;          // XP earned since reaching this level
+  const xpNeededForLevel = nextLevelXP - currentLevelXP; // XP needed for this level
+  const xpProgress = isMaxLevel ? 100 : (xpNeededForLevel > 0 ? (xpIntoLevel / xpNeededForLevel) * 100 : 100);
+  
+  document.getElementById('xp-fill')?.style.setProperty('--pct', Math.max(0, Math.min(100, xpProgress)));
+  document.getElementById('xp-text').textContent = isMaxLevel ? 'MAX' : `${p.xp}/${nextLevelXP}`;
 
   // WoW-style XP bar (bottom bar)
   const xpBarFill = document.getElementById('xp-bar-fill');
   const xpBarLevel = document.getElementById('xp-bar-level');
   const xpBarProgress = document.getElementById('xp-bar-progress');
-  if (xpBarFill) xpBarFill.style.setProperty('--xp-pct', Math.max(0, xpProgress));
+  if (xpBarFill) xpBarFill.style.setProperty('--xp-pct', Math.max(0, Math.min(100, xpProgress)));
   if (xpBarLevel) xpBarLevel.textContent = `Lv.${p.level}`;
   if (xpBarProgress) {
-    xpBarProgress.textContent = p.level >= 25 ? 'MAX LEVEL' : `${p.xp} / ${p.xpToNext} XP`;
+    xpBarProgress.textContent = isMaxLevel ? 'MAX LEVEL' : `${xpIntoLevel} / ${xpNeededForLevel} XP`;
   }
 
   // Player frame
