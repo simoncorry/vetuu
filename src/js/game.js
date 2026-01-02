@@ -1024,12 +1024,27 @@ function updateLighting() {
     }
     
     // Match torch intensity and style
-    const intensity = Math.min(1, nightIntensity * light.intensity * 1.2);
+    const baseIntensity = Math.min(1, nightIntensity * light.intensity * 1.2);
     
-    // Subtle flicker unique to each lamp (seeded by position)
+    // Sci-fi LED behavior: electronic hum + occasional energy surges
     const seed = (light.x * 7 + light.y * 13) % 100;
-    const flickerPhase = seed * 0.1; // Different phase per lamp
-    const flicker = 1 + Math.sin(Date.now() * 0.002 + flickerPhase) * 0.015;
+    const now = Date.now();
+    
+    // Steady electronic hum (different frequency per lamp for variety)
+    const humFreq = 0.003 + (seed % 20) * 0.0001; // Slight freq variation
+    const humPhase = seed * 0.5;
+    const hum = Math.sin(now * humFreq + humPhase) * 0.08; // ±8% brightness variation
+    
+    // Energy surge: brief brightness spike every ~10-20 seconds per lamp
+    const surgeInterval = 10000 + (seed * 100); // 10-20s based on seed
+    const surgeCycle = (now + seed * 1000) % surgeInterval;
+    const surgeWindow = 150; // 150ms surge duration
+    const isSurging = surgeCycle < surgeWindow;
+    const surge = isSurging ? Math.sin((surgeCycle / surgeWindow) * Math.PI) * 0.25 : 0; // Up to +25% brightness
+    
+    // Combine effects
+    const intensity = Math.min(1, baseIntensity * (1 + hum + surge));
+    const flicker = 1 + hum * 0.1; // Slight size variation with hum
     
     // Seeded offsets for consistent asymmetry
     const offsetX1 = (seed % 10 - 5) * 0.02 * light.radius;
@@ -1089,12 +1104,14 @@ function updateLighting() {
   const playerX = torchAnim.currentX;
   const playerY = torchAnim.currentY;
   const torchBaseRadius = 8 * lightingTileSize;
-  // Torch needs high intensity to actually cut through darkness
-  // nightIntensity determines darkness level, torch should fully illuminate
-  const torchIntensity = Math.min(1, nightIntensity * 1.2);
+  const now = Date.now();
   
-  // Use slight time-based variation for organic feel
-  const flicker = 1 + Math.sin(Date.now() * 0.003) * 0.02;
+  // Player torch: steady electronic hum (well-maintained equipment)
+  const hum = Math.sin(now * 0.004) * 0.05; // Subtle ±5% brightness pulse
+  const torchIntensity = Math.min(1, nightIntensity * 1.2 * (1 + hum));
+  
+  // Slight size variation synced with hum
+  const flicker = 1 + Math.sin(now * 0.004) * 0.015;
   
   // Layer 1: Outer ambient (largest, softest)
   const torchOuterRadius = torchBaseRadius * 1.5 * flicker;
