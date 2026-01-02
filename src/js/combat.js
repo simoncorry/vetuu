@@ -552,6 +552,9 @@ const IMMUNITY_DURATION = 5000; // 5 seconds of immunity after corpse revive
 // Track which enemies have been provoked (for passive critters)
 let provokedEnemies = new Set();
 
+// Burst attack timer tracking (for cancellation on target death/disengage)
+let activeBurstTimers = [];
+
 // ============================================
 // ENEMY DISENGAGE HANDLER
 // ============================================
@@ -954,6 +957,7 @@ function endCombat() {
   autoAttackEnabled = false;
   provokedEnemies.clear(); // Clear provoked enemies when combat ends
   pendingAttack = null;
+  clearBurstTimers(); // Cancel any in-flight burst attacks
   
   // Clear combat intent - prevents auto-reengaging when walking back
   clearCombatIntent();
@@ -2706,6 +2710,33 @@ export function useWeaponAbility(slot) {
 }
 
 // ============================================
+// BURST TIMER MANAGEMENT
+// ============================================
+
+/**
+ * Clear all active burst timers, optionally filtered by target ID.
+ * Called on target death, disengage, or combat cancellation.
+ */
+function clearBurstTimers(targetId = null) {
+  if (targetId === null) {
+    // Clear all burst timers
+    for (const timer of activeBurstTimers) {
+      clearTimeout(timer.timeoutId);
+    }
+    activeBurstTimers = [];
+  } else {
+    // Clear only timers for specific target
+    activeBurstTimers = activeBurstTimers.filter(timer => {
+      if (timer.targetId === targetId) {
+        clearTimeout(timer.timeoutId);
+        return false;
+      }
+      return true;
+    });
+  }
+}
+
+// ============================================
 // RIFLE ABILITY IMPLEMENTATIONS
 // ============================================
 function executeRifleBurst(weapon, ability) {
@@ -2713,13 +2744,21 @@ function executeRifleBurst(weapon, ability) {
   
   const player = currentState.player;
   const target = currentTarget;
+  const targetId = target.id;
   const shots = ability.shots || 3;
   const damagePerShot = ability.damagePerShot || 6;
   
-  // Fire 3 rapid shots
+  // Clear any existing burst timers for this target (prevent stacking)
+  clearBurstTimers(targetId);
+  
+  // Fire rapid shots with cancellable timers
   for (let i = 0; i < shots; i++) {
-    setTimeout(() => {
-      if (!target || target.hp <= 0) return;
+    const timeoutId = setTimeout(() => {
+      // Remove this timer from tracking (it's executing now)
+      activeBurstTimers = activeBurstTimers.filter(t => t.timeoutId !== timeoutId);
+      
+      // Guard: stop if target is dead or invalid
+      if (!target || target.hp <= 0 || target._deathHandled) return;
       
       const damage = calculateDamage(weapon, target, damagePerShot);
       showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FF88');
@@ -2731,10 +2770,14 @@ function executeRifleBurst(weapon, ability) {
       updateEnemyHealthBar(target);
       updateTargetFrame();
       
+      // Check for death and handle (idempotency guard in handleEnemyDeath prevents double-call)
       if (target.hp <= 0) {
         handleEnemyDeath(target);
       }
     }, i * 150); // 150ms between shots
+    
+    // Track this timer for potential cancellation
+    activeBurstTimers.push({ timeoutId, targetId });
   }
   
   logCombat(`Burst: ${shots} shots fired!`);
@@ -4248,11 +4291,13 @@ function setWeaponAbilityIntent(slot, target) {
 // They are AoE and execute immediately via useSenseAbility().
 
 /**
- * Clear combat intent.
+ * Clear combat intent and any associated state.
  */
 function clearCombatIntent() {
   combatIntent = null;
   pendingAttack = null; // Also clear pending attack when intent cleared
+  // Note: burst timers are cleared separately via clearBurstTimers() when needed
+  // (they may belong to a different target than the intent)
 }
 
 /**
@@ -4269,6 +4314,7 @@ export function cancelCombatPursuit() {
   // Player explicitly decided not to use the ability
   if (combatIntent?.type === 'weaponAbility') {
     clearCombatIntent();
+    clearBurstTimers(); // Cancel any in-flight burst attacks
     autoAttackEnabled = false; // Don't start auto-attacking after canceling ability
   }
   // Clear any pending movement for attack
@@ -4278,10 +4324,11 @@ export function cancelCombatPursuit() {
 
 /**
  * Cancel combat engagement completely (Escape key, explicit disengage).
- * Clears all intent, auto-attack, and pending attack.
+ * Clears all intent, auto-attack, pending attack, and burst timers.
  */
 export function cancelCombatEngagement() {
   clearCombatIntent();
+  clearBurstTimers(); // Cancel any in-flight burst attacks
   autoAttackEnabled = false;
   // Don't clear inCombat or target - player might still want to re-engage
   // Just stop the automatic pursuit
@@ -4676,6 +4723,24 @@ if (typeof window !== 'undefined') {
       lastHitTime,
     };
   };
+  
+  window.VETUU_BURST = () => ({
+    activeTimers: activeBurstTimers.length,
+    timers: activeBurstTimers.map(t => ({ targetId: t.targetId }))
+  });
+  
+  window.VETUU_TARGET = () => {
+    if (!currentTarget) return null;
+    return {
+      id: currentTarget.id,
+      name: currentTarget.name,
+      hp: currentTarget.hp,
+      maxHp: currentTarget.maxHp ?? currentTarget.maxHP,
+      state: currentTarget.state,
+      isRetreating: currentTarget.isRetreating,
+      _deathHandled: currentTarget._deathHandled
+    };
+  };
 }
 
 // ============================================
@@ -4845,6 +4910,21 @@ function calculateEnemyDef(level) { return 2 + Math.floor(level * 0.5); }
 // DEATH HANDLING
 // ============================================
 async function handleEnemyDeath(enemy) {
+  // Idempotency guard: prevent double-death processing (e.g., from burst attacks)
+  if (enemy._deathHandled) {
+    if (COMBAT_DEBUG) console.log(`%c[DEATH BLOCKED] ${enemy.name} - already handled`, 'color: orange');
+    return;
+  }
+  enemy._deathHandled = true;
+  if (COMBAT_DEBUG) console.log(`%c[DEATH] ${enemy.name} (id: ${enemy.id})`, 'color: lime');
+  
+  // Cancel any remaining burst timers targeting this enemy
+  const cancelledTimers = activeBurstTimers.filter(t => t.targetId === enemy.id).length;
+  clearBurstTimers(enemy.id);
+  if (COMBAT_DEBUG && cancelledTimers > 0) {
+    console.log(`%c[BURST] Cancelled ${cancelledTimers} remaining shot(s)`, 'color: cyan');
+  }
+  
   logCombat(`${enemy.name} defeated!`);
 
   // Remove from provoked set and attacker slots
