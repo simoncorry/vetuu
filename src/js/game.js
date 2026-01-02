@@ -1083,7 +1083,7 @@ function updateLighting() {
   updateTorchPosition();
   const playerX = torchAnim.currentX;
   const playerY = torchAnim.currentY;
-  const torchBaseRadius = 5 * lightingTileSize;
+  const torchBaseRadius = 8 * lightingTileSize;
   // Torch needs high intensity to actually cut through darkness
   // nightIntensity determines darkness level, torch should fully illuminate
   const torchIntensity = Math.min(1, nightIntensity * 1.2);
