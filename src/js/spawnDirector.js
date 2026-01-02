@@ -366,12 +366,12 @@ export function initSpawnDirector(state) {
     // Base center (4x scaled base, centered at 56,38)
     baseCenter = { x: 56 + ox, y: 38 + oy };
     
-    // Define base bounds (4x scaled: 33,21 → 79,55)
+    // Define base bounds (28-84 x 17-59)
     baseBounds = {
-      minX: 22 + ox,
-      maxX: 90 + ox,
-      minY: 13 + oy,
-      maxY: 63 + oy
+      minX: 28 + ox,
+      maxX: 84 + ox,
+      minY: 17 + oy,
+      maxY: 59 + oy
     };
   }
   
