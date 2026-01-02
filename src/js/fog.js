@@ -62,8 +62,51 @@ export function initFog(state) {
   // Reveal starting area around player
   revealAround(state, state.player.x, state.player.y, 10);
 
+  // Reveal Drycross base region with buffer
+  revealDrycrossBase(state);
+
   // Initial render
   renderFog(state);
+}
+
+/**
+ * Reveal the Drycross base and surrounding area on game start.
+ */
+function revealDrycrossBase(state) {
+  const BASE_BUFFER = 6; // Extra tiles around the base
+  
+  // Find Drycross region
+  const drycross = state.map.regions?.find(r => r.id === 'region_drycross');
+  if (!drycross) return;
+  
+  // Get map offset for expanded coordinates
+  const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
+  
+  // Calculate expanded bounds with buffer
+  const bounds = {
+    x0: drycross.bounds.x0 + offset.x - BASE_BUFFER,
+    y0: drycross.bounds.y0 + offset.y - BASE_BUFFER,
+    x1: drycross.bounds.x1 + offset.x + BASE_BUFFER,
+    y1: drycross.bounds.y1 + offset.y + BASE_BUFFER
+  };
+  
+  // Clamp to map bounds
+  bounds.x0 = Math.max(0, bounds.x0);
+  bounds.y0 = Math.max(0, bounds.y0);
+  bounds.x1 = Math.min(mapWidth - 1, bounds.x1);
+  bounds.y1 = Math.min(mapHeight - 1, bounds.y1);
+  
+  // Reveal all tiles in the region (skip animation for initial load)
+  for (let y = bounds.y0; y <= bounds.y1; y++) {
+    for (let x = bounds.x0; x <= bounds.x1; x++) {
+      if (!fogMask[y][x]) {
+        fogMask[y][x] = true;
+        state.runtime.revealedTiles.add(`${x},${y}`);
+      }
+    }
+  }
+  
+  saveFogMask();
 }
 
 // ============================================
