@@ -393,6 +393,17 @@
   100% { opacity: 0; transform: scale3d(0, 0, 1); }
 }
 
+/* Teleport snap - disable transitions for instant position change */
+.enemy.is-teleporting {
+  transition: none !important;
+}
+
+/* Retreating enemies - slightly dimmed to indicate disengaged state */
+.enemy.retreating {
+  opacity: 0.7;
+  filter: saturate(0.7);
+}
+
 /* Enemy level badge */
 .enemy-level-badge {
   position: absolute;

@@ -165,13 +165,87 @@ export function getAggroRadius(enemy) {
 // RETREAT SYSTEM
 // ============================================
 
+// Callback for player disengage handling (set by combat.js)
+let onEnemyDisengageCallback = null;
+
+/**
+ * Register callback for enemy disengage events.
+ * Called by combat.js during initialization.
+ */
+export function setOnEnemyDisengageCallback(callback) {
+  onEnemyDisengageCallback = callback;
+}
+
+/**
+ * Get a unique retreat destination for an enemy.
+ * Avoids clumping by using individual spawn positions with offsets.
+ * @param {object} enemy - The enemy retreating
+ * @param {object} state - Game state (for collision checks)
+ * @param {function} canMoveToFn - Collision check function
+ * @returns {{x: number, y: number}} - Retreat destination
+ */
+export function getRetreatDestination(enemy, state, canMoveToFn) {
+  // Default: use enemy's individual spawn point
+  const baseX = enemy.spawnX ?? enemy.home?.x ?? enemy.x;
+  const baseY = enemy.spawnY ?? enemy.home?.y ?? enemy.y;
+  
+  // If no collision check function, just return base position
+  if (!canMoveToFn) {
+    return { x: baseX, y: baseY };
+  }
+  
+  // Check if base position is valid and unoccupied
+  if (canMoveToFn(state, baseX, baseY) && !isTileOccupiedByOther(state, baseX, baseY, enemy.id)) {
+    return { x: baseX, y: baseY };
+  }
+  
+  // Spiral search for nearest free tile around base position
+  const maxSearchRadius = 6;
+  for (let radius = 1; radius <= maxSearchRadius; radius++) {
+    // Check tiles in a ring pattern
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        // Only check perimeter tiles
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+        
+        const testX = baseX + dx;
+        const testY = baseY + dy;
+        
+        if (canMoveToFn(state, testX, testY) && !isTileOccupiedByOther(state, testX, testY, enemy.id)) {
+          return { x: testX, y: testY };
+        }
+      }
+    }
+  }
+  
+  // Fallback to base position if nothing found
+  return { x: baseX, y: baseY };
+}
+
+/**
+ * Check if a tile is occupied by another enemy.
+ */
+function isTileOccupiedByOther(state, x, y, excludeId) {
+  const enemies = state?.runtime?.activeEnemies || [];
+  for (const e of enemies) {
+    if (e.id === excludeId) continue;
+    if (e.hp <= 0) continue;
+    if (e.x === x && e.y === y) return true;
+    // Also check retreatTo positions of currently retreating enemies
+    if (e.isRetreating && e.retreatTo?.x === x && e.retreatTo?.y === y) return true;
+  }
+  return false;
+}
+
 /**
  * Start retreat for an enemy
  * @param {object} enemy - The enemy to retreat
  * @param {number} t - Current time in ms
  * @param {string} reason - Why retreating: 'leash', 'guards', 'lost', 'pack'
+ * @param {object} state - Game state (optional, for retreat destination calculation)
+ * @param {function} canMoveToFn - Collision check function (optional)
  */
-export function startRetreat(enemy, t = nowMs(), reason = 'leash') {
+export function startRetreat(enemy, t = nowMs(), reason = 'leash', state = null, canMoveToFn = null) {
   // Already retreating? Just update reason if more urgent
   if (enemy.isRetreating) {
     if (reason === 'guards') {
@@ -189,6 +263,17 @@ export function startRetreat(enemy, t = nowMs(), reason = 'leash') {
   enemy.isEngaged = false;
   enemy.isAware = false;
 
+  // Calculate unique retreat destination
+  if (state && canMoveToFn) {
+    enemy.retreatTo = getRetreatDestination(enemy, state, canMoveToFn);
+  } else {
+    // Fallback to home or spawn position
+    enemy.retreatTo = {
+      x: enemy.home?.x ?? enemy.spawnX ?? enemy.x,
+      y: enemy.home?.y ?? enemy.spawnY ?? enemy.y
+    };
+  }
+
   // Prevent instant re-aggro loops
   // Guards get extra time to prevent pinball
   const extraTime = (reason === 'guards') ? AI.GUARD_BREAKOFF_EXTRA_MS : 0;
@@ -203,43 +288,71 @@ export function startRetreat(enemy, t = nowMs(), reason = 'leash') {
   // Retreat bookkeeping
   enemy.retreatStartedAt = t;
   enemy.retreatStuckSince = null;
+  
+  // Notify combat system that this enemy is disengaging
+  // This allows player pursuit to be cancelled immediately
+  if (onEnemyDisengageCallback) {
+    onEnemyDisengageCallback(enemy, reason, t);
+  }
 }
 
 /**
- * Process retreat movement and healing
+ * Process retreat movement and healing.
+ * Uses enemy.retreatTo for destination (unique per enemy, no clumping).
+ * @param {object} enemy - The retreating enemy
+ * @param {function} moveTowardFn - Function to move enemy toward a point
+ * @param {number} t - Current time
+ * @param {number} dtMs - Delta time in ms
+ * @param {function} onSnapFn - Optional callback when snapping (for visual handling)
  * @returns {boolean} True if still retreating, false if finished
  */
-export function processRetreat(enemy, moveTowardFn, t = nowMs(), dtMs = 100) {
+export function processRetreat(enemy, moveTowardFn, t = nowMs(), dtMs = 100, onSnapFn = null) {
   if (!enemy.isRetreating) return false;
 
   // Heal while retreating
   regenWhileRetreating(enemy, dtMs);
 
-  // Ensure home point exists
-  if (!enemy.home) {
-    enemy.home = { x: enemy.spawnX ?? enemy.x, y: enemy.spawnY ?? enemy.y };
+  // Ensure retreat destination exists (fallback to home/spawn)
+  if (!enemy.retreatTo) {
+    enemy.retreatTo = {
+      x: enemy.home?.x ?? enemy.spawnX ?? enemy.x,
+      y: enemy.home?.y ?? enemy.spawnY ?? enemy.y
+    };
   }
 
-  // Check if stuck too long
+  const destX = enemy.retreatTo.x;
+  const destY = enemy.retreatTo.y;
+
+  // Check if stuck too long - snap as last resort
   const retreatDur = t - (enemy.retreatStartedAt ?? t);
   if (retreatDur > AI.RETREAT_TIMEOUT_MS) {
-    // Snap to home as last resort
-    enemy.x = enemy.home.x;
-    enemy.y = enemy.home.y;
+    // Mark for snap teleport (visual handler will disable transition)
+    enemy._isSnapping = true;
+    
+    // Snap to retreatTo (unique per enemy, not shared homeCenter)
+    enemy.x = destX;
+    enemy.y = destY;
+    
+    // Notify visual handler for no-tween snap
+    if (onSnapFn) {
+      onSnapFn(enemy);
+    }
+    
+    finishResetAtHome(enemy, t);
+    enemy._isSnapping = false;
+    return false;
+  }
+
+  // Check if arrived at retreat destination
+  const distToDest = dist(enemy.x, enemy.y, destX, destY);
+  if (distToDest <= AI.HOME_ARRIVE_EPS) {
     finishResetAtHome(enemy, t);
     return false;
   }
 
-  // Check if arrived home
-  const distToHome = dist(enemy.x, enemy.y, enemy.home.x, enemy.home.y);
-  if (distToHome <= AI.HOME_ARRIVE_EPS) {
-    finishResetAtHome(enemy, t);
-    return false;
-  }
-
-  // Move toward home
+  // Move toward retreat destination
   if (moveTowardFn) {
-    moveTowardFn(enemy, enemy.home.x, enemy.home.y);
+    moveTowardFn(enemy, destX, destY);
   }
 
   return true;
@@ -260,7 +373,8 @@ export function regenWhileRetreating(enemy, dtMs) {
 }
 
 /**
- * Called when enemy reaches home and finishes reset
+ * Called when enemy reaches retreat destination and finishes reset.
+ * Resets state IN PLACE - does NOT remove/recreate the enemy.
  */
 export function finishResetAtHome(enemy, t = nowMs()) {
   enemy.isRetreating = false;
@@ -270,6 +384,7 @@ export function finishResetAtHome(enemy, t = nowMs()) {
   enemy.targetId = null;
   enemy.isEngaged = false;
   enemy.isAware = false;
+  enemy.pendingAggro = false;
 
   // Full heal on home arrival (support both maxHP and maxHp casing)
   const maxHp = enemy.maxHp ?? enemy.maxHP;
@@ -279,12 +394,20 @@ export function finishResetAtHome(enemy, t = nowMs()) {
 
   // Brief spawn immunity to prevent spawn camping
   enemy.spawnImmunityUntil = t + AI.SPAWN_IMMUNITY_MS;
+  
+  // Reset spawn time for settle logic
+  enemy.spawnedAt = t;
 
   // Clear retreat metadata
   enemy.retreatReason = null;
   enemy.retreatStartedAt = null;
   enemy.retreatStuckSince = null;
+  enemy.retreatTo = null;
   enemy.outOfRangeSince = null;
+  enemy._isSnapping = false;
+  
+  // Clear attacker lease (will be released by combat.js too, but be thorough)
+  enemy.attackerSlotHeldUntil = 0;
 }
 
 // ============================================

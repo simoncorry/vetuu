@@ -28,7 +28,7 @@ import {
   isBrokenOff, isInSpawnSettle, canAggro,
   getSpawnImmunityRemaining, getSpawnSettleRemaining,
   getAggroRadius,
-  startRetreat,
+  startRetreat, setOnEnemyDisengageCallback,
   shouldBreakOffFromGuards, checkLeashAndDeaggro,
   retreatPack, ensureEffects
 } from './aiUtils.js';
@@ -553,10 +553,86 @@ const IMMUNITY_DURATION = 5000; // 5 seconds of immunity after corpse revive
 let provokedEnemies = new Set();
 
 // ============================================
+// ENEMY DISENGAGE HANDLER
+// ============================================
+
+/**
+ * Called when an enemy disengages (starts retreat, breaks off, etc).
+ * If this enemy is the player's current target or intent target,
+ * immediately stop pursuit and clear combat state.
+ * 
+ * @param {object} enemy - The disengaging enemy
+ * @param {string} reason - Why disengaging: 'leash', 'guards', 'lost', 'pack'
+ * @param {number} t - Current time
+ */
+function onEnemyDisengage(enemy, reason, t) {
+  if (!enemy) return;
+  
+  const isCurrentTarget = currentTarget?.id === enemy.id;
+  const isIntentTarget = combatIntent?.targetId === enemy.id;
+  
+  // Only react if this enemy is the one we're pursuing
+  if (!isCurrentTarget && !isIntentTarget) return;
+  
+  // Release attacker slot immediately
+  releaseAttackerSlot(enemy);
+  
+  // Clear combat intent (stops move-to-range, ability retries, etc)
+  clearCombatIntent();
+  
+  // Stop auto-attack
+  autoAttackEnabled = false;
+  
+  // Cancel any pending attack
+  pendingAttack = null;
+  
+  // Cancel movement/chase via movement module
+  import('./movement.js').then(({ cancelPath }) => {
+    cancelPath();
+  });
+  
+  // Clear target (optional - makes "combat ended" feel more intentional)
+  if (isCurrentTarget) {
+    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+    if (el) el.classList.remove('targeted');
+    currentTarget = null;
+    updateTargetFrame();
+    updateActionBarState();
+  }
+  
+  // Exit combat mode
+  inCombat = false;
+  
+  // Log to combat log so player knows what happened
+  const reasonText = reason === 'guards' ? 'fled from guards' 
+                   : reason === 'leash' ? 'returned home'
+                   : reason === 'lost' ? 'lost interest'
+                   : 'disengaged';
+  logCombat(`${enemy.name} ${reasonText}.`);
+}
+
+/**
+ * Retreat all pack members, passing state for unique retreat destinations.
+ * Wrapper around retreatPack that provides collision checking.
+ */
+function retreatPackWithState(packId, enemies, t, reason) {
+  if (!packId || !enemies) return;
+  
+  for (const enemy of enemies) {
+    if (enemy.packId === packId && enemy.hp > 0 && !enemy.isRetreating) {
+      startRetreat(enemy, t, reason, currentState, canMoveTo);
+    }
+  }
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 export function initCombat(state) {
   currentState = state;
+  
+  // Register disengage callback with aiUtils
+  setOnEnemyDisengageCallback(onEnemyDisengage);
 
   if (!state.runtime.activeEnemies) {
     state.runtime.activeEnemies = [];
@@ -1147,11 +1223,11 @@ function processEnemyAI(enemy, t) {
   // 7. GUARD RETREAT CHECKS
   // ============================================
   if (shouldBreakOffFromGuards(enemy, guards, t)) {
-    startRetreat(enemy, t, 'guards');
+    startRetreat(enemy, t, 'guards', currentState, canMoveTo);
     releaseAttackerSlot(enemy);
     
     if (enemy.packId) {
-      retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'guards');
+      retreatPackWithState(enemy.packId, currentState.runtime.activeEnemies, t, 'guards');
     }
     
     updateEnemyVisuals();
@@ -1186,11 +1262,11 @@ function processEnemyAI(enemy, t) {
     const retreatReason = checkLeashAndDeaggro(enemy, player, t);
     
     if (retreatReason) {
-      startRetreat(enemy, t, retreatReason);
+      startRetreat(enemy, t, retreatReason, currentState, canMoveTo);
       releaseAttackerSlot(enemy);
       
       if (retreatReason === 'leash' && enemy.packId) {
-        retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'leash');
+        retreatPackWithState(enemy.packId, currentState.runtime.activeEnemies, t, 'leash');
       }
       
       updateEnemyVisuals();
@@ -1312,18 +1388,21 @@ function regenAtHome(enemy, t) {
 }
 
 /**
- * Handle enemy retreat state - move toward home, heal, and finish when arrived
+ * Handle enemy retreat state - move toward retreat destination, heal, and finish when arrived.
+ * Uses retreatTo (unique per enemy) instead of shared home to avoid clumping.
  */
 function handleRetreatState(enemy, t) {
-  // Ensure home point exists
-  if (!enemy.home) {
-    enemy.home = { 
-      x: enemy.homeCenter?.x ?? enemy.spawnX ?? enemy.x, 
-      y: enemy.homeCenter?.y ?? enemy.spawnY ?? enemy.y 
+  // Ensure retreat destination exists (use retreatTo, fall back to home/spawn)
+  if (!enemy.retreatTo) {
+    enemy.retreatTo = {
+      x: enemy.home?.x ?? enemy.spawnX ?? enemy.x,
+      y: enemy.home?.y ?? enemy.spawnY ?? enemy.y
     };
   }
   
-  const distToHome = distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y);
+  const destX = enemy.retreatTo.x;
+  const destY = enemy.retreatTo.y;
+  const distToDest = distCoords(enemy.x, enemy.y, destX, destY);
   
   // Heal while retreating (15% per second = 1.5% per 100ms tick)
   const retreatMax = getMaxHP(enemy);
@@ -1334,26 +1413,25 @@ function handleRetreatState(enemy, t) {
     updateEnemyHealthBar(enemy);
   }
   
-  // Check if arrived home (within 1.5 tiles)
-  if (distToHome <= 1.5) {
+  // Check if arrived at retreat destination (within 1.5 tiles)
+  if (distToDest <= 1.5) {
     finishRetreat(enemy, t);
     return;
   }
   
-  // Check if stuck too long - snap to home
+  // Check if stuck too long - snap as last resort
   const retreatDur = t - (enemy.retreatStartedAt ?? t);
   if (retreatDur > AI.RETREAT_TIMEOUT_MS) {
-    // Snap to home as last resort
     snapEnemyToHome(enemy, t);
     return;
   }
   
-  // Move toward home (faster movement during retreat)
+  // Move toward retreat destination (faster movement during retreat)
   const moveCD = 320; // Faster than normal
   if (!isExpired(enemy.moveCooldown, t)) return;
   
-  const dx = Math.sign(enemy.home.x - enemy.x);
-  const dy = Math.sign(enemy.home.y - enemy.y);
+  const dx = Math.sign(destX - enemy.x);
+  const dy = Math.sign(destY - enemy.y);
   
   // Try to move - allow movement even through normal restrictions during retreat
   let moved = false;
@@ -1374,7 +1452,7 @@ function handleRetreatState(enemy, t) {
     moved = true;
   }
   
-  // If can't move normally, try any adjacent tile closer to home
+  // If can't move normally, try any adjacent tile closer to destination
   if (!moved) {
     const adjacentMoves = [
       { x: enemy.x + 1, y: enemy.y },
@@ -1383,10 +1461,10 @@ function handleRetreatState(enemy, t) {
       { x: enemy.x, y: enemy.y - 1 },
     ];
     
-    // Sort by distance to home
+    // Sort by distance to retreat destination
     adjacentMoves.sort((a, b) => {
-      const distA = distCoords(a.x, a.y, enemy.home.x, enemy.home.y);
-      const distB = distCoords(b.x, b.y, enemy.home.x, enemy.home.y);
+      const distA = distCoords(a.x, a.y, destX, destY);
+      const distB = distCoords(b.x, b.y, destX, destY);
       return distA - distB;
     });
     
@@ -1441,30 +1519,39 @@ function canEnemyMoveToRetreat(x, y, enemyId) {
 }
 
 /**
- * Snap enemy to home position (used when stuck)
+ * Snap enemy to retreat destination (used when stuck).
+ * Uses retreatTo (unique per enemy) to avoid clumping.
  */
 function snapEnemyToHome(enemy, t) {
-  // Update position in data
-  enemy.x = enemy.home.x;
-  enemy.y = enemy.home.y;
+  // Use retreatTo (unique) or fall back to home
+  const destX = enemy.retreatTo?.x ?? enemy.home?.x ?? enemy.spawnX ?? enemy.x;
+  const destY = enemy.retreatTo?.y ?? enemy.home?.y ?? enemy.spawnY ?? enemy.y;
   
-  // Update DOM element position immediately
+  // Update position in data
+  enemy.x = destX;
+  enemy.y = destY;
+  
+  // Update DOM element position immediately with no tween
   const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (el) {
-    // Disable transition for instant snap
-    el.style.transition = 'none';
+    // Add teleporting class to disable transitions
+    el.classList.add('is-teleporting');
     el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
-    // Force reflow
+    
+    // Force reflow then remove class next frame
     el.offsetHeight;
-    // Re-enable transition
-    el.style.transition = '';
+    requestAnimationFrame(() => {
+      el.classList.remove('is-teleporting');
+      el.classList.remove('retreating');
+    });
   }
   
   finishRetreat(enemy, t);
 }
 
 /**
- * Finish retreat - enemy has arrived home
+ * Finish retreat - enemy has arrived at retreat destination.
+ * Resets state IN PLACE - does NOT remove/recreate the enemy.
  */
 function finishRetreat(enemy, t) {
   enemy.isRetreating = false;
@@ -1472,11 +1559,13 @@ function finishRetreat(enemy, t) {
   enemy.retreatReason = null;
   enemy.retreatStartedAt = null;
   enemy.retreatStuckSince = null;
+  enemy.retreatTo = null; // Clear retreat destination
   
   // Clear combat state
   enemy.targetId = null;
   enemy.isEngaged = false;
   enemy.isAware = false;
+  enemy.pendingAggro = false; // Clear pending aggro flag
   
   // Full heal on arrival
   const finishMax = getMaxHP(enemy);
@@ -2095,6 +2184,13 @@ function updateEnemyPosition(enemy, x, y, forceMove = false) {
   const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (el) {
     el.style.transform = `translate3d(${x * 24}px, ${y * 24}px, 0)`;
+    
+    // Add/remove retreating class for visual feedback
+    if (enemy.isRetreating) {
+      el.classList.add('retreating');
+    } else {
+      el.classList.remove('retreating');
+    }
   }
 }
 
@@ -4240,6 +4336,39 @@ export function tryExecuteCombatIntent() {
     logCombat('Lost target.');
     clearCombatIntent();
     return;
+  }
+  
+  // === GUARDRAIL: Check if target has disengaged ===
+  // If target is retreating, broken off, or unaware after recent disengage,
+  // clear intent immediately and don't chase.
+  const intentTarget = getIntentTarget();
+  if (intentTarget) {
+    // Target is retreating - stop pursuit
+    if (intentTarget.isRetreating) {
+      logCombat('Target disengaged.');
+      clearCombatIntent();
+      autoAttackEnabled = false;
+      inCombat = false;
+      return;
+    }
+    
+    // Target has broken off (anti-re-aggro window) - stop pursuit
+    if (isBrokenOff(intentTarget, now)) {
+      logCombat('Target disengaged.');
+      clearCombatIntent();
+      autoAttackEnabled = false;
+      inCombat = false;
+      return;
+    }
+    
+    // Target has reset to UNAWARE state - stop pursuit (they're no longer in combat)
+    if (intentTarget.state === 'UNAWARE' && !intentTarget.isEngaged && !intentTarget.isAware) {
+      logCombat('Target disengaged.');
+      clearCombatIntent();
+      autoAttackEnabled = false;
+      inCombat = false;
+      return;
+    }
   }
   
   // Throttle retries (prevent spam when immune)
