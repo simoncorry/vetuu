@@ -363,15 +363,15 @@ export function initSpawnDirector(state) {
   if (state.map?.meta?.originalOffset) {
     const ox = state.map.meta.originalOffset.x;
     const oy = state.map.meta.originalOffset.y;
-    // Base center (aligned with scrapTown floor tiles)
+    // Base center (4x scaled base, centered at 56,38)
     baseCenter = { x: 56 + ox, y: 38 + oy };
     
-    // Define base bounds (aligned with floor: 44,29 → 67,46)
+    // Define base bounds (4x scaled: 33,21 → 79,55)
     baseBounds = {
-      minX: 44 + ox,
-      maxX: 67 + ox,
-      minY: 29 + oy,
-      maxY: 46 + oy
+      minX: 33 + ox,
+      maxX: 79 + ox,
+      minY: 21 + oy,
+      maxY: 55 + oy
     };
   }
   
