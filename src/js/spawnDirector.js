@@ -96,7 +96,7 @@ const MAX_PACK_SIZE = 8;        // Maximum enemies per pack
 // STATE
 // ============================================
 let currentState = null;
-let baseCenter = { x: 236, y: 162 };  // Will be set from map offset
+let baseCenter = { x: 236, y: 158 };  // Will be set from map offset (56+180, 38+120)
 let baseBounds = null;
 let baseBuffer = 4;
 let spawners = [];

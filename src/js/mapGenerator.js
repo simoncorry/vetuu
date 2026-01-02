@@ -4,10 +4,25 @@
  * Drycross base centered at (240, 168) in expanded map
  */
 
-// New map center (scaled)
+// Original base center in 120x80 map
+const ORIGINAL_BASE_CENTER = { x: 56, y: 38 };
+
+// Expansion dimensions
+const EXPANDED_WIDTH = 480;
+const EXPANDED_HEIGHT = 320;
+const ORIGINAL_WIDTH = 120;
+const ORIGINAL_HEIGHT = 80;
+
+// Offset to center original map in expanded map
+export const EXPANSION_OFFSET = {
+  x: Math.floor((EXPANDED_WIDTH - ORIGINAL_WIDTH) / 2),   // 180
+  y: Math.floor((EXPANDED_HEIGHT - ORIGINAL_HEIGHT) / 2)  // 120
+};
+
+// Base center in expanded coordinates (56+180, 38+120) = (236, 158)
 export const BASE_CENTER = { 
-  x: Math.floor(120 * 2), // 240 - center of 480 width
-  y: Math.floor(80 * 2)   // 160 - center of 320 height
+  x: ORIGINAL_BASE_CENTER.x + EXPANSION_OFFSET.x,  // 236
+  y: ORIGINAL_BASE_CENTER.y + EXPANSION_OFFSET.y   // 158
 };
 
 // Terrain types for procedural generation
@@ -116,8 +131,9 @@ function getRoadTile(x, y, centerX, centerY) {
  * Generate terrain based on position
  */
 function generateTerrain(x, y, width, height) {
-  const centerX = width / 2;
-  const centerY = height / 2;
+  // Use actual base center, not geometric map center
+  const centerX = BASE_CENTER.x;
+  const centerY = BASE_CENTER.y;
   
   // Check for road first - roads extend to map edges
   const roadTile = getRoadTile(x, y, centerX, centerY);
@@ -191,18 +207,22 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
   const objects = [];
   let id = 20000;
 
-  const centerX = width / 2;
-  const centerY = height / 2;
+  // Use actual base center for distance calculations
+  const centerX = BASE_CENTER.x;
+  const centerY = BASE_CENTER.y;
 
   // Scatter rocks and wrecks in the expanded areas
   for (let i = 0; i < 200; i++) {
     const x = Math.floor(seededRandom(i * 7) * width);
     const y = Math.floor(seededRandom(i * 13) * height);
     
-    // Skip if in original map area or too close to center
+    // Skip if in original map area or too close to base center
     const distFromCenter = Math.hypot(x - centerX, y - centerY);
     if (distFromCenter < 50) continue;
-    if (x >= offsetX && x < offsetX + 120 && y >= offsetY && y < offsetY + 80) continue;
+    if (x >= offsetX && x < offsetX + ORIGINAL_WIDTH && y >= offsetY && y < offsetY + ORIGINAL_HEIGHT) continue;
+    
+    // Skip if on road (within 8 tiles of road center lines)
+    if (Math.abs(x - centerX) <= 8 || Math.abs(y - centerY) <= 8) continue;
 
     const type = seededRandom(i * 31) < 0.6 ? 'junk' : 'wreck';
     objects.push({ id: `scatter_${id++}`, type, x, y, solid: true });
@@ -216,6 +236,9 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
     const distFromCenter = Math.hypot(x - centerX, y - centerY);
     if (distFromCenter < 60) continue;
     if (x < 5 || x > width - 5 || y < 5 || y > height - 5) continue;
+    
+    // Skip if on road
+    if (Math.abs(x - centerX) <= 8 || Math.abs(y - centerY) <= 8) continue;
 
     const type = seededRandom(i * 41) < 0.5 ? 'scrapNode' : 'clothNode';
     objects.push({ 
