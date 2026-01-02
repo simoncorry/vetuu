@@ -79,11 +79,12 @@ function seededRandom(x, y) {
 
 /**
  * Reveal the Drycross base and surrounding area on game start.
- * Uses jagged edges for a natural look.
+ * Uses radial distance with jagged edges for a natural look.
  */
 function revealDrycrossBase(state) {
-  const BASE_BUFFER = 6; // Extra tiles around the base
-  const JAGGED_ZONE = 4; // How many tiles from edge get randomized
+  const CORE_RADIUS = 14;   // Always revealed within this radius
+  const OUTER_RADIUS = 20;  // Max reveal distance (with falloff)
+  const JAGGED_AMOUNT = 3;  // Random variation in radius
   
   // Find Drycross region
   const drycross = state.map.regions?.find(r => r.id === 'region_drycross');
@@ -92,47 +93,46 @@ function revealDrycrossBase(state) {
   // Get map offset for expanded coordinates
   const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
   
-  // Core bounds (always revealed)
-  const core = {
-    x0: drycross.bounds.x0 + offset.x - (BASE_BUFFER - JAGGED_ZONE),
-    y0: drycross.bounds.y0 + offset.y - (BASE_BUFFER - JAGGED_ZONE),
-    x1: drycross.bounds.x1 + offset.x + (BASE_BUFFER - JAGGED_ZONE),
-    y1: drycross.bounds.y1 + offset.y + (BASE_BUFFER - JAGGED_ZONE)
-  };
+  // Calculate center of the region
+  const centerX = Math.floor((drycross.bounds.x0 + drycross.bounds.x1) / 2) + offset.x;
+  const centerY = Math.floor((drycross.bounds.y0 + drycross.bounds.y1) / 2) + offset.y;
   
-  // Outer bounds (with buffer for jagged edges)
-  const outer = {
-    x0: Math.max(0, drycross.bounds.x0 + offset.x - BASE_BUFFER - 2),
-    y0: Math.max(0, drycross.bounds.y0 + offset.y - BASE_BUFFER - 2),
-    x1: Math.min(mapWidth - 1, drycross.bounds.x1 + offset.x + BASE_BUFFER + 2),
-    y1: Math.min(mapHeight - 1, drycross.bounds.y1 + offset.y + BASE_BUFFER + 2)
-  };
+  // Scan area around center
+  const scanRadius = OUTER_RADIUS + JAGGED_AMOUNT + 2;
+  const startX = Math.max(0, centerX - scanRadius);
+  const startY = Math.max(0, centerY - scanRadius);
+  const endX = Math.min(mapWidth - 1, centerX + scanRadius);
+  const endY = Math.min(mapHeight - 1, centerY + scanRadius);
   
-  // Reveal tiles with jagged edges
-  for (let y = outer.y0; y <= outer.y1; y++) {
-    for (let x = outer.x0; x <= outer.x1; x++) {
+  // Reveal tiles with radial falloff and jagged edges
+  for (let y = startY; y <= endY; y++) {
+    for (let x = startX; x <= endX; x++) {
       if (fogMask[y][x]) continue; // Already revealed
       
-      // Calculate distance from core bounds
-      let distFromCore = 0;
-      if (x < core.x0) distFromCore = Math.max(distFromCore, core.x0 - x);
-      if (x > core.x1) distFromCore = Math.max(distFromCore, x - core.x1);
-      if (y < core.y0) distFromCore = Math.max(distFromCore, core.y0 - y);
-      if (y > core.y1) distFromCore = Math.max(distFromCore, y - core.y1);
+      // Calculate distance from center
+      const dist = Math.hypot(x - centerX, y - centerY);
+      
+      // Add per-tile random variation for jagged edges
+      const jitter = (seededRandom(x, y) - 0.5) * 2 * JAGGED_AMOUNT;
+      const effectiveRadius = OUTER_RADIUS + jitter;
       
       // Inside core = always reveal
-      if (distFromCore === 0) {
+      if (dist <= CORE_RADIUS) {
         fogMask[y][x] = true;
         state.runtime.revealedTiles.add(`${x},${y}`);
         continue;
       }
       
-      // In jagged zone = random chance based on distance
-      // Closer to core = higher chance
-      const revealChance = 1 - (distFromCore / (JAGGED_ZONE + 3));
-      if (revealChance > 0 && seededRandom(x, y) < revealChance) {
-        fogMask[y][x] = true;
-        state.runtime.revealedTiles.add(`${x},${y}`);
+      // Between core and outer = chance based on distance
+      if (dist <= effectiveRadius) {
+        const falloffZone = effectiveRadius - CORE_RADIUS;
+        const distInFalloff = dist - CORE_RADIUS;
+        const revealChance = 1 - (distInFalloff / falloffZone);
+        
+        if (seededRandom(x + 100, y + 100) < revealChance) {
+          fogMask[y][x] = true;
+          state.runtime.revealedTiles.add(`${x},${y}`);
+        }
       }
     }
   }
