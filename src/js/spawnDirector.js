@@ -15,6 +15,7 @@ import { distCoords, randomRange } from './utils.js';
 import { AI } from './aiConstants.js';
 import { nowMs } from './time.js';
 import { normalizeHealthKeys, clampHP } from './entityCompat.js';
+import { renderEnemies } from './combat.js';
 
 // ============================================
 // CONSTANTS - DISTANCE RINGS
@@ -386,7 +387,11 @@ export function initSpawnDirector(state) {
   if (spawnTickInterval) clearInterval(spawnTickInterval);
   spawnTickInterval = setInterval(() => spawnDirectorTick(), SPAWN_TICK_MS);
   
-  console.log(`[SpawnDirector] Initialized with ${spawners.length} spawners, base center: (${baseCenter.x}, ${baseCenter.y})`);
+  // Log summary
+  const totalSlots = spawners.reduce((sum, s) => sum + s.slots.length, 0);
+  const validSlots = spawners.reduce((sum, s) => sum + s.slots.filter(sl => sl.spawnX !== null).length, 0);
+  console.log(`[SpawnDirector] Initialized with ${spawners.length} spawners, ${validSlots}/${totalSlots} valid slots`);
+  console.log(`[SpawnDirector] Base center: (${baseCenter.x}, ${baseCenter.y}), Player at: (${currentState.player.x}, ${currentState.player.y})`);
 }
 
 function initializeSpawners(state) {
@@ -425,6 +430,11 @@ function initializeSpawnerSlots(spawner) {
   
   // Find positions for all slots upfront
   const positions = findSlotPositions(spawner, slotCount);
+  
+  if (positions.length === 0 && slotCount > 0) {
+    // Debug: log when a spawner fails to find ANY valid positions
+    console.warn(`[SpawnDirector] Spawner ${spawner.id} at (${spawner.center.x}, ${spawner.center.y}) found 0/${slotCount} positions`);
+  }
   
   for (let i = 0; i < slotCount; i++) {
     const position = positions[i] || null;
@@ -488,10 +498,22 @@ function bootstrapSpawns() {
   console.log(`[SpawnDirector] Bootstrapping ${loadedSpawners.length} spawners in loaded regions...`);
   
   let spawnedCount = 0;
+  let skippedNoSlots = 0;
+  let skippedFlag = 0;
   
   for (const spawner of loadedSpawners) {
     // Check requirements (e.g., Act 3)
-    if (spawner.requires?.flag && !hasFlag(spawner.requires.flag)) continue;
+    if (spawner.requires?.flag && !hasFlag(spawner.requires.flag)) {
+      skippedFlag++;
+      continue;
+    }
+    
+    // Check if spawner has valid slots
+    const validSlots = spawner.slots.filter(s => s.spawnX !== null);
+    if (validSlots.length === 0) {
+      skippedNoSlots++;
+      continue;
+    }
     
     // Fill slots
     const filled = fillSpawnerSlots(spawner, now, { immediate: true });
@@ -499,11 +521,11 @@ function bootstrapSpawns() {
   }
   
   console.log(`[SpawnDirector] Bootstrap complete: ${spawnedCount} enemies spawned`);
+  console.log(`[SpawnDirector] Skipped: ${skippedNoSlots} no valid slots, ${skippedFlag} flag requirements`);
+  console.log(`[SpawnDirector] Active enemies: ${currentState.runtime.activeEnemies.length}`);
   
-  // Render all spawned enemies
-  import('./combat.js').then(combat => {
-    combat.renderEnemies(currentState);
-  });
+  // NOTE: Rendering happens synchronously in game.js after initSpawnDirector returns.
+  // No async import needed here - enemies are already in state.runtime.activeEnemies.
 }
 
 // ============================================
@@ -1040,9 +1062,11 @@ function fillStraySlot(spawner, now, immediate) {
   // Check respawn timer (unless immediate)
   if (!immediate && now < slot.nextRespawnAt) return 0;
   
-  // Check player distance
+  // Check player distance (skip during bootstrap - we WANT a populated world on load)
+  // During bootstrap, only block spawning ON the player (2 tiles)
   const player = currentState.player;
-  if (distCoords(slot.spawnX, slot.spawnY, player.x, player.y) < NO_SPAWN_RADIUS) return 0;
+  const minDist = immediate ? 2 : NO_SPAWN_RADIUS;
+  if (distCoords(slot.spawnX, slot.spawnY, player.x, player.y) < minDist) return 0;
   
   // Spawn enemy
   const enemy = spawnEnemyInSlot(spawner, slot, now);
@@ -1083,11 +1107,13 @@ function fillPackSlots(spawner, now, immediate) {
   const shuffledSlots = [...validSlots].sort(() => Math.random() - 0.5);
   const slotsToUse = shuffledSlots.slice(0, packSize);
   
-  // Check player distance from pack center
+  // Check player distance from pack center (skip during bootstrap - we WANT a populated world)
+  // During bootstrap, only block spawning ON the player (2 tiles)
   const player = currentState.player;
   const avgX = slotsToUse.reduce((sum, s) => sum + s.spawnX, 0) / slotsToUse.length;
   const avgY = slotsToUse.reduce((sum, s) => sum + s.spawnY, 0) / slotsToUse.length;
-  if (distCoords(avgX, avgY, player.x, player.y) < NO_SPAWN_RADIUS) return 0;
+  const minDist = immediate ? 2 : NO_SPAWN_RADIUS;
+  if (distCoords(avgX, avgY, player.x, player.y) < minDist) return 0;
   
   // Generate pack ID
   const packId = `pack_${Math.floor(now)}_${Math.random().toString(36).substr(2, 5)}`;
@@ -1279,9 +1305,7 @@ function spawnDirectorTick() {
   
   // Render new enemies if any spawned
   if (anySpawned) {
-    import('./combat.js').then(combat => {
-      combat.renderEnemies(currentState);
-    });
+    renderEnemies(currentState);
   }
 }
 
@@ -1918,9 +1942,7 @@ function executeSpawnRequests(requests) {
   }
   
   // Render the new enemies
-  import('./combat.js').then(combat => {
-    combat.renderEnemies(currentState);
-  });
+  renderEnemies(currentState);
 }
 
 /**
