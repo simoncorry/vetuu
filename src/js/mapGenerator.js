@@ -80,6 +80,10 @@ export function expandMap(originalMap) {
   const scatteredObjects = generateScatteredFeatures(newWidth, newHeight, offsetX, offsetY);
   expandedObjects.push(...scatteredObjects);
 
+  // Add lamp posts along roads
+  const lampPosts = generateRoadLampPosts(newWidth, newHeight, offsetX, offsetY);
+  expandedObjects.push(...lampPosts);
+
   return {
     meta: {
       ...originalMap.meta,
@@ -98,33 +102,61 @@ export function expandMap(originalMap) {
 const ROAD_TILES = {
   normal: '3',
   worn: 'e',
-  cracked: 'f',
-  missing: '0'  // Reverts to sand
+  cracked: 'f'
 };
+
+// Road dimensions
+const ROAD_MAIN_HALF = 1;      // Main road is 3 tiles wide (center ± 1)
+const ROAD_TOTAL_HALF = 3;    // Total footprint is 7 tiles wide (center ± 3)
 
 /**
  * Check if position is on a road and return appropriate road tile
- * Roads run N-S and E-W through map center
+ * Roads run N-S and E-W through base center
+ * - Inner 3 tiles: main road surface with weathering
+ * - Outer 2 tiles each side: debris zone (mostly empty with scattered road chunks)
  */
 function getRoadTile(x, y, centerX, centerY) {
-  const roadHalfWidth = 1;
-  const isOnVerticalRoad = Math.abs(x - centerX) <= roadHalfWidth;
-  const isOnHorizontalRoad = Math.abs(y - centerY) <= roadHalfWidth;
+  const distToVertical = Math.abs(x - centerX);
+  const distToHorizontal = Math.abs(y - centerY);
   
-  if (!isOnVerticalRoad && !isOnHorizontalRoad) {
+  const onVerticalRoad = distToVertical <= ROAD_TOTAL_HALF;
+  const onHorizontalRoad = distToHorizontal <= ROAD_TOTAL_HALF;
+  
+  if (!onVerticalRoad && !onHorizontalRoad) {
     return null;
   }
   
-  // Apply weathering effect
+  // Determine if we're on main road or debris zone
+  const onMainVertical = distToVertical <= ROAD_MAIN_HALF;
+  const onMainHorizontal = distToHorizontal <= ROAD_MAIN_HALF;
+  const onMainRoad = onMainVertical || onMainHorizontal;
+  
   const rand = seededRandom(x * 1000 + y);
-  if (rand < 0.06) {
-    return ROAD_TILES.missing;
-  } else if (rand < 0.18) {
-    return ROAD_TILES.worn;
-  } else if (rand < 0.26) {
-    return ROAD_TILES.cracked;
+  const rand2 = seededRandom(x * 7777 + y * 3333);
+  
+  if (onMainRoad) {
+    // Main road surface - mostly intact with weathering
+    if (rand < 0.08) {
+      // 8% completely missing - world bg shows through
+      return null;
+    } else if (rand < 0.20) {
+      return ROAD_TILES.worn;
+    } else if (rand < 0.30) {
+      return ROAD_TILES.cracked;
+    }
+    return ROAD_TILES.normal;
+  } else {
+    // Debris zone - mostly empty with scattered road chunks
+    if (rand < 0.15) {
+      // 15% chance of debris tile
+      if (rand2 < 0.5) {
+        return ROAD_TILES.cracked;
+      }
+      return ROAD_TILES.worn;
+    }
+    // 85% show world terrain
+    return null;
   }
-  return ROAD_TILES.normal;
 }
 
 /**
@@ -221,8 +253,8 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
     if (distFromCenter < 50) continue;
     if (x >= offsetX && x < offsetX + ORIGINAL_WIDTH && y >= offsetY && y < offsetY + ORIGINAL_HEIGHT) continue;
     
-    // Skip if on road (within 8 tiles of road center lines)
-    if (Math.abs(x - centerX) <= 8 || Math.abs(y - centerY) <= 8) continue;
+    // Skip if on road footprint (7 tiles wide = 3 from center + buffer)
+    if (Math.abs(x - centerX) <= ROAD_TOTAL_HALF + 2 || Math.abs(y - centerY) <= ROAD_TOTAL_HALF + 2) continue;
 
     const type = seededRandom(i * 31) < 0.6 ? 'junk' : 'wreck';
     objects.push({ id: `scatter_${id++}`, type, x, y, solid: true });
@@ -237,8 +269,8 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
     if (distFromCenter < 60) continue;
     if (x < 5 || x > width - 5 || y < 5 || y > height - 5) continue;
     
-    // Skip if on road
-    if (Math.abs(x - centerX) <= 8 || Math.abs(y - centerY) <= 8) continue;
+    // Skip if on road footprint
+    if (Math.abs(x - centerX) <= ROAD_TOTAL_HALF + 2 || Math.abs(y - centerY) <= ROAD_TOTAL_HALF + 2) continue;
 
     const type = seededRandom(i * 41) < 0.5 ? 'scrapNode' : 'clothNode';
     objects.push({ 
@@ -251,6 +283,119 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
     });
   }
 
+  return objects;
+}
+
+/**
+ * Generate lamp posts along roads at random intervals
+ * Lamps are placed on the outermost tiles of the road footprint (±3 from center)
+ */
+function generateRoadLampPosts(width, height, offsetX, offsetY) {
+  const objects = [];
+  let id = 30000;
+  
+  const centerX = BASE_CENTER.x;
+  const centerY = BASE_CENTER.y;
+  const lampOffset = ROAD_TOTAL_HALF; // Place on outermost tile (3 tiles from center)
+  
+  // Average spacing between lamps (tiles)
+  const LAMP_SPACING_MIN = 12;
+  const LAMP_SPACING_MAX = 20;
+  
+  // Skip areas
+  const borderBuffer = 10;
+  const baseBuffer = 40; // Don't place lamps too close to base
+  
+  // Vertical road (N-S) - place lamps on left and right sides
+  let nextLampY = borderBuffer;
+  while (nextLampY < height - borderBuffer) {
+    const distFromBase = Math.abs(nextLampY - centerY);
+    
+    // Skip if too close to base
+    if (distFromBase > baseBuffer) {
+      // Skip if in original map area
+      const inOriginal = nextLampY >= offsetY && nextLampY < offsetY + ORIGINAL_HEIGHT;
+      
+      if (!inOriginal) {
+        const rand = seededRandom(nextLampY * 777);
+        
+        // Place lamp on left side (west)
+        if (rand < 0.7) { // 70% chance
+          objects.push({
+            id: `lamp_road_${id++}`,
+            type: 'lamp',
+            x: centerX - lampOffset,
+            y: nextLampY,
+            solid: true,
+            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+          });
+        }
+        
+        // Place lamp on right side (east) - offset so not directly across
+        const randRight = seededRandom(nextLampY * 888 + 500);
+        if (randRight < 0.7) {
+          objects.push({
+            id: `lamp_road_${id++}`,
+            type: 'lamp',
+            x: centerX + lampOffset,
+            y: nextLampY + Math.floor(seededRandom(nextLampY * 999) * 6) - 3,
+            solid: true,
+            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+          });
+        }
+      }
+    }
+    
+    // Random spacing to next lamp
+    const spacing = LAMP_SPACING_MIN + Math.floor(seededRandom(nextLampY * 123) * (LAMP_SPACING_MAX - LAMP_SPACING_MIN));
+    nextLampY += spacing;
+  }
+  
+  // Horizontal road (E-W) - place lamps on top and bottom sides
+  let nextLampX = borderBuffer;
+  while (nextLampX < width - borderBuffer) {
+    const distFromBase = Math.abs(nextLampX - centerX);
+    
+    // Skip if too close to base
+    if (distFromBase > baseBuffer) {
+      // Skip if in original map area
+      const inOriginal = nextLampX >= offsetX && nextLampX < offsetX + ORIGINAL_WIDTH;
+      
+      if (!inOriginal) {
+        const rand = seededRandom(nextLampX * 555);
+        
+        // Place lamp on top side (north)
+        if (rand < 0.7) {
+          objects.push({
+            id: `lamp_road_${id++}`,
+            type: 'lamp',
+            x: nextLampX,
+            y: centerY - lampOffset,
+            solid: true,
+            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+          });
+        }
+        
+        // Place lamp on bottom side (south)
+        const randBottom = seededRandom(nextLampX * 666 + 500);
+        if (randBottom < 0.7) {
+          objects.push({
+            id: `lamp_road_${id++}`,
+            type: 'lamp',
+            x: nextLampX + Math.floor(seededRandom(nextLampX * 444) * 6) - 3,
+            y: centerY + lampOffset,
+            solid: true,
+            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+          });
+        }
+      }
+    }
+    
+    // Random spacing to next lamp
+    const spacing = LAMP_SPACING_MIN + Math.floor(seededRandom(nextLampX * 321) * (LAMP_SPACING_MAX - LAMP_SPACING_MIN));
+    nextLampX += spacing;
+  }
+  
   return objects;
 }
 
