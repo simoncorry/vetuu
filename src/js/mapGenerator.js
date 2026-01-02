@@ -289,6 +289,7 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
 /**
  * Generate lamp posts along roads at random intervals
  * Lamps are placed on the outermost tiles of the road footprint (±3 from center)
+ * Lamps alternate sides: left, right, left, right...
  */
 function generateRoadLampPosts(width, height, offsetX, offsetY) {
   const objects = [];
@@ -304,46 +305,34 @@ function generateRoadLampPosts(width, height, offsetX, offsetY) {
   
   // Skip areas
   const borderBuffer = 10;
-  const baseBuffer = 40; // Don't place lamps too close to base
+  const baseBuffer = 4; // Place lamps right up to base walls
   
-  // Vertical road (N-S) - place lamps on left and right sides
+  // Base bounds in expanded coordinates
+  const baseMinY = offsetY + 19;  // Original base y bounds
+  const baseMaxY = offsetY + 57;
+  const baseMinX = offsetX + 31;  // Original base x bounds
+  const baseMaxX = offsetX + 81;
+  
+  // Vertical road (N-S) - alternate between left and right sides
   let nextLampY = borderBuffer;
+  let verticalSide = -1; // Start on left side (-1 = left, +1 = right)
+  
   while (nextLampY < height - borderBuffer) {
-    const distFromBase = Math.abs(nextLampY - centerY);
+    // Skip if inside base area (with buffer)
+    const inBaseArea = nextLampY >= baseMinY - baseBuffer && nextLampY <= baseMaxY + baseBuffer;
     
-    // Skip if too close to base
-    if (distFromBase > baseBuffer) {
-      // Skip if in original map area
-      const inOriginal = nextLampY >= offsetY && nextLampY < offsetY + ORIGINAL_HEIGHT;
+    if (!inBaseArea) {
+      objects.push({
+        id: `lamp_road_${id++}`,
+        type: 'lamp',
+        x: centerX + (lampOffset * verticalSide),
+        y: nextLampY,
+        solid: true,
+        light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+      });
       
-      if (!inOriginal) {
-        const rand = seededRandom(nextLampY * 777);
-        
-        // Place lamp on left side (west)
-        if (rand < 0.7) { // 70% chance
-          objects.push({
-            id: `lamp_road_${id++}`,
-            type: 'lamp',
-            x: centerX - lampOffset,
-            y: nextLampY,
-            solid: true,
-            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
-          });
-        }
-        
-        // Place lamp on right side (east) - offset so not directly across
-        const randRight = seededRandom(nextLampY * 888 + 500);
-        if (randRight < 0.7) {
-          objects.push({
-            id: `lamp_road_${id++}`,
-            type: 'lamp',
-            x: centerX + lampOffset,
-            y: nextLampY + Math.floor(seededRandom(nextLampY * 999) * 6) - 3,
-            solid: true,
-            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
-          });
-        }
-      }
+      // Alternate side for next lamp
+      verticalSide *= -1;
     }
     
     // Random spacing to next lamp
@@ -351,44 +340,26 @@ function generateRoadLampPosts(width, height, offsetX, offsetY) {
     nextLampY += spacing;
   }
   
-  // Horizontal road (E-W) - place lamps on top and bottom sides
+  // Horizontal road (E-W) - alternate between top and bottom sides
   let nextLampX = borderBuffer;
+  let horizontalSide = -1; // Start on top side (-1 = top, +1 = bottom)
+  
   while (nextLampX < width - borderBuffer) {
-    const distFromBase = Math.abs(nextLampX - centerX);
+    // Skip if inside base area (with buffer)
+    const inBaseArea = nextLampX >= baseMinX - baseBuffer && nextLampX <= baseMaxX + baseBuffer;
     
-    // Skip if too close to base
-    if (distFromBase > baseBuffer) {
-      // Skip if in original map area
-      const inOriginal = nextLampX >= offsetX && nextLampX < offsetX + ORIGINAL_WIDTH;
+    if (!inBaseArea) {
+      objects.push({
+        id: `lamp_road_${id++}`,
+        type: 'lamp',
+        x: nextLampX,
+        y: centerY + (lampOffset * horizontalSide),
+        solid: true,
+        light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+      });
       
-      if (!inOriginal) {
-        const rand = seededRandom(nextLampX * 555);
-        
-        // Place lamp on top side (north)
-        if (rand < 0.7) {
-          objects.push({
-            id: `lamp_road_${id++}`,
-            type: 'lamp',
-            x: nextLampX,
-            y: centerY - lampOffset,
-            solid: true,
-            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
-          });
-        }
-        
-        // Place lamp on bottom side (south)
-        const randBottom = seededRandom(nextLampX * 666 + 500);
-        if (randBottom < 0.7) {
-          objects.push({
-            id: `lamp_road_${id++}`,
-            type: 'lamp',
-            x: nextLampX + Math.floor(seededRandom(nextLampX * 444) * 6) - 3,
-            y: centerY + lampOffset,
-            solid: true,
-            light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
-          });
-        }
-      }
+      // Alternate side for next lamp
+      horizontalSide *= -1;
     }
     
     // Random spacing to next lamp
