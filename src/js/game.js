@@ -809,6 +809,37 @@ let lightingTileSize = 24;
 let cameraX = 0;
 let cameraY = 0;
 
+// Torch position interpolation for smooth movement
+let torchAnim = {
+  startX: 0,
+  startY: 0,
+  targetX: 0,
+  targetY: 0,
+  startTime: 0,
+  duration: 200,
+  currentX: 0,
+  currentY: 0
+};
+
+function startTorchMovement(targetX, targetY, duration) {
+  torchAnim.startX = torchAnim.currentX;
+  torchAnim.startY = torchAnim.currentY;
+  torchAnim.targetX = (targetX + 0.5) * lightingTileSize;
+  torchAnim.targetY = (targetY + 0.5) * lightingTileSize;
+  torchAnim.startTime = performance.now();
+  torchAnim.duration = duration;
+}
+
+function updateTorchPosition() {
+  const now = performance.now();
+  const elapsed = now - torchAnim.startTime;
+  const t = Math.min(1, elapsed / torchAnim.duration);
+  
+  // Linear interpolation (matches CSS transition linear)
+  torchAnim.currentX = torchAnim.startX + (torchAnim.targetX - torchAnim.startX) * t;
+  torchAnim.currentY = torchAnim.startY + (torchAnim.targetY - torchAnim.startY) * t;
+}
+
 function initLightingCanvas(gameState) {
   const world = document.getElementById('world');
   if (!world) return;
@@ -852,6 +883,12 @@ function initLightingCanvas(gameState) {
       color: obj.light.color || '#FFE4B5',
       intensity: obj.light.intensity || 0.8
     }));
+  
+  // Initialize torch position
+  torchAnim.currentX = (state.player.x + 0.5) * lightingTileSize;
+  torchAnim.currentY = (state.player.y + 0.5) * lightingTileSize;
+  torchAnim.targetX = torchAnim.currentX;
+  torchAnim.targetY = torchAnim.currentY;
   
   // Create DOM-based player torch (follows player with CSS transitions)
   createPlayerTorch();
@@ -1037,8 +1074,10 @@ function updateLighting() {
   }
   
   // Draw player torch on canvas (actually cuts through darkness)
-  const playerX = (state.player.x + 0.5) * lightingTileSize;
-  const playerY = (state.player.y + 0.5) * lightingTileSize;
+  // Use interpolated position for smooth movement
+  updateTorchPosition();
+  const playerX = torchAnim.currentX;
+  const playerY = torchAnim.currentY;
   const torchBaseRadius = 4 * lightingTileSize;
   const torchIntensity = nightIntensity * 0.9;
   
@@ -1106,10 +1145,8 @@ function gameLoop() {
   // Update day/night cycle
   updateDayCycle();
   
-  // Update canvas lighting (throttle to every 3 frames for performance)
-  if (state.tick % 3 === 0) {
-    updateLighting();
-  }
+  // Update canvas lighting every frame for smooth torch movement
+  updateLighting();
   
   requestAnimationFrame(gameLoop);
 }
@@ -1241,7 +1278,8 @@ async function init() {
       onMoveComplete: onMoveComplete,
       onMoveStart: (x, y, duration) => {
         updateCamera(state, duration); // Update camera at start so both transitions sync
-        syncTorchPosition(); // Sync torch position for smooth movement
+        syncTorchPosition(); // Sync DOM torch position
+        startTorchMovement(x, y, duration); // Start canvas torch interpolation
       },
       onInteract: interact
     });
