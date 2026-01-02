@@ -385,6 +385,9 @@ export function finishResetAtHome(enemy, t = nowMs()) {
   enemy.isEngaged = false;
   enemy.isAware = false;
   enemy.pendingAggro = false;
+  
+  // Clear death-handling flag (prevents immortal enemies on reset)
+  enemy._deathHandled = false;
 
   // Full heal on home arrival (support both maxHP and maxHp casing)
   const maxHp = enemy.maxHp ?? enemy.maxHP;

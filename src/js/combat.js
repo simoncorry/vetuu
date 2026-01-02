@@ -1050,13 +1050,10 @@ function acquireClosestEnemyInRange({ maxRange, requireLOS = false }) {
   const player = currentState.player;
   const enemies = currentState.runtime.activeEnemies || [];
   
-  // Filter to valid candidates
+  // Filter to valid candidates using centralized validity check
   const candidates = enemies.filter(e => {
-    // Must be alive
-    if (e.hp <= 0) return false;
-    
-    // Skip retreating enemies
-    if (e.isRetreating) return false;
+    // Use centralized validity check (dead, retreating, broken_off)
+    if (isInvalidCombatTarget(e).invalid) return false;
     
     // Check distance
     const dist = distCoords(player.x, player.y, e.x, e.y);
@@ -4296,7 +4293,8 @@ function isInvalidCombatTarget(enemy, t = nowMs()) {
  * Timer-gated: attacks occur every BASIC_ATTACK_CD_MS (1.5s shared cadence).
  */
 function setAutoAttackIntent(target) {
-  if (!target || target.hp <= 0) return;
+  // Use centralized validity check
+  if (isInvalidCombatTarget(target).invalid) return;
   
   const weapon = WEAPONS[currentWeapon];
   const basic = weapon?.basic;
@@ -4330,7 +4328,8 @@ function setAutoAttackIntent(target) {
  * One-shot: clears after successful execution.
  */
 function setWeaponAbilityIntent(slot, target) {
-  if (!target || target.hp <= 0) return;
+  // Use centralized validity check
+  if (isInvalidCombatTarget(target).invalid) return;
   
   const weapon = WEAPONS[currentWeapon];
   const ability = weapon?.abilities?.[slot];
@@ -4703,7 +4702,19 @@ function executeWeaponAbilityIntent(now) {
   // Execute the ability
   executeWeaponAbilityDirect(intentSlot);
   
-  // Resume auto-attack if it was enabled (ability fired, now return to basic attacks)
+  // ============================================
+  // ABILITY WEAVING DESIGN CHOICE
+  // ============================================
+  // After a weapon ability, we immediately resume auto-attack with a FRESH intent.
+  // This means nextAttackAt = 0, allowing an instant basic attack after the ability.
+  // 
+  // This is INTENTIONAL "ability weaving" - rewarding players who time abilities well.
+  // The flow is: basic attack → ability → instant basic attack → normal 1.5s cadence
+  // 
+  // If you want SWING TIMER PRESERVATION instead (no instant attack after ability):
+  // 1. Before clearCombatIntent(), snapshot: const savedNextAttackAt = combatIntent?.nextAttackAt
+  // 2. After setAutoAttackIntent(), restore: combatIntent.nextAttackAt = savedNextAttackAt
+  // ============================================
   if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
     setAutoAttackIntent(currentTarget);
   }
