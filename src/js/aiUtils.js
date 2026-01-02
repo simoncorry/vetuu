@@ -178,48 +178,23 @@ export function setOnEnemyDisengageCallback(callback) {
 
 /**
  * Get a unique retreat destination for an enemy.
- * Avoids clumping by using individual spawn positions with offsets.
+ * 
+ * STABILITY: Always returns enemy's authoritative spawn point (spawnX/spawnY).
+ * With the new spawn footprint system, each enemy has a unique 3×3 block,
+ * so we should NEVER need to search for a fallback position.
+ * 
  * @param {object} enemy - The enemy retreating
- * @param {object} state - Game state (for collision checks)
- * @param {function} canMoveToFn - Collision check function
- * @returns {{x: number, y: number}} - Retreat destination
+ * @param {object} _state - Game state (unused with new footprint system)
+ * @param {function} _canMoveToFn - Collision check function (unused)
+ * @returns {{x: number, y: number}} - Retreat destination (always enemy's spawn point)
  */
-export function getRetreatDestination(enemy, state, canMoveToFn) {
-  // Default: use enemy's individual spawn point
-  const baseX = enemy.spawnX ?? enemy.home?.x ?? enemy.x;
-  const baseY = enemy.spawnY ?? enemy.home?.y ?? enemy.y;
-  
-  // If no collision check function, just return base position
-  if (!canMoveToFn) {
-    return { x: baseX, y: baseY };
-  }
-  
-  // Check if base position is valid and unoccupied
-  if (canMoveToFn(state, baseX, baseY) && !isTileOccupiedByOther(state, baseX, baseY, enemy.id)) {
-    return { x: baseX, y: baseY };
-  }
-  
-  // Spiral search for nearest free tile around base position
-  const maxSearchRadius = 6;
-  for (let radius = 1; radius <= maxSearchRadius; radius++) {
-    // Check tiles in a ring pattern
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        // Only check perimeter tiles
-        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
-        
-        const testX = baseX + dx;
-        const testY = baseY + dy;
-        
-        if (canMoveToFn(state, testX, testY) && !isTileOccupiedByOther(state, testX, testY, enemy.id)) {
-          return { x: testX, y: testY };
-        }
-      }
-    }
-  }
-  
-  // Fallback to base position if nothing found
-  return { x: baseX, y: baseY };
+export function getRetreatDestination(enemy, _state, _canMoveToFn) {
+  // ALWAYS use enemy's authoritative spawn point (unique per enemy from spawn footprint)
+  // The spawn footprint system guarantees this is a valid, reserved position
+  return {
+    x: enemy.spawnX ?? enemy.home?.x ?? enemy.x,
+    y: enemy.spawnY ?? enemy.home?.y ?? enemy.y
+  };
 }
 
 /**
@@ -242,10 +217,10 @@ function isTileOccupiedByOther(state, x, y, excludeId) {
  * @param {object} enemy - The enemy to retreat
  * @param {number} t - Current time in ms
  * @param {string} reason - Why retreating: 'leash', 'guards', 'lost', 'pack'
- * @param {object} state - Game state (optional, for retreat destination calculation)
- * @param {function} canMoveToFn - Collision check function (optional)
+ * @param {object} _state - Game state (unused with new footprint system)
+ * @param {function} _canMoveToFn - Collision check function (unused)
  */
-export function startRetreat(enemy, t = nowMs(), reason = 'leash', state = null, canMoveToFn = null) {
+export function startRetreat(enemy, t = nowMs(), reason = 'leash', _state = null, _canMoveToFn = null) {
   // Already retreating? Just update reason if more urgent
   if (enemy.isRetreating) {
     if (reason === 'guards') {
@@ -263,16 +238,13 @@ export function startRetreat(enemy, t = nowMs(), reason = 'leash', state = null,
   enemy.isEngaged = false;
   enemy.isAware = false;
 
-  // Calculate unique retreat destination
-  if (state && canMoveToFn) {
-    enemy.retreatTo = getRetreatDestination(enemy, state, canMoveToFn);
-  } else {
-    // Fallback to home or spawn position
-    enemy.retreatTo = {
-      x: enemy.home?.x ?? enemy.spawnX ?? enemy.x,
-      y: enemy.home?.y ?? enemy.spawnY ?? enemy.y
-    };
-  }
+  // CRITICAL: Retreat destination is ALWAYS enemy's authoritative spawn point (unique per enemy)
+  // With the spawn footprint system, this is guaranteed to be valid and exclusive
+  // Do NOT dynamically recompute - this causes the "teleporting" issues
+  enemy.retreatTo = {
+    x: enemy.spawnX ?? enemy.home?.x ?? enemy.x,
+    y: enemy.spawnY ?? enemy.home?.y ?? enemy.y
+  };
 
   // Prevent instant re-aggro loops
   // Guards get extra time to prevent pinball
@@ -524,15 +496,16 @@ export function checkPackLeash(packId, enemies, maxExcessTiles = 5) {
 export function initEnemyAI(enemy, spawner = null) {
   const t = nowMs();
   
-  // Home point
-  enemy.home = enemy.home || { 
-    x: spawner?.center?.x ?? enemy.x, 
-    y: spawner?.center?.y ?? enemy.y 
-  };
+  // Spawn point (for reference) - set BEFORE home so home can use it
+  enemy.spawnX = enemy.spawnX ?? enemy.x;
+  enemy.spawnY = enemy.spawnY ?? enemy.y;
   
-  // Spawn point (for reference)
-  enemy.spawnX = enemy.x;
-  enemy.spawnY = enemy.y;
+  // Home point - prioritize per-enemy spawn position over shared spawner center
+  // This ensures unique retreat destinations
+  enemy.home = enemy.home || { 
+    x: enemy.spawnX ?? spawner?.center?.x ?? enemy.x, 
+    y: enemy.spawnY ?? spawner?.center?.y ?? enemy.y 
+  };
   
   // Ranges (spawner can override)
   enemy.leashRadius = enemy.leashRadius ?? spawner?.leashRadius ?? AI.DEFAULT_LEASH_RADIUS;

@@ -1340,10 +1340,11 @@ function initEnemyAIFields(enemy) {
   enemy.outOfRangeSince = null;
   
   // Set home if not set
+  // CRITICAL: Use spawnX/spawnY (per-enemy unique) NOT homeCenter (shared pack center)
   if (!enemy.home) {
     enemy.home = {
-      x: enemy.homeCenter?.x ?? enemy.spawnX ?? enemy.x,
-      y: enemy.homeCenter?.y ?? enemy.spawnY ?? enemy.y
+      x: enemy.spawnX ?? enemy.homeCenter?.x ?? enemy.x,
+      y: enemy.spawnY ?? enemy.homeCenter?.y ?? enemy.y
     };
   }
   
@@ -1403,20 +1404,26 @@ function regenAtHome(enemy, t) {
 
 /**
  * Handle enemy retreat state - move toward retreat destination, heal, and finish when arrived.
- * Uses retreatTo (unique per enemy) instead of shared home to avoid clumping.
+ * 
+ * STABILITY RULES:
+ * 1. Retreat destination is ALWAYS enemy.spawnX/spawnY (never recomputed dynamically)
+ * 2. Arrival is EXACT grid match (enemy.x === retreatTo.x && enemy.y === retreatTo.y)
+ * 3. Movement is CLAMPED to 1 tile per move step (no multi-tile jumps)
+ * 4. Timeout snap is LAST RESORT only (uses unique spawnX/spawnY, not shared home)
  */
 function handleRetreatState(enemy, t) {
-  // Ensure retreat destination exists (use retreatTo, fall back to home/spawn)
+  // CRITICAL: Retreat destination is per-enemy spawn point (never shared, never recomputed)
+  // This is set ONCE when retreat starts and should not change
   if (!enemy.retreatTo) {
+    // Use authoritative spawn position (unique per enemy from spawn footprint)
     enemy.retreatTo = {
-      x: enemy.home?.x ?? enemy.spawnX ?? enemy.x,
-      y: enemy.home?.y ?? enemy.spawnY ?? enemy.y
+      x: enemy.spawnX ?? enemy.home?.x ?? enemy.x,
+      y: enemy.spawnY ?? enemy.home?.y ?? enemy.y
     };
   }
   
   const destX = enemy.retreatTo.x;
   const destY = enemy.retreatTo.y;
-  const distToDest = distCoords(enemy.x, enemy.y, destX, destY);
   
   // Heal while retreating (15% per second = 1.5% per 100ms tick)
   const retreatMax = getMaxHP(enemy);
@@ -1427,13 +1434,13 @@ function handleRetreatState(enemy, t) {
     updateEnemyHealthBar(enemy);
   }
   
-  // Check if arrived at retreat destination (within 1.5 tiles)
-  if (distToDest <= 1.5) {
+  // CRITICAL: Arrival is EXACT grid match (prevents "close enough" snapping)
+  if (enemy.x === destX && enemy.y === destY) {
     finishRetreat(enemy, t);
     return;
   }
   
-  // Check if stuck too long - snap as last resort
+  // Check if stuck too long - snap as LAST RESORT only
   const retreatDur = t - (enemy.retreatStartedAt ?? t);
   if (retreatDur > AI.RETREAT_TIMEOUT_MS) {
     snapEnemyToHome(enemy, t);
@@ -1444,29 +1451,41 @@ function handleRetreatState(enemy, t) {
   const moveCD = 320; // Faster than normal
   if (!isExpired(enemy.moveCooldown, t)) return;
   
+  // CRITICAL: Movement is EXACTLY 1 tile per step (dx and dy are -1, 0, or 1)
   const dx = Math.sign(destX - enemy.x);
   const dy = Math.sign(destY - enemy.y);
   
-  // Try to move - allow movement even through normal restrictions during retreat
   let moved = false;
   
-  // Try diagonal first
-  if (dx !== 0 && dy !== 0 && canEnemyMoveToRetreat(enemy.x + dx, enemy.y + dy, enemy.id)) {
-    updateEnemyPosition(enemy, enemy.x + dx, enemy.y + dy);
-    moved = true;
-  } 
-  // Try horizontal
-  else if (dx !== 0 && canEnemyMoveToRetreat(enemy.x + dx, enemy.y, enemy.id)) {
-    updateEnemyPosition(enemy, enemy.x + dx, enemy.y);
-    moved = true;
-  } 
-  // Try vertical
-  else if (dy !== 0 && canEnemyMoveToRetreat(enemy.x, enemy.y + dy, enemy.id)) {
-    updateEnemyPosition(enemy, enemy.x, enemy.y + dy);
-    moved = true;
+  // Try cardinal directions first (more predictable pathing)
+  // Priority: direct line to goal, then fallback
+  if (dx !== 0 && dy === 0) {
+    // Pure horizontal movement needed
+    if (canEnemyMoveToRetreat(enemy.x + dx, enemy.y, enemy.id)) {
+      updateEnemyPosition(enemy, enemy.x + dx, enemy.y);
+      moved = true;
+    }
+  } else if (dx === 0 && dy !== 0) {
+    // Pure vertical movement needed
+    if (canEnemyMoveToRetreat(enemy.x, enemy.y + dy, enemy.id)) {
+      updateEnemyPosition(enemy, enemy.x, enemy.y + dy);
+      moved = true;
+    }
+  } else if (dx !== 0 && dy !== 0) {
+    // Diagonal movement needed - try horizontal first, then vertical, then diagonal
+    if (canEnemyMoveToRetreat(enemy.x + dx, enemy.y, enemy.id)) {
+      updateEnemyPosition(enemy, enemy.x + dx, enemy.y);
+      moved = true;
+    } else if (canEnemyMoveToRetreat(enemy.x, enemy.y + dy, enemy.id)) {
+      updateEnemyPosition(enemy, enemy.x, enemy.y + dy);
+      moved = true;
+    } else if (canEnemyMoveToRetreat(enemy.x + dx, enemy.y + dy, enemy.id)) {
+      updateEnemyPosition(enemy, enemy.x + dx, enemy.y + dy);
+      moved = true;
+    }
   }
   
-  // If can't move normally, try any adjacent tile closer to destination
+  // If can't move toward goal, try any adjacent tile closer to destination
   if (!moved) {
     const adjacentMoves = [
       { x: enemy.x + 1, y: enemy.y },
@@ -1483,7 +1502,10 @@ function handleRetreatState(enemy, t) {
     });
     
     for (const pos of adjacentMoves) {
-      if (canEnemyMoveToRetreat(pos.x, pos.y, enemy.id)) {
+      // Only move if it gets us closer
+      const currentDist = distCoords(enemy.x, enemy.y, destX, destY);
+      const newDist = distCoords(pos.x, pos.y, destX, destY);
+      if (newDist < currentDist && canEnemyMoveToRetreat(pos.x, pos.y, enemy.id)) {
         updateEnemyPosition(enemy, pos.x, pos.y);
         moved = true;
         break;
@@ -1494,7 +1516,7 @@ function handleRetreatState(enemy, t) {
   // Track if stuck
   if (!moved) {
     enemy.retreatStuckSince = enemy.retreatStuckSince ?? t;
-    // If stuck for 2 seconds, snap
+    // If stuck for 2 seconds, snap (last resort)
     if (t - enemy.retreatStuckSince > 2000) {
       snapEnemyToHome(enemy, t);
       return;
@@ -1533,13 +1555,14 @@ function canEnemyMoveToRetreat(x, y, enemyId) {
 }
 
 /**
- * Snap enemy to retreat destination (used when stuck).
- * Uses retreatTo (unique per enemy) to avoid clumping.
+ * Snap enemy to retreat destination (used when stuck as LAST RESORT).
+ * Uses unique spawnX/spawnY to avoid clumping at shared locations.
  */
 function snapEnemyToHome(enemy, t) {
-  // Use retreatTo (unique) or fall back to home
-  const destX = enemy.retreatTo?.x ?? enemy.home?.x ?? enemy.spawnX ?? enemy.x;
-  const destY = enemy.retreatTo?.y ?? enemy.home?.y ?? enemy.spawnY ?? enemy.y;
+  // CRITICAL: Use retreatTo if set (already unique), else use authoritative spawn point
+  // Priority: retreatTo > spawnX/spawnY > home > current position
+  const destX = enemy.retreatTo?.x ?? enemy.spawnX ?? enemy.home?.x ?? enemy.x;
+  const destY = enemy.retreatTo?.y ?? enemy.spawnY ?? enemy.home?.y ?? enemy.y;
   
   // Update position in data
   enemy.x = destX;
@@ -1739,10 +1762,17 @@ function aiIdle(enemy, now, weapon) {
   const newX = enemy.x + dir.dx;
   const newY = enemy.y + dir.dy;
   
-  // Don't wander too far from spawn point
+  // Stay within 3×3 footprint (soft personal space)
+  // With spawn footprint system, enemy's spawn point is center of their exclusive 3×3 block
+  // They should wander at most 1 tile from center (stays inside footprint)
   if (enemy.spawnX !== undefined && enemy.spawnY !== undefined) {
-    const distFromSpawn = distCoords(newX, newY, enemy.spawnX, enemy.spawnY);
-    if (distFromSpawn > 4) {
+    const distFromSpawn = Math.max(
+      Math.abs(newX - enemy.spawnX),
+      Math.abs(newY - enemy.spawnY)
+    );
+    
+    // Stay within footprint (Chebyshev distance <= 1 for 3×3 block)
+    if (distFromSpawn > 1) {
       // Move back toward spawn instead
       const toSpawnX = Math.sign(enemy.spawnX - enemy.x);
       const toSpawnY = Math.sign(enemy.spawnY - enemy.y);

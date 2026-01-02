@@ -64,6 +64,14 @@ const ACT3_MODIFIERS = {
 };
 
 // ============================================
+// SPAWN BLOCK CONSTANTS
+// ============================================
+const BLOCK_SIZE = 3;           // 3×3 tiles per spawn footprint
+const BLOCK_STRIDE = 3;         // Block spacing (could use 4 for 1-tile buffer)
+const MIN_PACK_SIZE = 2;        // Minimum enemies per pack
+const MAX_PACK_SIZE = 8;        // Maximum enemies per pack
+
+// ============================================
 // STATE
 // ============================================
 let currentState = null;
@@ -73,6 +81,89 @@ let baseBuffer = 4;
 let spawners = [];
 let lastPickedSpawnerId = null;
 let spawnTickInterval = null;
+
+// ============================================
+// TILE RESERVATION SYSTEM
+// ============================================
+// Tracks all reserved tiles (spawn footprints)
+// Key format: "x,y"
+const reservedTiles = new Set();
+
+/**
+ * Check if a tile is reserved by any enemy's spawn footprint.
+ */
+function isReserved(x, y) {
+  return reservedTiles.has(`${x},${y}`);
+}
+
+/**
+ * Get all 9 tiles in a 3×3 block centered at (cx, cy).
+ * @returns {Array<{x: number, y: number}>} Array of 9 tile positions
+ */
+function getBlockTiles(cx, cy) {
+  const tiles = [];
+  const half = Math.floor(BLOCK_SIZE / 2); // 1 for 3×3
+  for (let dy = -half; dy <= half; dy++) {
+    for (let dx = -half; dx <= half; dx++) {
+      tiles.push({ x: cx + dx, y: cy + dy });
+    }
+  }
+  return tiles;
+}
+
+/**
+ * Check if a 3×3 block centered at (cx, cy) is valid for spawning.
+ * Valid means: all 9 tiles walkable, none reserved, none in base bounds.
+ */
+function isBlockValid(cx, cy) {
+  const tiles = getBlockTiles(cx, cy);
+  
+  for (const tile of tiles) {
+    // Check walkability
+    if (!canMoveTo(currentState, tile.x, tile.y)) {
+      return false;
+    }
+    // Check reservation
+    if (isReserved(tile.x, tile.y)) {
+      return false;
+    }
+    // Check base exclusion
+    if (isInsideBaseBounds(tile.x, tile.y)) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Reserve all tiles in a block.
+ * @param {Array<{x: number, y: number}>} tiles - Tiles to reserve
+ */
+function reserveBlock(tiles) {
+  for (const tile of tiles) {
+    reservedTiles.add(`${tile.x},${tile.y}`);
+  }
+}
+
+/**
+ * Release all tiles in a block.
+ * @param {Array<{x: number, y: number}>} tiles - Tiles to release
+ */
+function releaseBlock(tiles) {
+  for (const tile of tiles) {
+    reservedTiles.delete(`${tile.x},${tile.y}`);
+  }
+}
+
+/**
+ * Release enemy's reserved block when they die or despawn.
+ */
+export function releaseEnemyBlock(enemy) {
+  if (enemy.reservedTiles && Array.isArray(enemy.reservedTiles)) {
+    releaseBlock(enemy.reservedTiles);
+  }
+}
 
 // ============================================
 // ENEMY TYPE DEFINITIONS (Simplified Combat)
@@ -734,8 +825,12 @@ function buildSpawnRequest(spawner) {
   
   // Determine roster
   const roster = [];
+  // Pack size: use spawner config if available, otherwise use global MIN/MAX (2-8)
   const size = spawner.kind === 'pack' 
-    ? randomRange(spawner.packSize.min, spawner.packSize.max)
+    ? randomRange(
+        spawner.packSize?.min ?? MIN_PACK_SIZE, 
+        spawner.packSize?.max ?? MAX_PACK_SIZE
+      )
     : 1;
   
   // Determine alphas for pack
@@ -785,48 +880,187 @@ function buildSpawnRequest(spawner) {
   };
 }
 
-function findSpawnPositions(spawner, count) {
-  const positions = [];
+/**
+ * Find a single valid 3×3 block for spawning.
+ * Spiral searches outward from the spawn center.
+ * @returns {{centerX: number, centerY: number, tiles: Array} | null}
+ */
+function findFreeBlock(spawner) {
   const player = currentState.player;
-  const maxAttempts = 50;
+  const maxSearchRadius = Math.max(spawner.spawnRadius, 10);
   
-  for (let i = 0; i < count; i++) {
-    let found = false;
+  // Spiral search from spawner center
+  for (let radius = 0; radius <= maxSearchRadius; radius++) {
+    // Generate candidate positions at this radius
+    const candidates = [];
     
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = Math.random() * spawner.spawnRadius;
-      const x = Math.round(spawner.center.x + Math.cos(angle) * dist);
-      const y = Math.round(spawner.center.y + Math.sin(angle) * dist);
-      
-      // Validate position
-      if (!canMoveTo(currentState, x, y)) continue;
-      if (isInsideBaseBounds(x, y)) continue;
-      if (distCoords(x, y, player.x, player.y) < NO_SPAWN_RADIUS) continue;
-      
-      // Don't overlap existing enemies
-      const enemies = currentState.runtime.activeEnemies || [];
-      const overlap = enemies.some(e => e.hp > 0 && e.x === x && e.y === y);
-      if (overlap) continue;
-      
-      // Don't overlap positions we already picked
-      if (positions.some(p => p.x === x && p.y === y)) continue;
-      
-      // For packs, keep positions close together
-      if (count > 1 && positions.length > 0) {
-        const distToFirst = distCoords(x, y, positions[0].x, positions[0].y);
-        if (distToFirst > 4) continue;
+    if (radius === 0) {
+      candidates.push({ x: spawner.center.x, y: spawner.center.y });
+    } else {
+      // Perimeter of square at this radius
+      for (let i = -radius; i <= radius; i++) {
+        candidates.push({ x: spawner.center.x + i, y: spawner.center.y - radius }); // top
+        candidates.push({ x: spawner.center.x + i, y: spawner.center.y + radius }); // bottom
+        if (Math.abs(i) !== radius) {
+          candidates.push({ x: spawner.center.x - radius, y: spawner.center.y + i }); // left
+          candidates.push({ x: spawner.center.x + radius, y: spawner.center.y + i }); // right
+        }
       }
-      
-      positions.push({ x, y });
-      found = true;
-      break;
     }
     
-    if (!found) break;
+    // Shuffle candidates for variety
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    
+    for (const candidate of candidates) {
+      const cx = candidate.x;
+      const cy = candidate.y;
+      
+      // Check player distance from block center
+      if (distCoords(cx, cy, player.x, player.y) < NO_SPAWN_RADIUS) continue;
+      
+      // Check if full block is valid
+      if (!isBlockValid(cx, cy)) continue;
+      
+      // Don't overlap existing enemy positions
+      const enemies = currentState.runtime.activeEnemies || [];
+      const tiles = getBlockTiles(cx, cy);
+      const hasEnemyOverlap = enemies.some(e => 
+        e.hp > 0 && tiles.some(t => t.x === e.x && t.y === e.y)
+      );
+      if (hasEnemyOverlap) continue;
+      
+      return { centerX: cx, centerY: cy, tiles };
+    }
   }
   
-  return positions;
+  return null;
+}
+
+/**
+ * Find N 3×3 blocks for a pack, arranged in a grid layout.
+ * @param {object} spawner - The spawner config
+ * @param {number} count - Number of blocks needed (one per enemy)
+ * @returns {Array<{centerX: number, centerY: number, tiles: Array}> | null}
+ */
+function findPackBlockLayout(spawner, count) {
+  const player = currentState.player;
+  const maxAnchorAttempts = 30;
+  
+  // Calculate grid dimensions
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+  
+  // Total footprint size
+  const layoutWidth = cols * BLOCK_STRIDE;
+  const layoutHeight = rows * BLOCK_STRIDE;
+  
+  // Try different anchor positions
+  for (let attempt = 0; attempt < maxAnchorAttempts; attempt++) {
+    // Generate anchor position (top-left of pack layout)
+    let anchorX, anchorY;
+    
+    if (attempt === 0) {
+      // First try: centered on spawner
+      anchorX = spawner.center.x - Math.floor(layoutWidth / 2);
+      anchorY = spawner.center.y - Math.floor(layoutHeight / 2);
+    } else {
+      // Subsequent tries: random within spawn radius
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * spawner.spawnRadius;
+      anchorX = Math.round(spawner.center.x + Math.cos(angle) * dist) - Math.floor(layoutWidth / 2);
+      anchorY = Math.round(spawner.center.y + Math.sin(angle) * dist) - Math.floor(layoutHeight / 2);
+    }
+    
+    // Generate block centers in deterministic grid order
+    const blocks = [];
+    let blockIndex = 0;
+    let allValid = true;
+    
+    for (let row = 0; row < rows && allValid; row++) {
+      for (let col = 0; col < cols && allValid; col++) {
+        if (blockIndex >= count) break;
+        
+        // Calculate block center
+        // Each block is centered, so offset by half BLOCK_SIZE + stride * index
+        const cx = anchorX + col * BLOCK_STRIDE + Math.floor(BLOCK_SIZE / 2);
+        const cy = anchorY + row * BLOCK_STRIDE + Math.floor(BLOCK_SIZE / 2);
+        
+        // Check player distance
+        if (distCoords(cx, cy, player.x, player.y) < NO_SPAWN_RADIUS) {
+          allValid = false;
+          break;
+        }
+        
+        // Check block validity (walkable, not reserved, not in base)
+        if (!isBlockValid(cx, cy)) {
+          allValid = false;
+          break;
+        }
+        
+        // Don't overlap existing enemies
+        const enemies = currentState.runtime.activeEnemies || [];
+        const tiles = getBlockTiles(cx, cy);
+        const hasEnemyOverlap = enemies.some(e =>
+          e.hp > 0 && tiles.some(t => t.x === e.x && t.y === e.y)
+        );
+        if (hasEnemyOverlap) {
+          allValid = false;
+          break;
+        }
+        
+        // Check we don't overlap already-picked blocks in this layout
+        const overlapsOther = blocks.some(other =>
+          other.tiles.some(ot => tiles.some(t => t.x === ot.x && t.y === ot.y))
+        );
+        if (overlapsOther) {
+          allValid = false;
+          break;
+        }
+        
+        blocks.push({ centerX: cx, centerY: cy, tiles });
+        blockIndex++;
+      }
+    }
+    
+    if (allValid && blocks.length === count) {
+      return blocks;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Find spawn positions (blocks) for enemies.
+ * For packs: uses grid layout algorithm.
+ * For strays: finds single block.
+ * @returns {Array<{x: number, y: number, blockTiles: Array}>} Spawn positions with reserved tiles
+ */
+function findSpawnPositions(spawner, count) {
+  if (count === 1) {
+    // Single enemy: find one block
+    const block = findFreeBlock(spawner);
+    if (!block) return [];
+    
+    return [{
+      x: block.centerX,
+      y: block.centerY,
+      blockTiles: block.tiles
+    }];
+  }
+  
+  // Pack: find grid layout of blocks
+  const blocks = findPackBlockLayout(spawner, count);
+  if (!blocks) return [];
+  
+  return blocks.map(block => ({
+    x: block.centerX,
+    y: block.centerY,
+    blockTiles: block.tiles
+  }));
 }
 
 // ============================================
@@ -837,6 +1071,11 @@ function executeSpawnRequests(requests) {
     for (let i = 0; i < request.roster.length; i++) {
       const rosterEntry = request.roster[i];
       const position = request.positions[i];
+      
+      // Reserve the block tiles BEFORE creating the enemy
+      if (position.blockTiles) {
+        reserveBlock(position.blockTiles);
+      }
       
       const enemy = createEnemy(rosterEntry, position, request);
       currentState.runtime.activeEnemies.push(enemy);
@@ -886,8 +1125,17 @@ function createEnemy(rosterEntry, position, request) {
   const atk = Math.floor(typeDef.baseAtk * atkScale);
   const def = Math.floor(typeDef.baseDef * defScale);
   
-  // Home/leash point
-  const homeCenter = request.metadata.homeCenter || { x: position.x, y: position.y };
+  // Per-enemy spawn position (center of their 3×3 block)
+  // This is the authoritative position - NOT a shared pack center
+  const spawnX = position.x;
+  const spawnY = position.y;
+  
+  // Home point is per-enemy (their own spawn), not shared pack center
+  // This ensures unique retreat destinations
+  const home = { x: spawnX, y: spawnY };
+  
+  // Legacy homeCenter (optional, for visuals/debug only)
+  const homeCenter = request.metadata.homeCenter || { x: spawnX, y: spawnY };
   
   const enemy = {
     id: `enemy_${Math.floor(t)}_${Math.random().toString(36).substr(2, 8)}`,
@@ -900,15 +1148,21 @@ function createEnemy(rosterEntry, position, request) {
     level,
     isAlpha: rosterEntry.isAlpha,
     
-    // Position
-    x: position.x,
-    y: position.y,
-    spawnX: position.x,
-    spawnY: position.y,
+    // Position (current)
+    x: spawnX,
+    y: spawnY,
     
-    // Home/leash point (required for AI)
-    home: { x: homeCenter.x, y: homeCenter.y },
-    homeCenter, // Legacy compatibility
+    // Spawn position (authoritative for retreat)
+    spawnX,
+    spawnY,
+    
+    // Reserved tiles (for release on death/despawn)
+    reservedTiles: position.blockTiles || [],
+    
+    // Home/leash point (per-enemy, NOT shared pack center)
+    home,
+    homeCenter, // Legacy compatibility (pack center for visuals only)
+    packHomeCenter: homeCenter, // Explicit pack center reference for debug
     
     // Stats (canonical: maxHP, legacy alias: maxHp)
     hp,
@@ -990,6 +1244,11 @@ function createEnemy(rosterEntry, position, request) {
 // ENEMY DEATH CALLBACK
 // ============================================
 export function onEnemyDeath(enemy) {
+  // Release reserved tiles
+  if (enemy.reservedTiles && Array.isArray(enemy.reservedTiles)) {
+    releaseBlock(enemy.reservedTiles);
+  }
+  
   // Update spawner alive count
   const spawner = spawners.find(s => s.id === enemy.spawnerId);
   if (spawner) {
@@ -1053,6 +1312,101 @@ export function getRings() {
 
 export function getEnemyTypes() {
   return ENEMY_TYPES;
+}
+
+// ============================================
+// DEBUG HELPERS
+// ============================================
+
+/**
+ * Debug: List all active enemies with their spawn positions and pack info.
+ * Call from console: VETUU_SPAWNS()
+ */
+function debugListSpawns() {
+  if (!currentState) {
+    console.log('[VETUU_SPAWNS] No state available');
+    return [];
+  }
+  
+  const enemies = currentState.runtime.activeEnemies || [];
+  const result = enemies
+    .filter(e => e.hp > 0)
+    .map(e => ({
+      id: e.id,
+      name: e.name,
+      level: e.level,
+      position: { x: e.x, y: e.y },
+      spawnPoint: { x: e.spawnX, y: e.spawnY },
+      home: e.home,
+      packId: e.packId || null,
+      packHomeCenter: e.packHomeCenter || null,
+      isRetreating: e.isRetreating,
+      reservedTileCount: e.reservedTiles?.length || 0
+    }));
+  
+  console.table(result);
+  return result;
+}
+
+/**
+ * Debug: Count reserved tiles and optionally highlight them.
+ * Call from console: VETUU_RESERVED() or VETUU_RESERVED(true) to highlight
+ */
+function debugReservedTiles(highlight = false) {
+  const count = reservedTiles.size;
+  const tiles = Array.from(reservedTiles).map(key => {
+    const [x, y] = key.split(',').map(Number);
+    return { x, y };
+  });
+  
+  console.log(`[VETUU_RESERVED] ${count} tiles reserved`);
+  
+  if (highlight && count > 0) {
+    // Add visual markers to the map
+    const actorLayer = document.getElementById('actor-layer');
+    if (actorLayer) {
+      // Remove existing debug markers
+      actorLayer.querySelectorAll('.debug-reserved-tile').forEach(el => el.remove());
+      
+      for (const tile of tiles) {
+        const marker = document.createElement('div');
+        marker.className = 'debug-reserved-tile';
+        marker.style.cssText = `
+          position: absolute;
+          left: ${tile.x * 24}px;
+          top: ${tile.y * 24}px;
+          width: 24px;
+          height: 24px;
+          background: rgba(255, 0, 0, 0.2);
+          border: 1px solid rgba(255, 0, 0, 0.5);
+          pointer-events: none;
+          z-index: 5;
+        `;
+        actorLayer.appendChild(marker);
+      }
+      console.log(`[VETUU_RESERVED] Added ${count} visual markers (call VETUU_RESERVED_CLEAR() to remove)`);
+    }
+  }
+  
+  return { count, tiles };
+}
+
+/**
+ * Debug: Clear reserved tile visual markers.
+ */
+function debugClearReservedMarkers() {
+  const actorLayer = document.getElementById('actor-layer');
+  if (actorLayer) {
+    actorLayer.querySelectorAll('.debug-reserved-tile').forEach(el => el.remove());
+    console.log('[VETUU_RESERVED_CLEAR] Markers removed');
+  }
+}
+
+// Expose debug functions to window
+if (typeof window !== 'undefined') {
+  window.VETUU_SPAWNS = debugListSpawns;
+  window.VETUU_RESERVED = debugReservedTiles;
+  window.VETUU_RESERVED_CLEAR = debugClearReservedMarkers;
 }
 
 export { ENEMY_TYPES, RINGS };
