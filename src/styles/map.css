@@ -105,23 +105,29 @@
 
 #minimap-player {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 6px;
   height: 6px;
   background: var(--player);
   border-radius: 50%;
   box-shadow: 0 0 4px var(--player);
-  transform: translate3d(-50%, -50%, 0);
   z-index: 10;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 /* Corpse marker on minimap */
 .minimap-corpse {
   position: absolute;
+  top: 0;
+  left: 0;
   font-size: 10px;
-  transform: translate3d(-50%, -50%, 0);
   z-index: 9;
   animation: corpse-blink 1.5s ease-in-out infinite;
   text-shadow: 0 0 4px var(--danger), 0 0 8px var(--danger);
+  will-change: transform;
+  backface-visibility: hidden;
   filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
   pointer-events: auto;
   cursor: pointer;

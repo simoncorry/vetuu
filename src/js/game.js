@@ -470,8 +470,8 @@ function updateMinimap() {
   const x = state.player.x * minimapScale;
   const y = state.player.y * minimapScale;
 
-  playerDot.style.left = `${x}px`;
-  playerDot.style.top = `${y}px`;
+  // Use transform for GPU-accelerated positioning (includes -50% centering)
+  playerDot.style.transform = `translate3d(calc(${x}px - 50%), calc(${y}px - 50%), 0)`;
 
   updateMinimapFog();
 }
@@ -518,8 +518,8 @@ export function updateMinimapCorpse(x, y) {
   const corpseMarker = document.createElement('div');
   corpseMarker.id = 'minimap-corpse';
   corpseMarker.className = 'minimap-corpse';
-  corpseMarker.style.left = `${x * minimapScale}px`;
-  corpseMarker.style.top = `${y * minimapScale}px`;
+  // Use transform for GPU-accelerated positioning
+  corpseMarker.style.transform = `translate3d(calc(${x * minimapScale}px - 50%), calc(${y * minimapScale}px - 50%), 0)`;
   corpseMarker.textContent = '💀';
   corpseMarker.title = 'Click to path to your corpse';
   
@@ -861,6 +861,9 @@ function initLightingCanvas(gameState) {
     height: ${height}px;
     pointer-events: none;
     z-index: 6;
+    transform: translate3d(0, 0, 0);
+    will-change: contents;
+    contain: strict;
   `;
   
   // Insert after fog layer
@@ -913,8 +916,10 @@ function createPlayerTorch() {
     pointer-events: none;
     opacity: 0;
     z-index: 9;
-    transition: transform var(--move-duration, 200ms) linear;
-    will-change: transform;
+    transition: transform var(--move-duration, 200ms) linear, opacity 0.1s linear;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    contain: layout style paint;
     border-radius: 50%;
     background: radial-gradient(
       ellipse 50% 55% at 50% 50%,
