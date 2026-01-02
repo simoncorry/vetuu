@@ -6,7 +6,7 @@
 import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects } from './render.js';
 import { initInput } from './input.js';
 import { initMovement, createPathTo } from './movement.js';
-import { getObjectAt, getNpcAt, buildSpatialIndex } from './collision.js';
+import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
@@ -800,7 +800,69 @@ function hardReset() {
 function gameLoop() {
   state.tick++;
   checkPendingAttack(); // Check if player reached attack range
+  
+  // Guard patrol tick (every ~60 frames = ~1 second)
+  if (state.tick % 60 === 0) {
+    tickGuardPatrol();
+  }
+  
   requestAnimationFrame(gameLoop);
+}
+
+// ============================================
+// GUARD PATROL SYSTEM
+// ============================================
+const GUARD_PATROL_INTERVAL = 2000; // Move every 2 seconds
+const guardLastMove = new Map();
+
+function tickGuardPatrol() {
+  const now = Date.now();
+  
+  for (const npc of state.entities.npcs) {
+    if (!npc.patrol || !npc.isGuard) continue;
+    
+    // Check if enough time has passed since last move
+    const lastMove = guardLastMove.get(npc.id) || 0;
+    if (now - lastMove < GUARD_PATROL_INTERVAL) continue;
+    
+    // Random chance to move (50%)
+    if (Math.random() > 0.5) continue;
+    
+    // Store original position if not set
+    if (npc.homeX === undefined) {
+      npc.homeX = npc.x;
+      npc.homeY = npc.y;
+    }
+    
+    const radius = npc.patrolRadius || 1;
+    
+    // Pick a random direction within patrol area
+    const dx = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+    const dy = Math.floor(Math.random() * 3) - 1;
+    
+    const newX = npc.x + dx;
+    const newY = npc.y + dy;
+    
+    // Check if within patrol radius of home
+    if (Math.abs(newX - npc.homeX) > radius || Math.abs(newY - npc.homeY) > radius) {
+      continue;
+    }
+    
+    // Check if tile is walkable and not occupied
+    if (!canMoveTo(state, newX, newY)) continue;
+    if (newX === state.player.x && newY === state.player.y) continue;
+    
+    // Move the guard
+    npc.x = newX;
+    npc.y = newY;
+    guardLastMove.set(npc.id, now);
+    
+    // Update visual position
+    const npcEl = document.querySelector(\`[data-npc-id="\${npc.id}"]\`);
+    if (npcEl) {
+      npcEl.style.transform = \`translate3d(\${newX * 24}px, \${newY * 24}px, 0)\`;
+    }
+  }
 }
 
 // ============================================

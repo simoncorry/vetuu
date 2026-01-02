@@ -70,80 +70,96 @@
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 54,
-      "y": 18,
+      "y": 20,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_north_2",
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 58,
-      "y": 18,
+      "y": 20,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_south_1",
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 54,
-      "y": 58,
+      "y": 56,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_south_2",
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 58,
-      "y": 58,
+      "y": 56,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_east_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 83,
+      "x": 80,
       "y": 36,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_east_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 83,
+      "x": 80,
       "y": 40,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_west_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 29,
+      "x": 32,
       "y": 36,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "guard_west_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 29,
+      "x": 32,
       "y": 40,
       "color": "#22B6B8",
       "isGuard": true,
-      "level": 25
+      "level": 25,
+      "patrol": true,
+      "patrolRadius": 1
     },
     {
       "id": "npc_nurse_vela",
@@ -154,6 +170,18 @@
       "color": "#E85D75",
       "dialogueRoot": "dlg_vela_root",
       "isMedic": true
+    },
+    {
+      "id": "guard_collapse",
+      "name": "Breach Watcher",
+      "role": "guard",
+      "x": 30,
+      "y": 55,
+      "color": "#22B6B8",
+      "isGuard": true,
+      "level": 15,
+      "patrol": true,
+      "patrolRadius": 1
     }
   ],
   "enemySpawns": [
