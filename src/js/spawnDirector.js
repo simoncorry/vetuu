@@ -364,15 +364,15 @@ export function initSpawnDirector(state) {
     const ox = state.map.meta.originalOffset.x;
     const oy = state.map.meta.originalOffset.y;
     // Base center (central yard hub, player start area)
-    baseCenter = { x: 58 + ox, y: 42 + oy };
+    // Perfectly centered at (60, 40) on original 120x80 map
+    baseCenter = { x: 60 + ox, y: 40 + oy };
     
-    // Define base bounds (new irregular perimeter: 38,22 → 82,60)
-    // This is a bounding box; the actual perimeter is irregular
+    // Define base bounds (uniform rectangle: 42,23 → 78,57)
     baseBounds = {
-      minX: 38 + ox,
-      maxX: 82 + ox,
-      minY: 22 + oy,
-      maxY: 60 + oy
+      minX: 42 + ox,
+      maxX: 78 + ox,
+      minY: 23 + oy,
+      maxY: 57 + oy
     };
   }
   

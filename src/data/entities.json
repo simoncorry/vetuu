@@ -1,7 +1,7 @@
 {
   "playerStart": {
-    "x": 56,
-    "y": 42,
+    "x": 60,
+    "y": 40,
     "facing": "south"
   },
   "npcs": [
@@ -9,8 +9,8 @@
       "id": "npc_dax_rowan",
       "name": "Captain Dax Rowan",
       "role": "militiaCaptain",
-      "x": 51,
-      "y": 39,
+      "x": 55,
+      "y": 38,
       "color": "#22B6B8",
       "dialogueRoot": "dlg_dax_root"
     },
@@ -18,18 +18,20 @@
       "id": "npc_sela_marr",
       "name": "Sela Marr",
       "role": "hiddenAsset",
-      "x": 57,
+      "x": 60,
       "y": 35,
       "color": "#77C7FF",
       "dialogueRoot": "dlg_sela_root",
-      "flags": { "hidden": true }
+      "flags": {
+        "hidden": true
+      }
     },
     {
       "id": "npc_verdleg_trader",
       "name": "Verdleg Trader",
       "role": "nomadStall",
-      "x": 59,
-      "y": 37,
+      "x": 64,
+      "y": 45,
       "color": "#E18B37",
       "dialogueRoot": "dlg_verdleg_trader"
     },
@@ -55,18 +57,20 @@
       "id": "npc_silas_morn",
       "name": "Field Director Silas Morn",
       "role": "artLead",
-      "x": 74,
-      "y": 29,
+      "x": 65,
+      "y": 30,
       "color": "#2E343B",
       "dialogueRoot": "dlg_silas_root",
-      "requires": { "flag": "act3" }
+      "requires": {
+        "flag": "act3"
+      }
     },
     {
       "id": "guard_north_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 54,
-      "y": 23,
+      "x": 58,
+      "y": 24,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -75,8 +79,8 @@
       "id": "guard_north_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 58,
-      "y": 23,
+      "x": 62,
+      "y": 24,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -85,8 +89,8 @@
       "id": "guard_south_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 54,
-      "y": 55,
+      "x": 58,
+      "y": 56,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -95,8 +99,8 @@
       "id": "guard_south_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 58,
-      "y": 55,
+      "x": 62,
+      "y": 56,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -105,8 +109,8 @@
       "id": "guard_east_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 75,
-      "y": 37,
+      "x": 77,
+      "y": 38,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -115,8 +119,8 @@
       "id": "guard_east_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 75,
-      "y": 41,
+      "x": 77,
+      "y": 42,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -125,8 +129,8 @@
       "id": "guard_west_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 41,
-      "y": 37,
+      "x": 43,
+      "y": 38,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -135,28 +139,8 @@
       "id": "guard_west_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 41,
-      "y": 41,
-      "color": "#22B6B8",
-      "isGuard": true,
-      "level": 25
-    },
-    {
-      "id": "guard_pad_1",
-      "name": "Ironcross Guard",
-      "role": "guard",
-      "x": 72,
-      "y": 28,
-      "color": "#22B6B8",
-      "isGuard": true,
-      "level": 25
-    },
-    {
-      "id": "guard_pad_2",
-      "name": "Ironcross Guard",
-      "role": "guard",
-      "x": 76,
-      "y": 28,
+      "x": 43,
+      "y": 42,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -165,8 +149,8 @@
       "id": "npc_nurse_vela",
       "name": "Field Medic Vela",
       "role": "medic",
-      "x": 52,
-      "y": 38,
+      "x": 55,
+      "y": 44,
       "color": "#E85D75",
       "dialogueRoot": "dlg_vela_root",
       "isMedic": true
@@ -180,7 +164,10 @@
       "level": 1,
       "count": 3,
       "radius": 5,
-      "center": { "x": 56, "y": 60 },
+      "center": {
+        "x": 56,
+        "y": 60
+      },
       "respawnSeconds": 120
     },
     {
@@ -190,7 +177,10 @@
       "level": 2,
       "count": 3,
       "radius": 5,
-      "center": { "x": 75, "y": 42 },
+      "center": {
+        "x": 75,
+        "y": 42
+      },
       "respawnSeconds": 120
     },
     {
@@ -200,7 +190,10 @@
       "level": 2,
       "count": 3,
       "radius": 5,
-      "center": { "x": 37, "y": 42 },
+      "center": {
+        "x": 37,
+        "y": 42
+      },
       "respawnSeconds": 120
     },
     {
@@ -210,7 +203,10 @@
       "level": 3,
       "count": 4,
       "radius": 5,
-      "center": { "x": 56, "y": 22 },
+      "center": {
+        "x": 56,
+        "y": 22
+      },
       "respawnSeconds": 150
     },
     {
@@ -220,7 +216,10 @@
       "level": 4,
       "count": 4,
       "radius": 5,
-      "center": { "x": 78, "y": 55 },
+      "center": {
+        "x": 78,
+        "y": 55
+      },
       "respawnSeconds": 150
     },
     {
@@ -230,7 +229,10 @@
       "level": 5,
       "count": 4,
       "radius": 5,
-      "center": { "x": 34, "y": 55 },
+      "center": {
+        "x": 34,
+        "y": 55
+      },
       "respawnSeconds": 150
     },
     {
@@ -240,7 +242,10 @@
       "level": 6,
       "count": 4,
       "radius": 7,
-      "center": { "x": 10, "y": 60 },
+      "center": {
+        "x": 10,
+        "y": 60
+      },
       "respawnSeconds": 240
     },
     {
@@ -250,7 +255,10 @@
       "level": 7,
       "count": 4,
       "radius": 7,
-      "center": { "x": 100, "y": 60 },
+      "center": {
+        "x": 100,
+        "y": 60
+      },
       "respawnSeconds": 240
     },
     {
@@ -260,7 +268,10 @@
       "level": 8,
       "count": 5,
       "radius": 8,
-      "center": { "x": 10, "y": 20 },
+      "center": {
+        "x": 10,
+        "y": 20
+      },
       "respawnSeconds": 300
     },
     {
@@ -270,7 +281,10 @@
       "level": 9,
       "count": 5,
       "radius": 8,
-      "center": { "x": 105, "y": 25 },
+      "center": {
+        "x": 105,
+        "y": 25
+      },
       "respawnSeconds": 300
     },
     {
@@ -280,7 +294,10 @@
       "level": 10,
       "count": 4,
       "radius": 7,
-      "center": { "x": 56, "y": -10 },
+      "center": {
+        "x": 56,
+        "y": -10
+      },
       "respawnSeconds": 360
     },
     {
@@ -290,7 +307,10 @@
       "level": 12,
       "count": 5,
       "radius": 8,
-      "center": { "x": 96, "y": 66 },
+      "center": {
+        "x": 96,
+        "y": 66
+      },
       "respawnSeconds": 420
     },
     {
@@ -300,7 +320,10 @@
       "level": 14,
       "count": 5,
       "radius": 8,
-      "center": { "x": -20, "y": 42 },
+      "center": {
+        "x": -20,
+        "y": 42
+      },
       "respawnSeconds": 420
     },
     {
@@ -310,7 +333,10 @@
       "level": 16,
       "count": 6,
       "radius": 9,
-      "center": { "x": -30, "y": 70 },
+      "center": {
+        "x": -30,
+        "y": 70
+      },
       "respawnSeconds": 480
     },
     {
@@ -320,7 +346,10 @@
       "level": 18,
       "count": 6,
       "radius": 9,
-      "center": { "x": 140, "y": 70 },
+      "center": {
+        "x": 140,
+        "y": 70
+      },
       "respawnSeconds": 480
     },
     {
@@ -330,7 +359,10 @@
       "level": 20,
       "count": 5,
       "radius": 8,
-      "center": { "x": 56, "y": -40 },
+      "center": {
+        "x": 56,
+        "y": -40
+      },
       "respawnSeconds": 540
     },
     {
@@ -340,9 +372,14 @@
       "level": 22,
       "count": 6,
       "radius": 9,
-      "center": { "x": 78, "y": 20 },
+      "center": {
+        "x": 78,
+        "y": 20
+      },
       "respawnSeconds": 600,
-      "requires": { "flag": "act3" }
+      "requires": {
+        "flag": "act3"
+      }
     },
     {
       "id": "sp_karth_vanguard",
@@ -351,9 +388,14 @@
       "level": 24,
       "count": 6,
       "radius": 9,
-      "center": { "x": 104, "y": 16 },
+      "center": {
+        "x": 104,
+        "y": 16
+      },
       "respawnSeconds": 720,
-      "requires": { "flag": "act3" }
+      "requires": {
+        "flag": "act3"
+      }
     }
   ],
   "bosses": [
@@ -364,7 +406,9 @@
       "level": 25,
       "x": 104,
       "y": 16,
-      "requires": { "flag": "act3" },
+      "requires": {
+        "flag": "act3"
+      },
       "arenaRadius": 10
     }
   ]
