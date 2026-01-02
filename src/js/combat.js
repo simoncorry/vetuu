@@ -36,7 +36,8 @@ import {
 // Enemy type configurations (Simplified - no weakness/resistance)
 // All enemies are either melee (range 2) or ranged (range 6)
 const ENEMY_CONFIGS = {
-  critter: { weapon: 'melee_claws', aiType: 'melee', hp: 0.7 },
+  nomad: { weapon: 'melee_club', aiType: 'melee', hp: 0.85 },
+  critter: { weapon: 'melee_claws', aiType: 'melee', hp: 0.7 }, // Legacy fallback
   scav_melee: { weapon: 'melee_club', aiType: 'melee', hp: 0.9 },
   scav_ranged: { weapon: 'ranged_rifle', aiType: 'ranged', hp: 0.8 },
   trog_warrior: { weapon: 'melee_spear', aiType: 'melee', hp: 1.0 },
@@ -738,7 +739,7 @@ function enemyAttackGuard(enemy, guard) {
   if (!isExpired(enemy.cooldownUntil, now)) return;
   if (!guard.hp || guard.hp <= 0) return;
   
-  const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
+  const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.nomad;
   const weapon = ENEMY_WEAPONS[config.weapon];
   const d = distCoords(enemy.x, enemy.y, guard.x, guard.y);
   
@@ -1160,7 +1161,7 @@ function processEnemyAI(enemy, t) {
     initEnemyAIFields(enemy);
   }
   
-  const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
+  const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.nomad;
   const weapon = ENEMY_WEAPONS[config.weapon];
   const player = currentState.player;
   const dPlayer = distCoords(enemy.x, enemy.y, player.x, player.y);
@@ -1885,7 +1886,7 @@ function aiIdle(enemy, now, weapon) {
   enemy.moveCooldown = now + moveCD;
 }
 
-// Check if an enemy is passive (yellow critter)
+// Check if an enemy is passive (yellow nomad/critter)
 function isEnemyPassive(enemy) {
   // New system: check aggroType from spawn director
   if (enemy.aggroType === 'passive') return true;
@@ -1896,8 +1897,8 @@ function isEnemyPassive(enemy) {
     if (isAct3) return false;
   }
   
-  // Legacy fallback: critters under level 5 are passive
-  return enemy.type === 'critter' && enemy.level < PASSIVE_CRITTER_MAX_LEVEL;
+  // Legacy fallback: nomads and critters are passive by default
+  return (enemy.type === 'nomad' || enemy.type === 'critter') && enemy.level < PASSIVE_CRITTER_MAX_LEVEL;
 }
 
 /**
@@ -5655,7 +5656,7 @@ export function renderEnemies(state) {
   for (const enemy of state.runtime.activeEnemies || []) {
     if (enemy.hp <= 0) continue;
 
-    const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.critter;
+    const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.nomad;
     const weapon = ENEMY_WEAPONS[config.weapon];
     const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
 

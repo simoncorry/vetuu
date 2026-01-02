@@ -172,18 +172,18 @@ export function releaseEnemyBlock(enemy) {
 // - Melee: range = 2, faster movement (320-380ms)
 // - Ranged: range = 6, slower movement (420-480ms)
 const ENEMY_TYPES = {
-  // Critters (passive, melee)
-  critter: {
-    name: 'Critter',
-    baseHp: 20,
-    baseAtk: 3,
-    baseDef: 1,
-    color: '#6B5B4F',
+  // Nomads (passive wanderers, always solo, melee)
+  nomad: {
+    name: 'Nomad',
+    baseHp: 25,
+    baseAtk: 4,
+    baseDef: 2,
+    color: '#8B7355',
     combatType: 'melee',
-    weapon: 'melee_bite',
-    moveSpeed: 320, // Fast melee
+    weapon: 'melee_club',
+    moveSpeed: 360, // Moderate speed
     defaultAggroType: 'passive',
-    defaultAggroRadius: 2,
+    defaultAggroRadius: 3,
     defaultLeashRadius: 10,
     defaultDeaggroMs: 3000
   },
@@ -342,13 +342,18 @@ function generateDefaultSpawners() {
   const result = [];
   let id = 0;
   
-  // Safe Ring: Inner critter ring (level 1-2, close to base perimeter)
-  // These are the easiest targets for brand new players
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2;
-    const dist = 6 + Math.random() * 4; // 6-10 tiles from center (just outside base)
+  // ============================================
+  // INNER RING: NOMADS (Solo only, Level 1-5)
+  // ============================================
+  // Nomads are always solo wanderers, never in packs.
+  // Level scales with distance from base: 1-2 close, 3-4 mid, 4-5 outer
+  
+  // Inner nomads (level 1-2, closest to base)
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const dist = 6 + Math.random() * 4; // 6-10 tiles from center
     result.push({
-      id: `sp_stray_critter_inner_${id++}`,
+      id: `sp_nomad_inner_${id++}`,
       kind: 'stray',
       ring: 'safe',
       center: {
@@ -357,10 +362,10 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 3,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['critter'],
+      enemyPool: ['nomad'],
       levelRange: [1, 2],
       aggroType: 'passive',
-      aggroRadius: 2,
+      aggroRadius: 3,
       leashRadius: 8,
       deaggroTimeMs: 3000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
@@ -371,12 +376,12 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Safe Ring: Outer critter ring (level 1-3, further out)
+  // Mid nomads (level 2-4, middle distance)
   for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2 + Math.PI / 16; // Offset to stagger with inner ring
-    const dist = NPE_CRITTER_ZONE_MIN + Math.random() * (NPE_CRITTER_ZONE_MAX - NPE_CRITTER_ZONE_MIN);
+    const angle = (i / 8) * Math.PI * 2 + Math.PI / 16;
+    const dist = 10 + Math.random() * 4; // 10-14 tiles from center
     result.push({
-      id: `sp_stray_safe_${id++}`,
+      id: `sp_nomad_mid_${id++}`,
       kind: 'stray',
       ring: 'safe',
       center: {
@@ -385,10 +390,10 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['critter'],
-      levelRange: [1, 3],
+      enemyPool: ['nomad'],
+      levelRange: [2, 4],
       aggroType: 'passive',
-      aggroRadius: 2,
+      aggroRadius: 3,
       leashRadius: 10,
       deaggroTimeMs: 3000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
@@ -399,41 +404,46 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Safe Ring: A few scav strays (conditional passive)
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 14 + Math.random() * 4;
+  // Outer nomads (level 4-5, edge of inner ring)
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 + Math.PI / 12;
+    const dist = 14 + Math.random() * 4; // 14-18 tiles from center
     result.push({
-      id: `sp_stray_scav_safe_${id++}`,
+      id: `sp_nomad_outer_${id++}`,
       kind: 'stray',
       ring: 'safe',
       center: {
         x: Math.round(baseCenter.x + Math.cos(angle) * dist),
         y: Math.round(baseCenter.y + Math.sin(angle) * dist)
       },
-      spawnRadius: 5,
+      spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['scav_ranged', 'scav_melee'],
-      levelRange: [3, 5],
-      aggroType: 'conditional',
-      aggroRadius: 4,
-      leashRadius: 12,
-      deaggroTimeMs: 4000,
+      enemyPool: ['nomad'],
+      levelRange: [4, 5],
+      aggroType: 'passive',
+      aggroRadius: 3,
+      leashRadius: 10,
+      deaggroTimeMs: 3000,
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      conditions: [] // Will become aggressive in Act 3
+      isNpeCritter: true
     });
   }
   
-  // Frontier Ring: Mixed strays
+  // ============================================
+  // SCAV PACKS (Always packs of 3-8, Level 6+)
+  // ============================================
+  // Scavs are always in packs, never solo. They start at the border of the inner ring.
+  
+  // Inner scav packs (level 6-8, just past nomad territory)
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
-    const dist = 22 + Math.random() * 15;
+    const dist = 20 + Math.random() * 6; // 20-26 tiles from center
     result.push({
-      id: `sp_stray_frontier_${id++}`,
-      kind: 'stray',
+      id: `sp_pack_scav_inner_${id++}`,
+      kind: 'pack',
       ring: 'frontier',
       center: {
         x: Math.round(baseCenter.x + Math.cos(angle) * dist),
@@ -441,25 +451,28 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 6,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['critter', 'scav_ranged', 'scav_melee'],
-      levelRange: [4, 7],
+      enemyPool: ['scav_ranged', 'scav_melee'],
+      levelRange: [6, 8],
+      packSize: { min: 3, max: 5 },
+      alpha: { chance: 0.2, max: 1 },
       aggroType: 'conditional',
-      aggroRadius: 5,
+      aggroRadius: 6,
       leashRadius: 14,
       deaggroTimeMs: 4000,
-      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+      respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
-      aliveCount: 0
+      aliveCount: 0,
+      minDistanceToOtherPacks: 14
     });
   }
   
-  // Frontier Ring: Small packs (the "teachable" encounters)
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const dist = 28 + Math.random() * 10;
+  // Mid scav packs (level 8-10, frontier territory)
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    const dist = 28 + Math.random() * 8; // 28-36 tiles from center
     result.push({
-      id: `sp_pack_frontier_${id++}`,
+      id: `sp_pack_scav_mid_${id++}`,
       kind: 'pack',
       ring: 'frontier',
       center: {
@@ -469,55 +482,62 @@ function generateDefaultSpawners() {
       spawnRadius: 7,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['scav_ranged', 'scav_melee'],
-      levelRange: [5, 8],
-      packSize: { min: 3, max: 4 },
-      alpha: { chance: 0.25, max: 1 },
+      levelRange: [8, 10],
+      packSize: { min: 4, max: 6 },
+      alpha: { chance: 0.3, max: 1 },
       aggroType: 'conditional',
       aggroRadius: 6,
-      leashRadius: 14,
+      leashRadius: 16,
       deaggroTimeMs: 4000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 12
+      minDistanceToOtherPacks: 14
     });
   }
   
-  // Wilderness Ring: Strays (mostly aggressive)
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const dist = 45 + Math.random() * 20;
+  // Outer scav packs (level 10-12, edge of frontier)
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const dist = 38 + Math.random() * 8; // 38-46 tiles from center
     result.push({
-      id: `sp_stray_wild_${id++}`,
-      kind: 'stray',
-      ring: 'wilderness',
+      id: `sp_pack_scav_outer_${id++}`,
+      kind: 'pack',
+      ring: 'frontier',
       center: {
         x: Math.round(baseCenter.x + Math.cos(angle) * dist),
         y: Math.round(baseCenter.y + Math.sin(angle) * dist)
       },
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['scav_ranged', 'trog_warrior'],
-      levelRange: [8, 12],
+      enemyPool: ['scav_ranged', 'scav_melee'],
+      levelRange: [10, 12],
+      packSize: { min: 5, max: 8 },
+      alpha: { chance: 0.35, max: 2 },
       aggroType: 'aggressive',
       aggroRadius: 7,
-      leashRadius: 16,
+      leashRadius: 18,
       deaggroTimeMs: 5000,
-      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+      respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
-      aliveCount: 0
+      aliveCount: 0,
+      minDistanceToOtherPacks: 16
     });
   }
   
-  // Wilderness Ring: Packs (1-2 alphas)
+  // ============================================
+  // WILDERNESS RING: TROGS (Packs, Level 12+)
+  // ============================================
+  // Trogs are aggressive warband packs in the wilderness
+  
+  // Trog warbands (level 12-15)
   for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2 + Math.PI / 6;
-    const dist = 50 + Math.random() * 15;
-    const isTrog = i % 2 === 0;
+    const angle = (i / 6) * Math.PI * 2;
+    const dist = 50 + Math.random() * 15; // 50-65 tiles from center
     result.push({
-      id: `sp_pack_wild_${id++}`,
+      id: `sp_pack_trog_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
       center: {
@@ -526,9 +546,9 @@ function generateDefaultSpawners() {
       },
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: isTrog ? ['trog_warrior', 'trog_shaman'] : ['scav_ranged', 'scav_melee'],
-      levelRange: [10, 14],
-      packSize: { min: 4, max: 5 },
+      enemyPool: ['trog_warrior', 'trog_shaman'],
+      levelRange: [12, 15],
+      packSize: { min: 4, max: 7 },
       alpha: { chance: 0.4, max: 2 },
       aggroType: 'aggressive',
       aggroRadius: 8,
@@ -538,43 +558,21 @@ function generateDefaultSpawners() {
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 14
+      minDistanceToOtherPacks: 16
     });
   }
   
-  // Danger Ring: High-level strays
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2;
-    const dist = 75 + Math.random() * 20;
-    result.push({
-      id: `sp_stray_danger_${id++}`,
-      kind: 'stray',
-      ring: 'danger',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
-      spawnRadius: 10,
-      noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['trog_warrior', 'karth_grunt'],
-      levelRange: [14, 18],
-      aggroType: 'aggressive',
-      aggroRadius: 9,
-      leashRadius: 18,
-      deaggroTimeMs: 5000,
-      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
-      maxAlive: 1,
-      lastSpawnAt: -Infinity,
-      aliveCount: 0
-    });
-  }
+  // ============================================
+  // DANGER RING: KARTH (Packs, Level 16+)
+  // ============================================
+  // Karth Directorate patrols - elite military packs
   
-  // Danger Ring: Elite packs
+  // Inner Karth patrols (level 16-18)
   for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const dist = 80 + Math.random() * 15;
+    const angle = (i / 4) * Math.PI * 2;
+    const dist = 72 + Math.random() * 10; // 72-82 tiles from center
     result.push({
-      id: `sp_pack_danger_${id++}`,
+      id: `sp_pack_karth_inner_${id++}`,
       kind: 'pack',
       ring: 'danger',
       center: {
@@ -584,8 +582,39 @@ function generateDefaultSpawners() {
       spawnRadius: 10,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],
-      levelRange: [16, 22],
-      packSize: { min: 5, max: 7 },
+      levelRange: [16, 18],
+      packSize: { min: 4, max: 6 },
+      alpha: { chance: 0.4, max: 1 },
+      aggroType: 'aggressive',
+      aggroRadius: 10,
+      leashRadius: 20,
+      deaggroTimeMs: 6000,
+      respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
+      maxAlive: 1,
+      lastSpawnAt: -Infinity,
+      aliveCount: 0,
+      minDistanceToOtherPacks: 18,
+      requires: { flag: 'act3' }  // Only in Act 3
+    });
+  }
+  
+  // Outer Karth patrols (level 18-22, elite squads)
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const dist = 85 + Math.random() * 15; // 85-100 tiles from center
+    result.push({
+      id: `sp_pack_karth_outer_${id++}`,
+      kind: 'pack',
+      ring: 'danger',
+      center: {
+        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
+        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
+      },
+      spawnRadius: 10,
+      noSpawnRadius: NO_SPAWN_RADIUS,
+      enemyPool: ['karth_grunt', 'karth_officer'],
+      levelRange: [18, 22],
+      packSize: { min: 5, max: 8 },
       alpha: { chance: 0.5, max: 2 },
       aggroType: 'aggressive',
       aggroRadius: 10,
@@ -595,7 +624,7 @@ function generateDefaultSpawners() {
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 16,
+      minDistanceToOtherPacks: 18,
       requires: { flag: 'act3' }  // Only in Act 3
     });
   }
@@ -814,7 +843,7 @@ function chooseSpawner(eligible, _counts) {
       if (pool.some(t => t.startsWith('karth'))) {
         weight *= ACT3_MODIFIERS.karthMultiplier;
       }
-      if (pool.includes('critter') && spawner.aggroType === 'passive') {
+      if (pool.includes('nomad') && spawner.aggroType === 'passive') {
         weight *= ACT3_MODIFIERS.neutralWildlifeMultiplier;
       }
     }
@@ -1139,7 +1168,7 @@ function applyAlphaMods(enemy) {
 }
 
 function createEnemy(rosterEntry, position, request) {
-  const typeDef = ENEMY_TYPES[rosterEntry.type] || ENEMY_TYPES.critter;
+  const typeDef = ENEMY_TYPES[rosterEntry.type] || ENEMY_TYPES.nomad;
   const level = rosterEntry.level;
   // Use performance.now() for all simulation timing
   const t = nowMs();
