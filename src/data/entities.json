@@ -65,7 +65,7 @@
       "id": "guard_north_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 50,
+      "x": 54,
       "y": 23,
       "color": "#22B6B8",
       "isGuard": true,
@@ -75,7 +75,7 @@
       "id": "guard_north_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 62,
+      "x": 58,
       "y": 23,
       "color": "#22B6B8",
       "isGuard": true,
@@ -106,7 +106,7 @@
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 75,
-      "y": 46,
+      "y": 37,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -116,7 +116,7 @@
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 75,
-      "y": 52,
+      "y": 41,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -126,7 +126,7 @@
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 41,
-      "y": 36,
+      "y": 37,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -136,7 +136,7 @@
       "name": "Ironcross Guard",
       "role": "guard",
       "x": 41,
-      "y": 44,
+      "y": 41,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
