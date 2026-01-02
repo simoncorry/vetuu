@@ -218,63 +218,6 @@
   ],
   "objects": [
     {
-      "id": "sign_078",
-      "type": "sign",
-      "x": 40,
-      "y": 30,
-      "solid": false,
-      "interact": {
-        "action": "read",
-        "textId": "sign_drycross"
-      }
-    },
-    {
-      "id": "lamp_079",
-      "type": "lamp",
-      "x": 46,
-      "y": 26,
-      "solid": false
-    },
-    {
-      "id": "lamp_080",
-      "type": "lamp",
-      "x": 66,
-      "y": 26,
-      "solid": false
-    },
-    {
-      "id": "stall_081",
-      "type": "stall",
-      "x": 64,
-      "y": 42,
-      "solid": true,
-      "interact": {
-        "action": "talk",
-        "entityId": "npc_verdleg_trader"
-      }
-    },
-    {
-      "id": "crate_082",
-      "type": "crate",
-      "x": 50,
-      "y": 44,
-      "solid": true
-    },
-    {
-      "id": "junk_083",
-      "type": "junk",
-      "x": 70,
-      "y": 48,
-      "solid": true
-    },
-    {
-      "id": "banner_084",
-      "type": "banner",
-      "x": 42,
-      "y": 32,
-      "solid": false
-    },
-    {
       "id": "tent_085",
       "type": "tent",
       "x": 12,
@@ -345,20 +288,6 @@
       }
     },
     {
-      "id": "banner_094",
-      "type": "banner",
-      "x": 63,
-      "y": 33,
-      "solid": false
-    },
-    {
-      "id": "lamp_095",
-      "type": "lamp",
-      "x": 65,
-      "y": 33,
-      "solid": false
-    },
-    {
       "id": "glyph_096",
       "type": "glyph",
       "x": 102,
@@ -389,97 +318,6 @@
       "x": 105,
       "y": 74,
       "solid": false
-    },
-    {
-      "id": "scrapNode_100",
-      "type": "scrapNode",
-      "x": 40,
-      "y": 48,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_scrap",
-        "amount": 1,
-        "cooldown": 120
-      }
-    },
-    {
-      "id": "scrapNode_101",
-      "type": "scrapNode",
-      "x": 35,
-      "y": 35,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_scrap",
-        "amount": 1,
-        "cooldown": 120
-      }
-    },
-    {
-      "id": "scrapNode_102",
-      "type": "scrapNode",
-      "x": 50,
-      "y": 50,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_scrap",
-        "amount": 1,
-        "cooldown": 120
-      }
-    },
-    {
-      "id": "scrapNode_103",
-      "type": "scrapNode",
-      "x": 72,
-      "y": 46,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_scrap",
-        "amount": 1,
-        "cooldown": 120
-      }
-    },
-    {
-      "id": "clothNode_104",
-      "type": "clothNode",
-      "x": 42,
-      "y": 26,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_cloth",
-        "amount": 1,
-        "cooldown": 180
-      }
-    },
-    {
-      "id": "clothNode_105",
-      "type": "clothNode",
-      "x": 72,
-      "y": 28,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_cloth",
-        "amount": 1,
-        "cooldown": 180
-      }
-    },
-    {
-      "id": "clothNode_106",
-      "type": "clothNode",
-      "x": 38,
-      "y": 38,
-      "solid": false,
-      "interact": {
-        "action": "collect",
-        "itemId": "itm_cloth",
-        "amount": 1,
-        "cooldown": 180
-      }
     },
     {
       "id": "wall_001",
