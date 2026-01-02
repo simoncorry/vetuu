@@ -79,12 +79,11 @@ function seededRandom(x, y) {
 
 /**
  * Reveal the Drycross base and surrounding area on game start.
- * Uses radial distance with jagged edges for a natural look.
+ * Reveals the full base rectangle + 12 tiles beyond walls with jagged edges.
  */
 function revealDrycrossBase(state) {
-  const CORE_RADIUS = 14;   // Always revealed within this radius
-  const OUTER_RADIUS = 20;  // Max reveal distance (with falloff)
-  const JAGGED_AMOUNT = 3;  // Random variation in radius
+  const BUFFER = 12;        // Tiles beyond walls to reveal
+  const JAGGED_AMOUNT = 4;  // Random variation at edges
   
   // Find Drycross region
   const drycross = state.map.regions?.find(r => r.id === 'region_drycross');
@@ -93,42 +92,48 @@ function revealDrycrossBase(state) {
   // Get map offset for expanded coordinates
   const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
   
-  // Calculate center of the region
-  const centerX = Math.floor((drycross.bounds.x0 + drycross.bounds.x1) / 2) + offset.x;
-  const centerY = Math.floor((drycross.bounds.y0 + drycross.bounds.y1) / 2) + offset.y;
+  // Base bounds (from map.json region)
+  const baseMinX = drycross.bounds.x0 + offset.x;
+  const baseMaxX = drycross.bounds.x1 + offset.x;
+  const baseMinY = drycross.bounds.y0 + offset.y;
+  const baseMaxY = drycross.bounds.y1 + offset.y;
   
-  // Scan area around center
-  const scanRadius = OUTER_RADIUS + JAGGED_AMOUNT + 2;
-  const startX = Math.max(0, centerX - scanRadius);
-  const startY = Math.max(0, centerY - scanRadius);
-  const endX = Math.min(mapWidth - 1, centerX + scanRadius);
-  const endY = Math.min(mapHeight - 1, centerY + scanRadius);
+  // Reveal area = base + buffer
+  const revealMinX = baseMinX - BUFFER;
+  const revealMaxX = baseMaxX + BUFFER;
+  const revealMinY = baseMinY - BUFFER;
+  const revealMaxY = baseMaxY + BUFFER;
   
-  // Reveal tiles with radial falloff and jagged edges
+  // Scan area (including extra for jagged edges)
+  const startX = Math.max(0, revealMinX - JAGGED_AMOUNT);
+  const startY = Math.max(0, revealMinY - JAGGED_AMOUNT);
+  const endX = Math.min(mapWidth - 1, revealMaxX + JAGGED_AMOUNT);
+  const endY = Math.min(mapHeight - 1, revealMaxY + JAGGED_AMOUNT);
+  
   for (let y = startY; y <= endY; y++) {
     for (let x = startX; x <= endX; x++) {
       if (fogMask[y][x]) continue; // Already revealed
       
-      // Calculate distance from center
-      const dist = Math.hypot(x - centerX, y - centerY);
+      // Check if inside the core reveal rectangle
+      const insideX = x >= revealMinX && x <= revealMaxX;
+      const insideY = y >= revealMinY && y <= revealMaxY;
       
-      // Add per-tile random variation for jagged edges
-      const jitter = (seededRandom(x, y) - 0.5) * 2 * JAGGED_AMOUNT;
-      const effectiveRadius = OUTER_RADIUS + jitter;
-      
-      // Inside core = always reveal
-      if (dist <= CORE_RADIUS) {
+      if (insideX && insideY) {
+        // Inside core reveal area - always reveal
         fogMask[y][x] = true;
         state.runtime.revealedTiles.add(`${x},${y}`);
         continue;
       }
       
-      // Between core and outer = chance based on distance
-      if (dist <= effectiveRadius) {
-        const falloffZone = effectiveRadius - CORE_RADIUS;
-        const distInFalloff = dist - CORE_RADIUS;
-        const revealChance = 1 - (distInFalloff / falloffZone);
-        
+      // Calculate distance to the reveal rectangle edge
+      const distX = x < revealMinX ? revealMinX - x : (x > revealMaxX ? x - revealMaxX : 0);
+      const distY = y < revealMinY ? revealMinY - y : (y > revealMaxY ? y - revealMaxY : 0);
+      const distToEdge = Math.hypot(distX, distY);
+      
+      // Jagged edge falloff
+      const jitter = (seededRandom(x, y) - 0.5) * 2 * JAGGED_AMOUNT;
+      if (distToEdge <= JAGGED_AMOUNT + jitter) {
+        const revealChance = 1 - (distToEdge / (JAGGED_AMOUNT * 2));
         if (seededRandom(x + 100, y + 100) < revealChance) {
           fogMask[y][x] = true;
           state.runtime.revealedTiles.add(`${x},${y}`);

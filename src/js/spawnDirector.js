@@ -31,18 +31,18 @@ import { renderEnemies } from './combat.js';
 // - Danger: Karth patrols, elite content, levels 25-40
 // - Deep: Endgame area, levels 40-50, low density high lethality
 const RINGS = {
-  safe:       { min: 0,  max: 28 },    // Wide calm zone around Drycross
-  frontier:   { min: 29, max: 70 },    // Mixed threats, early packs
-  wilderness: { min: 71, max: 125 },   // Trog territory, real danger
-  danger:     { min: 126, max: 190 },  // Karth patrols, elites
-  deep:       { min: 191, max: Infinity } // Optional endgame spawns
+  safe:       { min: 0,  max: 42 },    // Wide calm zone around Drycross (1.5x scaled)
+  frontier:   { min: 43, max: 105 },   // Mixed threats, early packs
+  wilderness: { min: 106, max: 187 },  // Trog territory, real danger
+  danger:     { min: 188, max: 285 },  // Karth patrols, elites
+  deep:       { min: 286, max: Infinity } // Optional endgame spawns
 };
 
 // ============================================
 // CONSTANTS - DENSITY & SPAWNING
 // ============================================
-const ACTIVE_RADIUS = 30;           // Bubble around player for spawn decisions (wider for larger world)
-const NO_SPAWN_RADIUS = 12;         // Don't spawn within this range of player
+const ACTIVE_RADIUS = 45;           // Bubble around player for spawn decisions (1.5x scaled)
+const NO_SPAWN_RADIUS = 18;         // Don't spawn within this range of player (1.5x scaled)
 const SPAWN_TICK_MS = 500;          // How often to check spawns
 
 // Density caps within active bubble
@@ -93,7 +93,7 @@ const MAX_PACK_SIZE = 8;        // Maximum enemies per pack
 // STATE
 // ============================================
 let currentState = null;
-let baseCenter = { x: 236, y: 162 };  // Will be set from map offset
+let baseCenter = { x: 356, y: 238 };  // Will be set from map offset (720x480 map)
 let baseBounds = null;
 let baseBuffer = 4;
 let spawners = [];
@@ -331,8 +331,8 @@ const ENEMY_TYPES = {
 // LOADED REGION MODEL
 // ============================================
 // Controls which spawners are active (to avoid simulating the whole planet)
-const BASE_BUBBLE_RADIUS = 50;      // Always keep base area populated
-const PLAYER_BUBBLE_MARGIN = 15;    // Extra margin beyond ACTIVE_RADIUS
+const BASE_BUBBLE_RADIUS = 75;      // Always keep base area populated (1.5x scaled)
+const PLAYER_BUBBLE_MARGIN = 22;    // Extra margin beyond ACTIVE_RADIUS
 
 /**
  * Check if a spawner is in a "loaded" region (base bubble or player bubble).
@@ -363,10 +363,10 @@ export function initSpawnDirector(state) {
   if (state.map?.meta?.originalOffset) {
     const ox = state.map.meta.originalOffset.x;
     const oy = state.map.meta.originalOffset.y;
-    // Base center (4x scaled base, centered at 56,38)
+    // Base center (6x scaled map, base centered at 56,38 in original coords)
     baseCenter = { x: 56 + ox, y: 38 + oy };
     
-    // Define base bounds (4x scaled: 33,21 → 79,55)
+    // Define base bounds (original coords 22-90 x 13-63)
     baseBounds = {
       minX: 22 + ox,
       maxX: 90 + ox,
@@ -551,7 +551,7 @@ function generateDefaultSpawners() {
   // Inner nomads (level 1, closest to base)
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2;
-    const dist = 8 + Math.random() * 4; // 8-12 tiles from center
+    const dist = 12 + Math.random() * 6; // 8-12 tiles from center
     result.push({
       id: `sp_nomad_inner_${id++}`,
       kind: 'stray',
@@ -579,7 +579,7 @@ function generateDefaultSpawners() {
   // Mid nomads (level 1-2, middle of safe zone)
   for (let i = 0; i < 10; i++) {
     const angle = (i / 10) * Math.PI * 2 + Math.PI / 20;
-    const dist = 14 + Math.random() * 5; // 14-19 tiles from center
+    const dist = 21 + Math.random() * 8; // 14-19 tiles from center
     result.push({
       id: `sp_nomad_mid_${id++}`,
       kind: 'stray',
@@ -607,7 +607,7 @@ function generateDefaultSpawners() {
   // Outer nomads (level 2-3, edge of safe zone)
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2 + Math.PI / 16;
-    const dist = 21 + Math.random() * 6; // 21-27 tiles from center
+    const dist = 32 + Math.random() * 9; // 21-27 tiles from center
     result.push({
       id: `sp_nomad_outer_${id++}`,
       kind: 'stray',
@@ -641,7 +641,7 @@ function generateDefaultSpawners() {
   // Frontier solo strays (level 4-6)
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
-    const dist = 32 + Math.random() * 8; // 32-40 tiles from center
+    const dist = 48 + Math.random() * 12; // 32-40 tiles from center
     result.push({
       id: `sp_frontier_stray_${id++}`,
       kind: 'stray',
@@ -668,7 +668,7 @@ function generateDefaultSpawners() {
   // Inner frontier packs (level 4-7, small packs)
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + Math.PI / 10;
-    const dist = 35 + Math.random() * 8; // 35-43 tiles from center
+    const dist = 53 + Math.random() * 12; // 35-43 tiles from center
     result.push({
       id: `sp_pack_frontier_inner_${id++}`,
       kind: 'pack',
@@ -685,20 +685,20 @@ function generateDefaultSpawners() {
       alpha: { chance: 0.15, max: 1 },
       aggroType: 'conditional',
       aggroRadius: 6,
-      leashRadius: 14,
+      leashRadius: 21,
       deaggroTimeMs: 4000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 16
+      minDistanceToOtherPacks: 24
     });
   }
   
   // Mid frontier packs (level 7-10)
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + Math.PI / 5;
-    const dist = 48 + Math.random() * 10; // 48-58 tiles from center
+    const dist = 72 + Math.random() * 15; // 48-58 tiles from center
     result.push({
       id: `sp_pack_frontier_mid_${id++}`,
       kind: 'pack',
@@ -715,20 +715,20 @@ function generateDefaultSpawners() {
       alpha: { chance: 0.25, max: 1 },
       aggroType: 'conditional',
       aggroRadius: 6,
-      leashRadius: 16,
+      leashRadius: 24,
       deaggroTimeMs: 4000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 16
+      minDistanceToOtherPacks: 24
     });
   }
   
   // Outer frontier packs (level 10-12, larger packs)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 60 + Math.random() * 8; // 60-68 tiles from center
+    const dist = 90 + Math.random() * 12; // 60-68 tiles from center
     result.push({
       id: `sp_pack_frontier_outer_${id++}`,
       kind: 'pack',
@@ -745,13 +745,13 @@ function generateDefaultSpawners() {
       alpha: { chance: 0.3, max: 1 },
       aggroType: 'aggressive',
       aggroRadius: 7,
-      leashRadius: 18,
+      leashRadius: 27,
       deaggroTimeMs: 5000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 18
+      minDistanceToOtherPacks: 27
     });
   }
   
@@ -764,7 +764,7 @@ function generateDefaultSpawners() {
   // Inner wilderness (level 12-16)
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2;
-    const dist = 78 + Math.random() * 12; // 78-90 tiles from center
+    const dist = 117 + Math.random() * 18; // 78-90 tiles from center
     result.push({
       id: `sp_pack_trog_inner_${id++}`,
       kind: 'pack',
@@ -781,20 +781,20 @@ function generateDefaultSpawners() {
       alpha: { chance: 0.35, max: 1 },
       aggroType: 'aggressive',
       aggroRadius: 8,
-      leashRadius: 18,
+      leashRadius: 27,
       deaggroTimeMs: 5000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 18
+      minDistanceToOtherPacks: 27
     });
   }
   
   // Mid wilderness (level 16-20)
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + Math.PI / 5;
-    const dist = 95 + Math.random() * 15; // 95-110 tiles from center
+    const dist = 143 + Math.random() * 23; // 95-110 tiles from center
     result.push({
       id: `sp_pack_trog_mid_${id++}`,
       kind: 'pack',
@@ -811,20 +811,20 @@ function generateDefaultSpawners() {
       alpha: { chance: 0.4, max: 2 },
       aggroType: 'aggressive',
       aggroRadius: 9,
-      leashRadius: 20,
+      leashRadius: 30,
       deaggroTimeMs: 5000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 20
+      minDistanceToOtherPacks: 30
     });
   }
   
   // Outer wilderness (level 20-25)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 112 + Math.random() * 12; // 112-124 tiles from center
+    const dist = 168 + Math.random() * 18; // 112-124 tiles from center
     result.push({
       id: `sp_pack_trog_outer_${id++}`,
       kind: 'pack',
@@ -860,7 +860,7 @@ function generateDefaultSpawners() {
   // Inner danger (level 25-30)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
-    const dist = 132 + Math.random() * 15; // 132-147 tiles from center
+    const dist = 198 + Math.random() * 23; // 132-147 tiles from center
     result.push({
       id: `sp_pack_karth_inner_${id++}`,
       kind: 'pack',
@@ -891,7 +891,7 @@ function generateDefaultSpawners() {
   // Mid danger (level 30-35)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const dist = 155 + Math.random() * 18; // 155-173 tiles from center
+    const dist = 233 + Math.random() * 27; // 155-173 tiles from center
     result.push({
       id: `sp_pack_karth_mid_${id++}`,
       kind: 'pack',
@@ -922,7 +922,7 @@ function generateDefaultSpawners() {
   // Outer danger (level 35-40)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 178 + Math.random() * 10; // 178-188 tiles from center
+    const dist = 267 + Math.random() * 15; // 178-188 tiles from center
     result.push({
       id: `sp_pack_karth_outer_${id++}`,
       kind: 'pack',
@@ -962,7 +962,7 @@ function generateDefaultSpawners() {
   const deepAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4]; // Corner angles
   for (let i = 0; i < 4; i++) {
     const angle = deepAngles[i];
-    const dist = 180 + Math.random() * 15; // Near edge of danger ring
+    const dist = 270 + Math.random() * 23; // Near edge of danger ring
     result.push({
       id: `sp_pack_deep_${id++}`,
       kind: 'pack',
@@ -993,7 +993,7 @@ function generateDefaultSpawners() {
   // Elite deep spawners (level 45-50) - very rare, corner positions
   for (let i = 0; i < 2; i++) {
     const angle = deepAngles[i * 2]; // Only 2 spawners at opposite corners
-    const dist = 190 + Math.random() * 10;
+    const dist = 285 + Math.random() * 15;
     result.push({
       id: `sp_pack_deep_elite_${id++}`,
       kind: 'pack',

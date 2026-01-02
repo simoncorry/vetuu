@@ -1,13 +1,13 @@
 /**
  * VETUU — Map Generator
- * Procedurally expands the base map 4x (120x80 → 480x320)
- * Drycross base centered at (240, 168) in expanded map
+ * Procedurally expands the base map 6x (120x80 → 720x480)
+ * Drycross base centered at (360, 240) in expanded map
  */
 
 // New map center (scaled)
 export const BASE_CENTER = { 
-  x: Math.floor(120 * 2), // 240 - center of 480 width
-  y: Math.floor(80 * 2)   // 160 - center of 320 height
+  x: Math.floor(120 * 3), // 360 - center of 720 width
+  y: Math.floor(80 * 3)   // 240 - center of 480 height
 };
 
 // Terrain types for procedural generation
@@ -19,11 +19,11 @@ const TERRAIN = {
 };
 
 /**
- * Expand the map data 4x
+ * Expand the map data 6x (1.5x more than previous 4x)
  */
 export function expandMap(originalMap) {
-  const newWidth = 480;
-  const newHeight = 320;
+  const newWidth = 720;
+  const newHeight = 480;
   
   // Calculate offset to place original map in center
   const offsetX = Math.floor((newWidth - originalMap.meta.width) / 2);
@@ -155,7 +155,7 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
   const centerY = height / 2;
 
   // Scatter rocks and wrecks in the expanded areas
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 400; i++) {
     const x = Math.floor(seededRandom(i * 7) * width);
     const y = Math.floor(seededRandom(i * 13) * height);
     
@@ -169,7 +169,7 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
   }
 
   // Add some resource nodes in outer areas
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 100; i++) {
     const x = Math.floor(seededRandom(i * 17 + 1000) * width);
     const y = Math.floor(seededRandom(i * 23 + 1000) * height);
     
@@ -204,8 +204,8 @@ function seededRandom(seed) {
  */
 export function toExpandedCoords(origX, origY) {
   // Offset to center the original map
-  const offsetX = Math.floor((480 - 120) / 2);
-  const offsetY = Math.floor((320 - 80) / 2);
+  const offsetX = Math.floor((720 - 120) / 2);
+  const offsetY = Math.floor((480 - 80) / 2);
   return { x: origX + offsetX, y: origY + offsetY };
 }
 
@@ -213,8 +213,8 @@ export function toExpandedCoords(origX, origY) {
  * Convert expanded coordinates to original (if within bounds)
  */
 export function toOriginalCoords(expX, expY) {
-  const offsetX = Math.floor((480 - 120) / 2);
-  const offsetY = Math.floor((320 - 80) / 2);
+  const offsetX = Math.floor((720 - 120) / 2);
+  const offsetY = Math.floor((480 - 80) / 2);
   return { x: expX - offsetX, y: expY - offsetY };
 }
 
