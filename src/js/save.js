@@ -18,7 +18,7 @@ export function saveGame(state) {
         x: state.player.x,
         y: state.player.y,
         hp: state.player.hp,
-        maxHp: state.player.maxHp,
+        maxHP: state.player.maxHP,
         sense: state.player.sense,
         maxSense: state.player.maxSense,
         atk: state.player.atk,

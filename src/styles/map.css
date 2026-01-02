@@ -39,13 +39,16 @@
   background-color: var(--tile-color, var(--sand));
 }
 
-/* ---------- Objects ---------- */
+/* ---------- Objects - GPU accelerated via transform ---------- */
 .object {
   position: absolute;
+  left: 0;
+  top: 0;
   width: var(--tile-size);
   height: var(--tile-size);
   background-color: var(--obj-color, #444);
   border-radius: 2px;
+  transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0);
 }
 
 .object[data-interactable] { cursor: pointer; }
@@ -149,9 +152,11 @@
   letter-spacing: 0.05em;
 }
 
-/* ---------- Path Markers ---------- */
+/* ---------- Path Markers - GPU accelerated via transform ---------- */
 .path-marker {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 8px;
   height: 8px;
   background: var(--accent);
@@ -160,12 +165,13 @@
   z-index: 8;
   box-shadow: 0 0 6px var(--accent);
   opacity: var(--marker-opacity, 0.6);
+  transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0);
   animation: path-pulse 1s ease-in-out infinite;
   will-change: transform, opacity;
 }
 
 @keyframes path-pulse {
-  0%, 100% { opacity: 0.4; transform: scale3d(0.8, 0.8, 1); }
-  50% { opacity: 1; transform: scale3d(1.2, 1.2, 1); }
+  0%, 100% { opacity: 0.4; transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0) scale3d(0.8, 0.8, 1); }
+  50% { opacity: 1; transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0) scale3d(1.2, 1.2, 1); }
 }
 

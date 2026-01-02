@@ -2001,9 +2001,6 @@ function applyAlphaMods(enemy) {
   enemy.hp = Math.min(enemy.hp, enemy.maxHP);
   enemy.atk = Math.round(enemy.atk * 1.25);
   enemy.def = Math.round(enemy.def * 1.15);
-  
-  // Keep alias synced
-  enemy.maxHp = enemy.maxHP;
 }
 
 function createEnemy(rosterEntry, position, request) {
@@ -2064,10 +2061,9 @@ function createEnemy(rosterEntry, position, request) {
     homeCenter, // Legacy compatibility (pack center for visuals only)
     packHomeCenter: homeCenter, // Explicit pack center reference for debug
     
-    // Stats (canonical: maxHP, legacy alias: maxHp)
+    // Stats
     hp,
     maxHP: hp,
-    maxHp: hp,  // Legacy alias - kept for backward compatibility
     atk,
     def,
     

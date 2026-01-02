@@ -181,8 +181,8 @@ function createFogFadeElement(x, y, fromState, toState) {
   
   const el = document.createElement('div');
   el.className = 'fog-fade';
-  el.style.left = `${x * tileSize}px`;
-  el.style.top = `${y * tileSize}px`;
+  el.style.setProperty('--pos-x', `${x * tileSize}px`);
+  el.style.setProperty('--pos-y', `${y * tileSize}px`);
   
   // Choose the right dither pattern based on transition
   if (toState === FOG_STATE.REVEALED) {

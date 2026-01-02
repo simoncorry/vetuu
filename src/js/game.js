@@ -28,8 +28,7 @@ export const state = {
     x: 56,
     y: 42,
     hp: 100,
-    maxHP: 100,   // Canonical key
-    maxHp: 100,   // Legacy alias
+    maxHP: 100,
     sense: 20,
     maxSense: 20,
     atk: 5,

@@ -5,9 +5,11 @@
 
 /* ---------- Weapon Effects ---------- */
 
-/* Projectile (laser bolt) */
+/* Projectile (laser bolt) - GPU accelerated via transform */
 .projectile {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 16px;
   height: 4px;
   background: linear-gradient(90deg, transparent, var(--color, #00FFFF), var(--color, #00FFFF));
@@ -16,6 +18,7 @@
   pointer-events: none;
   z-index: 150;
   transform-origin: left center;
+  transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0) rotate3d(0, 0, 1, var(--angle, 0deg));
   animation: projectile-fly 0.2s linear forwards;
   will-change: transform, opacity;
 }
@@ -29,22 +32,23 @@
 @keyframes projectile-fly {
   from {
     opacity: 1;
-    transform: rotate3d(0, 0, 1, var(--angle, 0deg)) translate3d(0, 0, 0);
   }
   to {
     opacity: 0.5;
-    transform: rotate3d(0, 0, 1, var(--angle, 0deg)) translate3d(var(--dx, 0), var(--dy, 0), 0);
+    transform: translate3d(calc(var(--pos-x, 0) + var(--dx, 0)), calc(var(--pos-y, 0) + var(--dy, 0)), 0) rotate3d(0, 0, 1, var(--angle, 0deg));
   }
 }
 
-/* Melee swipe */
+/* Melee swipe - GPU accelerated via transform */
 .melee-swipe {
   position: absolute;
+  left: 0;
+  top: 0;
   width: calc(var(--tile-size) * 2);
   height: calc(var(--tile-size) * 2);
   pointer-events: none;
   z-index: 150;
-  transform: translate3d(-50%, -50%, 0) rotate3d(0, 0, 1, var(--angle, 0deg));
+  transform: translate3d(calc(var(--pos-x, 0) - 50%), calc(var(--pos-y, 0) - 50%), 0) rotate3d(0, 0, 1, var(--angle, 0deg));
   animation: swipe-arc 0.25s ease-out forwards;
   will-change: transform, opacity;
 }
@@ -79,15 +83,18 @@
   100% { transform: translate3d(0, -50%, 0) scale3d(0.3, 1, 1) rotate3d(0, 0, 1, 30deg); opacity: 0; }
 }
 
-/* Cleave effect */
+/* Cleave effect - GPU accelerated via transform */
 .cleave-effect {
   position: absolute;
+  left: 0;
+  top: 0;
   width: calc(var(--tile-size) * 3);
   height: calc(var(--tile-size) * 3);
   border: 3px solid var(--accent);
   border-radius: 50%;
   pointer-events: none;
   z-index: 150;
+  transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0);
   animation: cleave-expand 0.3s ease-out forwards;
   box-shadow: 0 0 20px var(--accent), inset 0 0 20px rgba(105, 210, 214, 0.3);
   will-change: transform, opacity;
@@ -95,18 +102,20 @@
 
 @keyframes cleave-expand {
   from { 
-    transform: scale3d(0.3, 0.3, 1);
+    transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0) scale3d(0.3, 0.3, 1);
     opacity: 1;
   }
   to { 
-    transform: scale3d(1.5, 1.5, 1);
+    transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0) scale3d(1.5, 1.5, 1);
     opacity: 0;
   }
 }
 
-/* ---------- Damage Numbers ---------- */
+/* ---------- Damage Numbers - GPU accelerated via transform ---------- */
 .damage-number {
   position: absolute;
+  left: 0;
+  top: 0;
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: bold;
@@ -114,6 +123,7 @@
   text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.9);
   pointer-events: none;
   z-index: 200;
+  transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0);
   animation: damage-float 1s ease-out forwards;
   will-change: transform, opacity;
 }
@@ -133,8 +143,8 @@
 }
 
 @keyframes damage-float {
-  0% { opacity: 1; transform: translate3d(0, 0, 0) scale3d(1, 1, 1); }
-  100% { opacity: 0; transform: translate3d(0, -40px, 0) scale3d(0.8, 0.8, 1); }
+  0% { opacity: 1; transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0) scale3d(1, 1, 1); }
+  100% { opacity: 0; transform: translate3d(var(--pos-x, 0), calc(var(--pos-y, 0) - 40px), 0) scale3d(0.8, 0.8, 1); }
 }
 
 /* ---------- Sense Ability Effects ---------- */

@@ -9,23 +9,14 @@
 import { AI } from './aiConstants.js';
 import { nowMs, toPerfTime, isExpired, remainingMs, isDeepNight } from './time.js';
 import { isPositionIlluminated, isTorchEnabled } from './game.js';
+import { distCoords } from './utils.js';
+import { getMaxHP } from './entityCompat.js';
 
 // Re-export nowMs for convenience
 export { nowMs, toPerfTime, isExpired, remainingMs };
 
-// ============================================
-// DISTANCE
-// ============================================
-
-/** Euclidean distance between two points */
-export function dist(x1, y1, x2, y2) {
-  return Math.hypot(x2 - x1, y2 - y1);
-}
-
-/** Distance between two entities with x,y properties */
-export function distEntities(a, b) {
-  return Math.hypot(b.x - a.x, b.y - a.y);
-}
+// Alias for internal use (dist is used throughout this file)
+const dist = distCoords;
 
 // ============================================
 // EFFECTS MANAGEMENT
@@ -195,50 +186,12 @@ export function setOnEnemyDisengageCallback(callback) {
 }
 
 /**
- * Get a unique retreat destination for an enemy.
- * 
- * STABILITY: Always returns enemy's authoritative spawn point (spawnX/spawnY).
- * With the new spawn footprint system, each enemy has a unique 3×3 block,
- * so we should NEVER need to search for a fallback position.
- * 
- * @param {object} enemy - The enemy retreating
- * @param {object} _state - Game state (unused with new footprint system)
- * @param {function} _canMoveToFn - Collision check function (unused)
- * @returns {{x: number, y: number}} - Retreat destination (always enemy's spawn point)
- */
-export function getRetreatDestination(enemy, _state, _canMoveToFn) {
-  // ALWAYS use enemy's authoritative spawn point (unique per enemy from spawn footprint)
-  // The spawn footprint system guarantees this is a valid, reserved position
-  return {
-    x: enemy.spawnX ?? enemy.home?.x ?? enemy.x,
-    y: enemy.spawnY ?? enemy.home?.y ?? enemy.y
-  };
-}
-
-/**
- * Check if a tile is occupied by another enemy.
- */
-function isTileOccupiedByOther(state, x, y, excludeId) {
-  const enemies = state?.runtime?.activeEnemies || [];
-  for (const e of enemies) {
-    if (e.id === excludeId) continue;
-    if (e.hp <= 0) continue;
-    if (e.x === x && e.y === y) return true;
-    // Also check retreatTo positions of currently retreating enemies
-    if (e.isRetreating && e.retreatTo?.x === x && e.retreatTo?.y === y) return true;
-  }
-  return false;
-}
-
-/**
  * Start retreat for an enemy
  * @param {object} enemy - The enemy to retreat
  * @param {number} t - Current time in ms
  * @param {string} reason - Why retreating: 'leash', 'guards', 'lost', 'pack'
- * @param {object} _state - Game state (unused with new footprint system)
- * @param {function} _canMoveToFn - Collision check function (unused)
  */
-export function startRetreat(enemy, t = nowMs(), reason = 'leash', _state = null, _canMoveToFn = null) {
+export function startRetreat(enemy, t = nowMs(), reason = 'leash') {
   // Already retreating? Just update reason if more urgent
   if (enemy.isRetreating) {
     if (reason === 'guards') {
@@ -352,8 +305,7 @@ export function processRetreat(enemy, moveTowardFn, t = nowMs(), dtMs = 100, onS
  * Heal enemy while retreating
  */
 export function regenWhileRetreating(enemy, dtMs) {
-  // Support both maxHP and maxHp casing
-  const maxHp = enemy.maxHp ?? enemy.maxHP;
+  const maxHp = getMaxHP(enemy);
   if (!maxHp) return;
   
   const rate = enemy.retreatRegenRate ?? AI.RETREAT_REGEN_RATE;
@@ -379,8 +331,8 @@ export function finishResetAtHome(enemy, t = nowMs()) {
   // Clear death-handling flag (prevents immortal enemies on reset)
   enemy._deathHandled = false;
 
-  // Full heal on home arrival (support both maxHP and maxHp casing)
-  const maxHp = enemy.maxHp ?? enemy.maxHP;
+  // Full heal on home arrival
+  const maxHp = getMaxHP(enemy);
   if (maxHp) {
     enemy.hp = maxHp;
   }

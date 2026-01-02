@@ -777,7 +777,6 @@ function initGuardsFromNPCs() {
       level: GUARD_LEVEL,
       hp: 100 + GUARD_LEVEL * 10, // Guards have HP now
       maxHP: 100 + GUARD_LEVEL * 10,
-      maxHp: 100 + GUARD_LEVEL * 10, // Legacy alias
       cooldownUntil: 0,
       color: npc.color
     }));
@@ -1334,7 +1333,7 @@ function processEnemyAI(enemy, t) {
   // 7. GUARD RETREAT CHECKS
   // ============================================
   if (shouldBreakOffFromGuards(enemy, guards, t)) {
-    startRetreat(enemy, t, 'guards', currentState, canMoveTo);
+    startRetreat(enemy, t, 'guards');
     releaseAttackerSlot(enemy);
     
     if (enemy.packId) {
@@ -1373,7 +1372,7 @@ function processEnemyAI(enemy, t) {
     const retreatReason = checkLeashAndDeaggro(enemy, player, t);
     
     if (retreatReason) {
-      startRetreat(enemy, t, retreatReason, currentState, canMoveTo);
+      startRetreat(enemy, t, retreatReason);
       releaseAttackerSlot(enemy);
       
       if (retreatReason === 'leash' && enemy.packId) {
@@ -4470,8 +4469,8 @@ function showProjectile(fromX, fromY, toX, toY, color, isEnhanced = false) {
   const projectile = document.createElement('div');
   projectile.className = `projectile ${isEnhanced ? 'enhanced' : ''}`;
   projectile.style.setProperty('--color', color);
-  projectile.style.left = `${fromX * 24 + 12}px`;
-  projectile.style.top = `${fromY * 24 + 12}px`;
+  projectile.style.setProperty('--pos-x', `${fromX * 24 + 12}px`);
+  projectile.style.setProperty('--pos-y', `${fromY * 24 + 12}px`);
 
   const dx = (toX - fromX) * 24;
   const dy = (toY - fromY) * 24;
@@ -4479,10 +4478,10 @@ function showProjectile(fromX, fromY, toX, toY, color, isEnhanced = false) {
 
   projectile.style.setProperty('--dx', `${dx}px`);
   projectile.style.setProperty('--dy', `${dy}px`);
-  projectile.style.transform = `rotate3d(0, 0, 1, ${angle}deg)`;
+  projectile.style.setProperty('--angle', `${angle}deg`);
 
   world.appendChild(projectile);
-  setTimeout(() => projectile.remove(), 300);
+  projectile.addEventListener('animationend', () => projectile.remove(), { once: true });
 }
 
 function showMeleeSwipe(fromX, fromY, toX, toY, color, isEnhanced = false) {
@@ -4492,8 +4491,8 @@ function showMeleeSwipe(fromX, fromY, toX, toY, color, isEnhanced = false) {
   const swipe = document.createElement('div');
   swipe.className = `melee-swipe ${isEnhanced ? 'enhanced' : ''}`;
   swipe.style.setProperty('--color', color);
-  swipe.style.left = `${toX * 24}px`;
-  swipe.style.top = `${toY * 24}px`;
+  swipe.style.setProperty('--pos-x', `${toX * 24}px`);
+  swipe.style.setProperty('--pos-y', `${toY * 24}px`);
 
   const dx = toX - fromX;
   const dy = toY - fromY;
@@ -4501,7 +4500,7 @@ function showMeleeSwipe(fromX, fromY, toX, toY, color, isEnhanced = false) {
   swipe.style.setProperty('--angle', `${angle}deg`);
 
   world.appendChild(swipe);
-  setTimeout(() => swipe.remove(), 300);
+  swipe.addEventListener('animationend', () => swipe.remove(), { once: true });
 }
 
 function showCleaveEffect(x, y) {
@@ -4510,11 +4509,11 @@ function showCleaveEffect(x, y) {
 
   const cleave = document.createElement('div');
   cleave.className = 'cleave-effect';
-  cleave.style.left = `${x * 24 - 24}px`;
-  cleave.style.top = `${y * 24 - 24}px`;
+  cleave.style.setProperty('--pos-x', `${x * 24 - 24}px`);
+  cleave.style.setProperty('--pos-y', `${y * 24 - 24}px`);
 
   world.appendChild(cleave);
-  setTimeout(() => cleave.remove(), 400);
+  cleave.addEventListener('animationend', () => cleave.remove(), { once: true });
 }
 
 // ============================================
@@ -5245,7 +5244,7 @@ if (typeof window !== 'undefined') {
       id: currentTarget.id,
       name: currentTarget.name,
       hp: currentTarget.hp,
-      maxHp: currentTarget.maxHp ?? currentTarget.maxHP,
+      maxHP: getMaxHP(currentTarget),
       state: currentTarget.state,
       isRetreating: currentTarget.isRetreating,
       isEngaged: currentTarget.isEngaged,
@@ -5453,7 +5452,6 @@ export function spawnBoss(state, bossDef) {
     y: bossDef.y,
     hp: calculateEnemyHP(bossDef.level) * 3,
     maxHP: calculateEnemyHP(bossDef.level) * 3,
-    maxHp: calculateEnemyHP(bossDef.level) * 3, // Legacy alias
     atk: calculateEnemyAtk(bossDef.level) * 1.5,
     def: calculateEnemyDef(bossDef.level),
     cooldownUntil: 0,
@@ -6314,11 +6312,11 @@ function showDamageNumber(x, y, damage, isCrit, isPlayer = false) {
   const el = document.createElement('div');
   el.className = `damage-number ${isCrit ? 'crit' : ''} ${isPlayer ? 'player-damage' : ''}`;
   el.textContent = damage;
-  el.style.left = `${x * 24 + 12}px`;
-  el.style.top = `${y * 24}px`;
+  el.style.setProperty('--pos-x', `${x * 24 + 12}px`);
+  el.style.setProperty('--pos-y', `${y * 24}px`);
 
   world.appendChild(el);
-  setTimeout(() => el.remove(), 1000);
+  el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
 export function isCombatActive() {

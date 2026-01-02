@@ -117,8 +117,8 @@ export function renderObjects(state) {
 
     const el = document.createElement('div');
     el.className = 'object';
-    el.style.left = `${obj.x * TILE_SIZE}px`;
-    el.style.top = `${obj.y * TILE_SIZE}px`;
+    el.style.setProperty('--pos-x', `${obj.x * TILE_SIZE}px`);
+    el.style.setProperty('--pos-y', `${obj.y * TILE_SIZE}px`);
     el.style.setProperty('--obj-color', objDef.color);
     el.dataset.objId = obj.id;
     el.dataset.objType = obj.type;
@@ -299,8 +299,8 @@ export function renderPath(path) {
     const { x, y } = path[i];
     const marker = document.createElement('div');
     marker.className = 'path-marker';
-    marker.style.left = `${x * TILE_SIZE + TILE_SIZE / 2 - 3}px`;
-    marker.style.top = `${y * TILE_SIZE + TILE_SIZE / 2 - 3}px`;
+    marker.style.setProperty('--pos-x', `${x * TILE_SIZE + TILE_SIZE / 2 - 3}px`);
+    marker.style.setProperty('--pos-y', `${y * TILE_SIZE + TILE_SIZE / 2 - 3}px`);
     marker.style.setProperty('--marker-opacity', 0.3 + (i / path.length) * 0.5);
     fragment.appendChild(marker);
   }

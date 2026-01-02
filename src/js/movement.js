@@ -566,8 +566,8 @@ function showPathMarkers(path) {
     const { x, y } = path[i];
     const marker = document.createElement('div');
     marker.className = 'path-marker';
-    marker.style.left = `${x * TILE_SIZE + TILE_SIZE / 2 - 4}px`;
-    marker.style.top = `${y * TILE_SIZE + TILE_SIZE / 2 - 4}px`;
+    marker.style.setProperty('--pos-x', `${x * TILE_SIZE + TILE_SIZE / 2 - 4}px`);
+    marker.style.setProperty('--pos-y', `${y * TILE_SIZE + TILE_SIZE / 2 - 4}px`);
     marker.style.setProperty('--marker-opacity', 0.3 + (i / path.length) * 0.5);
     actorLayer.appendChild(marker);
     pathMarkers.push(marker);

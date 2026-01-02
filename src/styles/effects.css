@@ -135,13 +135,15 @@
    ============================================ */
 .fog-fade {
   position: absolute;
+  left: 0;
+  top: 0;
   width: var(--tile-size, 24px);
   height: var(--tile-size, 24px);
   pointer-events: none;
   animation: fog-reveal 250ms ease-out forwards;
-  /* GPU compositing */
-  transform: translate3d(0, 0, 0);
-  will-change: opacity;
+  /* GPU compositing - position via transform */
+  transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0);
+  will-change: opacity, transform;
 }
 
 /* Inner ring fade: sparse 50% dither pattern (8/16 Bayer cells) */
