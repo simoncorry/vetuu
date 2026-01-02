@@ -162,8 +162,10 @@
   height: var(--tile-size, 24px);
   pointer-events: none;
   animation: fog-reveal 500ms ease-out forwards;
-  image-rendering: pixelated;
   transform-origin: center center;
+  /* Force GPU compositing layer */
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
   will-change: opacity, filter, transform;
 }
 
@@ -208,17 +210,17 @@
   0% { 
     opacity: 1; 
     filter: blur(0px);
-    transform: scale(1);
+    transform: translate3d(0, 0, 0) scale(1);
   }
-  60% {
-    opacity: 0.6;
-    filter: blur(2px);
-    transform: scale(1.1);
+  50% {
+    opacity: 0.7;
+    filter: blur(6px);
+    transform: translate3d(0, 0, 0) scale(1.15);
   }
   100% { 
     opacity: 0; 
-    filter: blur(4px);
-    transform: scale(1.2);
+    filter: blur(12px);
+    transform: translate3d(0, 0, 0) scale(1.3);
   }
 }
 
