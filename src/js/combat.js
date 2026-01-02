@@ -2731,7 +2731,7 @@ function executeRifleBurst(weapon, ability) {
       updateEnemyHealthBar(target);
       updateTargetFrame();
       
-      if (target.hp <= 0 && i === 0) {
+      if (target.hp <= 0) {
         handleEnemyDeath(target);
       }
     }, i * 150); // 150ms between shots
