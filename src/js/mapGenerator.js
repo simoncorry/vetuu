@@ -55,8 +55,21 @@ export function expandMap(originalMap) {
       
       if (origX >= 0 && origX < originalMap.meta.width && 
           origY >= 0 && origY < originalMap.meta.height) {
-        // Use original tile
-        row += originalMap.ground[origY][origX];
+        // Use original tile, but apply road weathering if it's a road
+        let tile = originalMap.ground[origY][origX];
+        
+        // Apply weathering to road tiles in original map
+        if (tile === '3' || tile === 'e' || tile === 'f') {
+          const weatheredTile = applyRoadWeathering(x, y);
+          if (weatheredTile !== null) {
+            tile = weatheredTile;
+          }
+          // null means show underlying terrain - use sand
+          else {
+            tile = '0';
+          }
+        }
+        row += tile;
       } else {
         // Generate procedural terrain based on distance from center
         row += generateTerrain(x, y, newWidth, newHeight);
@@ -110,6 +123,40 @@ const ROAD_MAIN_HALF = 1;      // Main road is 3 tiles wide (center ± 1)
 const ROAD_TOTAL_HALF = 3;    // Total footprint is 7 tiles wide (center ± 3)
 
 /**
+ * Apply weathering to an existing road tile
+ * Returns the weathered tile, or null if the tile should be removed (show terrain)
+ */
+function applyRoadWeathering(x, y) {
+  const rand = seededRandom(x * 1000 + y);
+  const rand2 = seededRandom(x * 7777 + y * 3333);
+  
+  // Check if on debris zone (outer tiles of road footprint)
+  const distToVertical = Math.abs(x - BASE_CENTER.x);
+  const distToHorizontal = Math.abs(y - BASE_CENTER.y);
+  const onMainVertical = distToVertical <= ROAD_MAIN_HALF;
+  const onMainHorizontal = distToHorizontal <= ROAD_MAIN_HALF;
+  const onMainRoad = onMainVertical || onMainHorizontal;
+  
+  if (onMainRoad) {
+    // Main road - 12% missing, 20% worn, 15% cracked
+    if (rand < 0.12) {
+      return null;  // Missing - show terrain
+    } else if (rand < 0.32) {
+      return ROAD_TILES.worn;
+    } else if (rand < 0.47) {
+      return ROAD_TILES.cracked;
+    }
+    return ROAD_TILES.normal;
+  } else {
+    // Debris zone - 70% missing, 30% debris chunks
+    if (rand < 0.70) {
+      return null;  // Show terrain
+    }
+    return rand2 < 0.5 ? ROAD_TILES.cracked : ROAD_TILES.worn;
+  }
+}
+
+/**
  * Check if position is on a road and return appropriate road tile
  * Roads run N-S and E-W through base center
  * - Inner 3 tiles: main road surface with weathering
@@ -135,27 +182,23 @@ function getRoadTile(x, y, centerX, centerY) {
   const rand2 = seededRandom(x * 7777 + y * 3333);
   
   if (onMainRoad) {
-    // Main road surface - mostly intact with weathering
-    if (rand < 0.08) {
-      // 8% completely missing - world bg shows through
+    // Main road surface - 12% missing, 20% worn, 15% cracked
+    if (rand < 0.12) {
+      // Missing - world bg shows through
       return null;
-    } else if (rand < 0.20) {
+    } else if (rand < 0.32) {
       return ROAD_TILES.worn;
-    } else if (rand < 0.30) {
+    } else if (rand < 0.47) {
       return ROAD_TILES.cracked;
     }
     return ROAD_TILES.normal;
   } else {
-    // Debris zone - mostly empty with scattered road chunks
-    if (rand < 0.15) {
-      // 15% chance of debris tile
-      if (rand2 < 0.5) {
-        return ROAD_TILES.cracked;
-      }
-      return ROAD_TILES.worn;
+    // Debris zone - 70% empty, 30% debris chunks
+    if (rand < 0.70) {
+      // Show world terrain
+      return null;
     }
-    // 85% show world terrain
-    return null;
+    return rand2 < 0.5 ? ROAD_TILES.cracked : ROAD_TILES.worn;
   }
 }
 
