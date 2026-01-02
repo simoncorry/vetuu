@@ -182,3 +182,68 @@
   100% { opacity: 0; }
 }
 
+/* ============================================
+   DAY/NIGHT CYCLE - CSS Overlay
+   ============================================ */
+
+:root {
+  --night-intensity: 0;
+}
+
+/* Night overlay on the world */
+#world::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(10, 15, 35, var(--night-intensity)) 0%,
+    rgba(15, 20, 45, var(--night-intensity)) 50%,
+    rgba(10, 15, 35, var(--night-intensity)) 100%
+  );
+  pointer-events: none;
+  z-index: 10;
+  transition: background 2s ease;
+  mix-blend-mode: multiply;
+}
+
+/* Lamp post glow effect */
+.lamp-glow {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  pointer-events: none;
+  z-index: 9;
+}
+
+/* Glow visible based on night intensity */
+.lamp-glow::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--glow-radius, 144px);
+  height: var(--glow-radius, 144px);
+  transform: translate3d(-50%, -50%, 0);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--glow-color, #FFE4B5) calc(var(--night-intensity) * 60%), transparent) 0%,
+    color-mix(in srgb, var(--glow-color, #FFE4B5) calc(var(--night-intensity) * 30%), transparent) 40%,
+    transparent 70%
+  );
+  border-radius: 50%;
+  opacity: calc(var(--night-intensity) * 0.8);
+  transition: opacity 2s ease;
+}
+
+/* Subtle flicker animation for lamp glows */
+@keyframes lamp-flicker {
+  0%, 100% { opacity: calc(var(--night-intensity) * 0.8); }
+  50% { opacity: calc(var(--night-intensity) * 0.75); }
+  75% { opacity: calc(var(--night-intensity) * 0.85); }
+}
+
+.lamp-glow::before {
+  animation: lamp-flicker 4s ease-in-out infinite;
+}
+
