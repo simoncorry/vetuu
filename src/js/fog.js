@@ -126,7 +126,7 @@ function createFogFadeElement(x, y, fromState, toState) {
   
   fogLayer.appendChild(el);
   
-  // Remove after animation completes (400ms)
+  // Remove after animation completes (500ms)
   el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 

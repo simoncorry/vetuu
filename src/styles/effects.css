@@ -161,8 +161,10 @@
   width: var(--tile-size, 24px);
   height: var(--tile-size, 24px);
   pointer-events: none;
-  animation: fog-reveal 400ms ease-out forwards;
+  animation: fog-reveal 500ms ease-out forwards;
   image-rendering: pixelated;
+  transform-origin: center center;
+  will-change: opacity, filter, transform;
 }
 
 /* Inner ring fade: sparse 50% dither pattern (8/16 Bayer cells) */
@@ -203,7 +205,20 @@
 }
 
 @keyframes fog-reveal {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
+  0% { 
+    opacity: 1; 
+    filter: blur(0px);
+    transform: scale(1);
+  }
+  60% {
+    opacity: 0.6;
+    filter: blur(2px);
+    transform: scale(1.1);
+  }
+  100% { 
+    opacity: 0; 
+    filter: blur(4px);
+    transform: scale(1.2);
+  }
 }
 
