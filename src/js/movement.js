@@ -562,17 +562,24 @@ function initSprintTimer() {
 }
 
 /**
- * Update the sprint duration countdown display
+ * Update the sprint duration countdown display and overlay
  */
-function updateSprintDurationDisplay(remainingMs) {
-  const timerEl = document.querySelector('[data-slot="sprint"] .cooldown-timer');
-  if (!timerEl) return;
+function updateSprintDurationDisplay(remainingMs, totalMs) {
+  const sprintSlot = document.querySelector('[data-slot="sprint"]');
+  const timerEl = sprintSlot?.querySelector('.cooldown-timer');
+  const overlayEl = sprintSlot?.querySelector('.cooldown-overlay');
   
   if (remainingMs <= 0) {
-    timerEl.textContent = '';
+    if (timerEl) timerEl.textContent = '';
+    if (overlayEl) overlayEl.style.setProperty('--cooldown-pct', '0');
   } else {
+    // Update countdown text
     const seconds = Math.ceil(remainingMs / 1000);
-    timerEl.textContent = seconds;
+    if (timerEl) timerEl.textContent = seconds;
+    
+    // Update overlay (percentage remaining)
+    const pct = (remainingMs / totalMs) * 100;
+    if (overlayEl) overlayEl.style.setProperty('--cooldown-pct', pct);
   }
 }
 
@@ -618,17 +625,12 @@ export function activateSprintBuff(onComplete) {
     fillPath.style.strokeDashoffset = sprintTimerPathLength;
   }
   
-  // Add active class to slot for visual feedback
-  if (sprintSlot) {
-    sprintSlot.classList.add('buff-active');
-  }
-  
-  // Start duration countdown display
-  updateSprintDurationDisplay(SPRINT_BUFF_DURATION);
+  // Start duration countdown display (uses same overlay/text as cooldown)
+  updateSprintDurationDisplay(SPRINT_BUFF_DURATION, SPRINT_BUFF_DURATION);
   sprintDurationInterval = setInterval(() => {
     const elapsed = Date.now() - startTime;
     const remaining = SPRINT_BUFF_DURATION - elapsed;
-    updateSprintDurationDisplay(remaining);
+    updateSprintDurationDisplay(remaining, SPRINT_BUFF_DURATION);
   }, 100);
   
   // Auto-deactivate after duration
@@ -643,7 +645,7 @@ export function activateSprintBuff(onComplete) {
     }
     
     // Clear duration display
-    updateSprintDurationDisplay(0);
+    updateSprintDurationDisplay(0, SPRINT_BUFF_DURATION);
     
     if (playerEl) {
       playerEl.classList.remove('sprinting');
@@ -652,11 +654,6 @@ export function activateSprintBuff(onComplete) {
     // Remove sprint timer visual
     if (wrapper) {
       wrapper.classList.remove('sprint-active');
-    }
-    
-    // Remove active class from slot
-    if (sprintSlot) {
-      sprintSlot.classList.remove('buff-active');
     }
     
     // Call completion callback (starts cooldown)
