@@ -342,9 +342,38 @@ function generateDefaultSpawners() {
   const result = [];
   let id = 0;
   
-  // Safe Ring: Critter strays around base perimeter
+  // Safe Ring: Inner critter ring (level 1-2, close to base perimeter)
+  // These are the easiest targets for brand new players
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2;
+    const dist = 6 + Math.random() * 4; // 6-10 tiles from center (just outside base)
+    result.push({
+      id: `sp_stray_critter_inner_${id++}`,
+      kind: 'stray',
+      ring: 'safe',
+      center: {
+        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
+        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
+      },
+      spawnRadius: 3,
+      noSpawnRadius: NO_SPAWN_RADIUS,
+      enemyPool: ['critter'],
+      levelRange: [1, 2],
+      aggroType: 'passive',
+      aggroRadius: 2,
+      leashRadius: 8,
+      deaggroTimeMs: 3000,
+      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+      maxAlive: 1,
+      lastSpawnAt: -Infinity,
+      aliveCount: 0,
+      isNpeCritter: true
+    });
+  }
+  
+  // Safe Ring: Outer critter ring (level 1-3, further out)
   for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
+    const angle = (i / 8) * Math.PI * 2 + Math.PI / 16; // Offset to stagger with inner ring
     const dist = NPE_CRITTER_ZONE_MIN + Math.random() * (NPE_CRITTER_ZONE_MAX - NPE_CRITTER_ZONE_MIN);
     result.push({
       id: `sp_stray_safe_${id++}`,
