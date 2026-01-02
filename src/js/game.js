@@ -859,30 +859,31 @@ function initLightingCanvas(gameState) {
   console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights`);
 }
 
-// Player torch as DOM element for smooth movement
+// Player torch as sibling element (not child) so it renders UNDER the player
 function createPlayerTorch() {
   const player = document.getElementById('player');
-  if (!player) return;
+  const actors = document.getElementById('actors');
+  if (!player || !actors) return;
   
   // Create layered torch for natural light diffusion
   const torchSize = 8 * lightingTileSize;
+  const halfTorch = torchSize / 2;
   
-  // Main torch container - z-index -1 to render under character
+  // Main torch container - z-index 50 (below player's 100)
   const torch = document.createElement('div');
   torch.id = 'player-torch';
   torch.style.cssText = `
     position: absolute;
     width: ${torchSize}px;
     height: ${torchSize}px;
-    top: 50%;
-    left: 50%;
-    transform: translate3d(-50%, -50%, 0);
     pointer-events: none;
     opacity: 0;
-    z-index: -1;
+    z-index: 50;
+    transition: transform var(--move-duration, 200ms) linear;
+    will-change: transform;
   `;
   
-  // Layer 1: Core bright center (small, warm) - reduced intensity
+  // Layer 1: Core bright center (small, warm) - further reduced
   const core = document.createElement('div');
   core.style.cssText = `
     position: absolute;
@@ -891,14 +892,14 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 45% 50% at 52% 48%,
-      rgba(255, 250, 240, 0.4) 0%,
-      rgba(255, 245, 230, 0.15) 30%,
+      rgba(255, 250, 240, 0.2) 0%,
+      rgba(255, 245, 230, 0.08) 30%,
       transparent 70%
     );
     mix-blend-mode: screen;
   `;
   
-  // Layer 2: Mid diffusion (slightly offset, irregular) - reduced intensity
+  // Layer 2: Mid diffusion (slightly offset, irregular)
   const mid = document.createElement('div');
   mid.style.cssText = `
     position: absolute;
@@ -909,15 +910,15 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 55% 48% at 48% 52%,
-      rgba(255, 240, 220, 0.25) 0%,
-      rgba(255, 230, 200, 0.12) 40%,
-      rgba(255, 220, 180, 0.04) 70%,
+      rgba(255, 240, 220, 0.2) 0%,
+      rgba(255, 230, 200, 0.1) 40%,
+      rgba(255, 220, 180, 0.03) 70%,
       transparent 100%
     );
     mix-blend-mode: screen;
   `;
   
-  // Layer 3: Outer ambient glow (large, soft, asymmetric) - reduced intensity
+  // Layer 3: Outer ambient glow (large, soft, asymmetric)
   const outer = document.createElement('div');
   outer.style.cssText = `
     position: absolute;
@@ -940,7 +941,28 @@ function createPlayerTorch() {
   torch.appendChild(outer);
   torch.appendChild(mid);
   torch.appendChild(core);
-  player.appendChild(torch);
+  
+  // Insert torch before player so it renders underneath
+  actors.insertBefore(torch, player);
+  
+  // Initial position sync
+  syncTorchPosition();
+}
+
+// Sync torch position with player (call on player move)
+function syncTorchPosition() {
+  const torch = document.getElementById('player-torch');
+  if (!torch || !state.player) return;
+  
+  const torchSize = 8 * lightingTileSize;
+  const halfTorch = torchSize / 2;
+  const halfTile = lightingTileSize / 2;
+  
+  // Center torch on player tile
+  const x = state.player.x * lightingTileSize + halfTile - halfTorch;
+  const y = state.player.y * lightingTileSize + halfTile - halfTorch;
+  
+  torch.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 }
 
 // Update torch visibility based on night intensity
@@ -1220,7 +1242,10 @@ async function init() {
     // NOW initialize movement (needs #player element to exist)
     initMovement(state, {
       onMoveComplete: onMoveComplete,
-      onMoveStart: (x, y, duration) => updateCamera(state, duration), // Update camera at start so both transitions sync
+      onMoveStart: (x, y, duration) => {
+        updateCamera(state, duration); // Update camera at start so both transitions sync
+        syncTorchPosition(); // Sync torch position for smooth movement
+      },
       onInteract: interact
     });
     
