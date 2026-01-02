@@ -100,17 +100,28 @@ let lastPickedSpawnerId = null;
 let spawnTickInterval = null;
 
 // ============================================
-// TILE RESERVATION SYSTEM
+// SLOT-BASED TILE RESERVATION SYSTEM
 // ============================================
-// Tracks all reserved tiles (spawn footprints)
-// Key format: "x,y"
-const reservedTiles = new Set();
+// Tiles are now owned by spawner SLOTS, not individual enemies.
+// This is the key insight: reservations are permanent for the spawner's lifetime,
+// not released on enemy death. This prevents pack clumping over time.
+//
+// Key format: "x,y" -> { spawnerId, slotIndex }
+const reservedBy = new Map();
 
 /**
- * Check if a tile is reserved by any enemy's spawn footprint.
+ * Check if a tile is reserved by any slot.
  */
 function isReserved(x, y) {
-  return reservedTiles.has(`${x},${y}`);
+  return reservedBy.has(`${x},${y}`);
+}
+
+/**
+ * Get the owner of a reserved tile.
+ * @returns {{ spawnerId: string, slotIndex: number } | null}
+ */
+function getReservationOwner(x, y) {
+  return reservedBy.get(`${x},${y}`) || null;
 }
 
 /**
@@ -154,31 +165,43 @@ function isBlockValid(cx, cy) {
 }
 
 /**
- * Reserve all tiles in a block.
+ * Reserve all tiles in a block for a specific slot.
  * @param {Array<{x: number, y: number}>} tiles - Tiles to reserve
+ * @param {string} spawnerId - ID of the spawner that owns this slot
+ * @param {number} slotIndex - Index of the slot within the spawner
  */
-function reserveBlock(tiles) {
+function reserveBlockForSlot(tiles, spawnerId, slotIndex) {
   for (const tile of tiles) {
-    reservedTiles.add(`${tile.x},${tile.y}`);
+    reservedBy.set(`${tile.x},${tile.y}`, { spawnerId, slotIndex });
   }
 }
 
 /**
- * Release all tiles in a block.
+ * Release all tiles in a block (only when spawner is disabled/deleted).
+ * NOT called on enemy death - slots own their footprints permanently.
  * @param {Array<{x: number, y: number}>} tiles - Tiles to release
  */
-function releaseBlock(tiles) {
+function releaseSlotBlock(tiles) {
   for (const tile of tiles) {
-    reservedTiles.delete(`${tile.x},${tile.y}`);
+    reservedBy.delete(`${tile.x},${tile.y}`);
   }
 }
 
 /**
- * Release enemy's reserved block when they die or despawn.
+ * LEGACY: Release enemy's reserved block when they die or despawn.
+ * NOTE: In slot-based spawning, this is a NO-OP for slot-spawned enemies.
+ * The slot owns the reservation, not the enemy.
  */
 export function releaseEnemyBlock(enemy) {
-  if (enemy.reservedTiles && Array.isArray(enemy.reservedTiles)) {
-    releaseBlock(enemy.reservedTiles);
+  // Slot-based enemies don't release their blocks on death
+  // The slot maintains the reservation until the spawner is disabled
+  // This prevents pack clumping over time
+  
+  // Only release for non-slot enemies (legacy spawns, if any)
+  if (!enemy.slotIndex && enemy.reservedTiles && Array.isArray(enemy.reservedTiles)) {
+    for (const tile of enemy.reservedTiles) {
+      reservedBy.delete(`${tile.x},${tile.y}`);
+    }
   }
 }
 
@@ -304,6 +327,32 @@ const ENEMY_TYPES = {
 
 
 // ============================================
+// LOADED REGION MODEL
+// ============================================
+// Controls which spawners are active (to avoid simulating the whole planet)
+const BASE_BUBBLE_RADIUS = 50;      // Always keep base area populated
+const PLAYER_BUBBLE_MARGIN = 15;    // Extra margin beyond ACTIVE_RADIUS
+
+/**
+ * Check if a spawner is in a "loaded" region (base bubble or player bubble).
+ */
+function isSpawnerInLoadedRegion(spawner) {
+  const player = currentState?.player;
+  if (!player) return false;
+  
+  const distFromBase = distCoords(spawner.center.x, spawner.center.y, baseCenter.x, baseCenter.y);
+  const distFromPlayer = distCoords(spawner.center.x, spawner.center.y, player.x, player.y);
+  
+  // In base bubble (always active)
+  if (distFromBase <= BASE_BUBBLE_RADIUS) return true;
+  
+  // In player bubble (active when player is nearby)
+  if (distFromPlayer <= ACTIVE_RADIUS + PLAYER_BUBBLE_MARGIN) return true;
+  
+  return false;
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 export function initSpawnDirector(state) {
@@ -324,10 +373,16 @@ export function initSpawnDirector(state) {
     };
   }
   
-  // Initialize spawners from data
+  // Clear any existing reservations
+  reservedBy.clear();
+  
+  // Initialize spawners with slot schema
   initializeSpawners(state);
   
-  // Start spawn tick
+  // BOOTSTRAP: Fill spawner slots immediately so world feels populated
+  bootstrapSpawns();
+  
+  // Start spawn tick (now checks slot timers instead of random picking)
   if (spawnTickInterval) clearInterval(spawnTickInterval);
   spawnTickInterval = setInterval(() => spawnDirectorTick(), SPAWN_TICK_MS);
   
@@ -337,19 +392,118 @@ export function initSpawnDirector(state) {
 function initializeSpawners(state) {
   spawners = [];
   
-  // Convert old enemy spawn data to new format, or use new spawner definitions
-  if (state.spawnerDefs) {
-    // New format - use directly
-    // Initialize lastSpawnAt to -Infinity so spawners are immediately eligible
-    spawners = state.spawnerDefs.map(def => ({
+  // Generate spawner definitions
+  const spawnerDefs = state.spawnerDefs || generateDefaultSpawners();
+  
+  // Convert each spawner to slot-based schema
+  for (const def of spawnerDefs) {
+    const spawner = {
       ...def,
+      // Slot-based schema
+      slots: [],
+      // Legacy fields (for compatibility)
       lastSpawnAt: -Infinity,
       aliveCount: 0
-    }));
-  } else {
-    // Generate default spawners based on rings
-    spawners = generateDefaultSpawners();
+    };
+    
+    // Initialize slots for this spawner
+    initializeSpawnerSlots(spawner);
+    
+    spawners.push(spawner);
   }
+}
+
+/**
+ * Initialize slots for a spawner with permanent footprint reservations.
+ * For strays: 1 slot
+ * For packs: MAX_PACK_SIZE slots (so packs can grow to full size)
+ */
+function initializeSpawnerSlots(spawner) {
+  const slotCount = spawner.kind === 'pack' 
+    ? (spawner.packSize?.max ?? MAX_PACK_SIZE) 
+    : 1;
+  
+  // Find positions for all slots upfront
+  const positions = findSlotPositions(spawner, slotCount);
+  
+  for (let i = 0; i < slotCount; i++) {
+    const position = positions[i] || null;
+    
+    const slot = {
+      index: i,
+      // Permanent footprint (reserved once, never released until spawner disabled)
+      reservedTiles: position?.blockTiles || [],
+      spawnX: position?.x ?? null,
+      spawnY: position?.y ?? null,
+      // Slot state
+      aliveEnemyId: null,      // Enemy ID occupying this slot (null = empty)
+      nextRespawnAt: -Infinity, // When slot can respawn (-Infinity = ready)
+      lastSpawnAt: -Infinity
+    };
+    
+    // Reserve tiles for this slot permanently
+    if (slot.reservedTiles.length > 0) {
+      reserveBlockForSlot(slot.reservedTiles, spawner.id, i);
+    }
+    
+    spawner.slots.push(slot);
+  }
+}
+
+/**
+ * Find permanent positions for spawner slots.
+ * These positions are calculated once and owned forever.
+ */
+function findSlotPositions(spawner, count) {
+  const positions = [];
+  
+  if (count === 1) {
+    // Single slot: find one block near spawner center
+    const block = findFreeBlockForSlot(spawner);
+    if (block) {
+      positions.push({
+        x: block.centerX,
+        y: block.centerY,
+        blockTiles: block.tiles
+      });
+    }
+    return positions;
+  }
+  
+  // Multiple slots: arrange in a grid layout
+  const gridPositions = findSlotGridLayout(spawner, count);
+  return gridPositions || [];
+}
+
+/**
+ * Bootstrap: Fill spawner slots immediately on world load.
+ * This makes the world feel populated from the start, not "streaming in."
+ */
+function bootstrapSpawns() {
+  const now = nowMs();
+  
+  // Get spawners in loaded regions
+  const loadedSpawners = spawners.filter(s => isSpawnerInLoadedRegion(s));
+  
+  console.log(`[SpawnDirector] Bootstrapping ${loadedSpawners.length} spawners in loaded regions...`);
+  
+  let spawnedCount = 0;
+  
+  for (const spawner of loadedSpawners) {
+    // Check requirements (e.g., Act 3)
+    if (spawner.requires?.flag && !hasFlag(spawner.requires.flag)) continue;
+    
+    // Fill slots
+    const filled = fillSpawnerSlots(spawner, now, { immediate: true });
+    spawnedCount += filled;
+  }
+  
+  console.log(`[SpawnDirector] Bootstrap complete: ${spawnedCount} enemies spawned`);
+  
+  // Render all spawned enemies
+  import('./combat.js').then(combat => {
+    combat.renderEnemies(currentState);
+  });
 }
 
 // ============================================
@@ -848,7 +1002,241 @@ function generateDefaultSpawners() {
 }
 
 // ============================================
-// MAIN SPAWN TICK
+// SLOT FILLING LOGIC
+// ============================================
+
+/**
+ * Fill available slots in a spawner.
+ * For packs: fills all slots at once when pack spawns
+ * For strays: fills single slot
+ * 
+ * @param {object} spawner - The spawner to fill
+ * @param {number} now - Current timestamp
+ * @param {object} options - { immediate: boolean } - Skip respawn timer check
+ * @returns {number} Number of enemies spawned
+ */
+function fillSpawnerSlots(spawner, now, options = {}) {
+  const { immediate = false } = options;
+  
+  // For packs: determine pack size and spawn as a group
+  if (spawner.kind === 'pack') {
+    return fillPackSlots(spawner, now, immediate);
+  }
+  
+  // For strays: fill single slot
+  return fillStraySlot(spawner, now, immediate);
+}
+
+/**
+ * Fill slots for a stray (solo) spawner.
+ */
+function fillStraySlot(spawner, now, immediate) {
+  const slot = spawner.slots[0];
+  if (!slot || !slot.spawnX) return 0;
+  
+  // Check if slot is occupied
+  if (slot.aliveEnemyId) return 0;
+  
+  // Check respawn timer (unless immediate)
+  if (!immediate && now < slot.nextRespawnAt) return 0;
+  
+  // Check player distance
+  const player = currentState.player;
+  if (distCoords(slot.spawnX, slot.spawnY, player.x, player.y) < NO_SPAWN_RADIUS) return 0;
+  
+  // Spawn enemy
+  const enemy = spawnEnemyInSlot(spawner, slot, now);
+  if (!enemy) return 0;
+  
+  // Update slot state
+  slot.aliveEnemyId = enemy.id;
+  slot.lastSpawnAt = now;
+  spawner.aliveCount++;
+  
+  return 1;
+}
+
+/**
+ * Fill slots for a pack spawner.
+ * Packs spawn as a group - all slots filled at once.
+ */
+function fillPackSlots(spawner, now, immediate) {
+  // Check if any pack members are alive (pack respawns when ALL dead)
+  const anyAlive = spawner.slots.some(s => s.aliveEnemyId !== null);
+  if (anyAlive) return 0;
+  
+  // Check respawn timer on first slot (pack timer)
+  const firstSlot = spawner.slots[0];
+  if (!immediate && firstSlot && now < firstSlot.nextRespawnAt) return 0;
+  
+  // Determine pack size for this spawn
+  const packSize = randomRange(
+    spawner.packSize?.min ?? MIN_PACK_SIZE,
+    Math.min(spawner.packSize?.max ?? MAX_PACK_SIZE, spawner.slots.filter(s => s.spawnX).length)
+  );
+  
+  // Get valid slots (have positions)
+  const validSlots = spawner.slots.filter(s => s.spawnX !== null);
+  if (validSlots.length < packSize) return 0;
+  
+  // Shuffle slots for variety in which positions get used
+  const shuffledSlots = [...validSlots].sort(() => Math.random() - 0.5);
+  const slotsToUse = shuffledSlots.slice(0, packSize);
+  
+  // Check player distance from pack center
+  const player = currentState.player;
+  const avgX = slotsToUse.reduce((sum, s) => sum + s.spawnX, 0) / slotsToUse.length;
+  const avgY = slotsToUse.reduce((sum, s) => sum + s.spawnY, 0) / slotsToUse.length;
+  if (distCoords(avgX, avgY, player.x, player.y) < NO_SPAWN_RADIUS) return 0;
+  
+  // Generate pack ID
+  const packId = `pack_${Math.floor(now)}_${Math.random().toString(36).substr(2, 5)}`;
+  
+  // Determine alphas
+  let alphaSlots = 0;
+  if (spawner.alpha) {
+    for (let i = 0; i < packSize && alphaSlots < spawner.alpha.max; i++) {
+      if (Math.random() < spawner.alpha.chance) alphaSlots++;
+    }
+  }
+  
+  // Spawn enemies in slots
+  let spawnedCount = 0;
+  for (let i = 0; i < slotsToUse.length; i++) {
+    const slot = slotsToUse[i];
+    const isAlpha = i < alphaSlots;
+    
+    const enemy = spawnEnemyInSlot(spawner, slot, now, { packId, isAlpha });
+    if (enemy) {
+      slot.aliveEnemyId = enemy.id;
+      slot.lastSpawnAt = now;
+      spawnedCount++;
+    }
+  }
+  
+  spawner.aliveCount = spawnedCount;
+  
+  return spawnedCount;
+}
+
+/**
+ * Spawn a single enemy in a slot.
+ */
+function spawnEnemyInSlot(spawner, slot, now, options = {}) {
+  const { packId = null, isAlpha = false } = options;
+  
+  // Pick enemy type and level
+  const enemyType = spawner.enemyPool[Math.floor(Math.random() * spawner.enemyPool.length)];
+  const level = randomRange(spawner.levelRange[0], spawner.levelRange[1]);
+  
+  // Create the enemy
+  const enemy = createEnemyFromSlot(spawner, slot, {
+    type: enemyType,
+    level,
+    isAlpha,
+    packId
+  }, now);
+  
+  // Add to active enemies
+  currentState.runtime.activeEnemies.push(enemy);
+  
+  return enemy;
+}
+
+/**
+ * Create enemy entity from slot data.
+ */
+function createEnemyFromSlot(spawner, slot, rosterEntry, t) {
+  const typeDef = ENEMY_TYPES[rosterEntry.type] || ENEMY_TYPES.nomad;
+  const level = rosterEntry.level;
+  
+  // Calculate stats with level scaling
+  const hpScale = Math.pow(1.02, level - 1);
+  const atkScale = Math.pow(1.017, level - 1);
+  const defScale = Math.pow(1.014, level - 1);
+  
+  const hp = Math.floor(typeDef.baseHp * hpScale);
+  const atk = Math.floor(typeDef.baseAtk * atkScale);
+  const def = Math.floor(typeDef.baseDef * defScale);
+  
+  const enemy = {
+    id: `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: typeDef.name,
+    type: rosterEntry.type,
+    level,
+    
+    // Position from slot (authoritative)
+    x: slot.spawnX,
+    y: slot.spawnY,
+    spawnX: slot.spawnX,
+    spawnY: slot.spawnY,
+    
+    // Slot ownership
+    spawnerId: spawner.id,
+    slotIndex: slot.index,
+    
+    // Reserved tiles (reference to slot's permanent reservation)
+    reservedTiles: slot.reservedTiles,
+    
+    // Stats
+    hp,
+    maxHp: hp,
+    maxHP: hp,
+    atk,
+    def,
+    
+    // Visual
+    color: typeDef.color,
+    combatType: typeDef.combatType,
+    weapon: typeDef.weapon,
+    projectileColor: typeDef.projectileColor,
+    moveSpeed: typeDef.moveSpeed,
+    
+    // AI behavior
+    aggroType: spawner.aggroType || typeDef.defaultAggroType,
+    aggroRadius: spawner.aggroRadius || typeDef.defaultAggroRadius,
+    leashRadius: spawner.leashRadius || typeDef.defaultLeashRadius,
+    deaggroTimeMs: spawner.deaggroTimeMs || typeDef.defaultDeaggroMs,
+    
+    // Home point (per-enemy, for retreat)
+    home: { x: slot.spawnX, y: slot.spawnY },
+    
+    // Pack info
+    packId: rosterEntry.packId || null,
+    
+    // Flags
+    isNpeCritter: spawner.isNpeCritter || false,
+    isSoloCritter: spawner.kind === 'stray',
+    isStray: spawner.kind === 'stray',
+    
+    // Spawn timing
+    spawnedAt: t,
+    spawnImmunityUntil: t + AI.SPAWN_IMMUNITY_MS,
+    
+    // Combat state (initialized by combat.js)
+    state: AI.STATES.UNAWARE,
+    targetId: null,
+    isEngaged: false,
+    isAware: false,
+    isRetreating: false,
+    nextAttackAt: 0,
+    moveCooldown: 0
+  };
+  
+  // Apply alpha modifications
+  if (rosterEntry.isAlpha) {
+    applyAlphaMods(enemy);
+  }
+  
+  // Normalize health keys
+  normalizeHealthKeys(enemy);
+  clampHP(enemy);
+  
+  return enemy;
+}
+
+// ============================================
+// MAIN SPAWN TICK (Slot-Timer Based)
 // ============================================
 function spawnDirectorTick() {
   if (!currentState) return;
@@ -859,39 +1247,42 @@ function spawnDirectorTick() {
   // Don't spawn while ghost running
   if (document.getElementById('player')?.classList.contains('ghost')) return;
   
-  // Get current enemy counts in active bubble
-  const bubble = getActiveBubble(player);
-  const counts = countEnemiesInBubble(bubble);
+  // Get spawners in loaded regions
+  const loadedSpawners = spawners.filter(s => isSpawnerInLoadedRegion(s));
   
-  // 1) Guarantee NPE critters near base
-  const playerDist = distCoords(player.x, player.y, baseCenter.x, baseCenter.y);
-  if (playerDist <= RINGS.safe.max + 10) {
-    const forcedSpawns = ensureNpeCritters(now, counts);
-    if (forcedSpawns.length > 0) {
-      executeSpawnRequests(forcedSpawns);
-      return;
+  let anySpawned = false;
+  
+  // Check each spawner's slots for respawn
+  for (const spawner of loadedSpawners) {
+    // Check requirements (e.g., Act 3)
+    if (spawner.requires?.flag && !hasFlag(spawner.requires.flag)) continue;
+    
+    // For packs: check if pack can respawn (all members dead + timer)
+    if (spawner.kind === 'pack') {
+      const anyAlive = spawner.slots.some(s => s.aliveEnemyId !== null);
+      if (anyAlive) continue;
+      
+      const firstSlot = spawner.slots[0];
+      if (firstSlot && now >= firstSlot.nextRespawnAt) {
+        const filled = fillPackSlots(spawner, now, false);
+        if (filled > 0) anySpawned = true;
+      }
+    } else {
+      // For strays: check individual slot
+      const slot = spawner.slots[0];
+      if (slot && !slot.aliveEnemyId && now >= slot.nextRespawnAt) {
+        const filled = fillStraySlot(spawner, now, false);
+        if (filled > 0) anySpawned = true;
+      }
     }
   }
   
-  // 2) Eligibility filter
-  const eligible = spawners.filter(s => isSpawnerEligible(s, now, counts));
-  
-  if (eligible.length === 0) return;
-  
-  // 3) Score & pick (weighted random)
-  const pick = chooseSpawner(eligible, counts);
-  if (!pick) return;
-  
-  // 4) Build spawn request
-  const request = buildSpawnRequest(pick);
-  if (!request) return;
-  
-  // 5) Commit bookkeeping
-  pick.lastSpawnAt = now;
-  lastPickedSpawnerId = pick.id;
-  
-  // 6) Execute spawn
-  executeSpawnRequests([request]);
+  // Render new enemies if any spawned
+  if (anySpawned) {
+    import('./combat.js').then(combat => {
+      combat.renderEnemies(currentState);
+    });
+  }
 }
 
 // ============================================
@@ -1152,6 +1543,173 @@ function buildSpawnRequest(spawner) {
     }
   };
 }
+
+// ============================================
+// SLOT POSITION FINDING (for initialization)
+// ============================================
+
+/**
+ * Find a free block for slot initialization.
+ * Similar to findFreeBlock but doesn't check player distance (slots are permanent).
+ */
+function findFreeBlockForSlot(spawner) {
+  const maxSearchRadius = Math.max(spawner.spawnRadius, 10);
+  
+  // Spiral search from spawner center
+  for (let radius = 0; radius <= maxSearchRadius; radius++) {
+    const candidates = [];
+    
+    if (radius === 0) {
+      candidates.push({ x: spawner.center.x, y: spawner.center.y });
+    } else {
+      for (let i = -radius; i <= radius; i++) {
+        candidates.push({ x: spawner.center.x + i, y: spawner.center.y - radius });
+        candidates.push({ x: spawner.center.x + i, y: spawner.center.y + radius });
+        if (Math.abs(i) !== radius) {
+          candidates.push({ x: spawner.center.x - radius, y: spawner.center.y + i });
+          candidates.push({ x: spawner.center.x + radius, y: spawner.center.y + i });
+        }
+      }
+    }
+    
+    // Shuffle for variety
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    
+    for (const candidate of candidates) {
+      const cx = candidate.x;
+      const cy = candidate.y;
+      
+      // Check if block is valid (walkable, not already reserved, not in base)
+      if (!isBlockValidForSlot(cx, cy)) continue;
+      
+      return { centerX: cx, centerY: cy, tiles: getBlockTiles(cx, cy) };
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if a block is valid for slot reservation.
+ * Doesn't check player distance (slots are permanent).
+ */
+function isBlockValidForSlot(cx, cy) {
+  const tiles = getBlockTiles(cx, cy);
+  
+  for (const tile of tiles) {
+    // Walkability
+    if (!canMoveTo(currentState, tile.x, tile.y)) return false;
+    // Not already reserved by another slot
+    if (isReserved(tile.x, tile.y)) return false;
+    // Not in base bounds
+    if (isInsideBaseBounds(tile.x, tile.y)) return false;
+  }
+  
+  return true;
+}
+
+/**
+ * Find grid layout positions for multiple slots (packs).
+ */
+function findSlotGridLayout(spawner, count) {
+  const maxAnchorAttempts = 30;
+  
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+  const layoutWidth = cols * BLOCK_STRIDE;
+  const layoutHeight = rows * BLOCK_STRIDE;
+  
+  for (let attempt = 0; attempt < maxAnchorAttempts; attempt++) {
+    let anchorX, anchorY;
+    
+    if (attempt === 0) {
+      anchorX = spawner.center.x - Math.floor(layoutWidth / 2);
+      anchorY = spawner.center.y - Math.floor(layoutHeight / 2);
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * spawner.spawnRadius;
+      anchorX = Math.round(spawner.center.x + Math.cos(angle) * dist) - Math.floor(layoutWidth / 2);
+      anchorY = Math.round(spawner.center.y + Math.sin(angle) * dist) - Math.floor(layoutHeight / 2);
+    }
+    
+    const positions = [];
+    let allValid = true;
+    let blockIndex = 0;
+    
+    for (let row = 0; row < rows && allValid; row++) {
+      for (let col = 0; col < cols && allValid; col++) {
+        if (blockIndex >= count) break;
+        
+        const cx = anchorX + col * BLOCK_STRIDE + Math.floor(BLOCK_SIZE / 2);
+        const cy = anchorY + row * BLOCK_STRIDE + Math.floor(BLOCK_SIZE / 2);
+        
+        if (!isBlockValidForSlot(cx, cy)) {
+          allValid = false;
+          break;
+        }
+        
+        const tiles = getBlockTiles(cx, cy);
+        
+        // Check no overlap with positions already picked
+        const overlaps = positions.some(pos =>
+          pos.blockTiles.some(pt => tiles.some(t => t.x === pt.x && t.y === pt.y))
+        );
+        if (overlaps) {
+          allValid = false;
+          break;
+        }
+        
+        positions.push({ x: cx, y: cy, blockTiles: tiles });
+        blockIndex++;
+      }
+    }
+    
+    if (allValid && positions.length === count) {
+      return positions;
+    }
+  }
+  
+  // Fallback: find positions individually
+  const positions = [];
+  const searchRadius = spawner.spawnRadius + 20;
+  
+  for (let i = 0; i < count; i++) {
+    let found = false;
+    
+    for (let r = 0; r <= searchRadius && !found; r++) {
+      for (let dx = -r; dx <= r && !found; dx++) {
+        for (let dy = -r; dy <= r && !found; dy++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          
+          const cx = spawner.center.x + dx;
+          const cy = spawner.center.y + dy;
+          
+          if (!isBlockValidForSlot(cx, cy)) continue;
+          
+          const tiles = getBlockTiles(cx, cy);
+          
+          // No overlap with existing positions
+          const overlaps = positions.some(pos =>
+            pos.blockTiles.some(pt => tiles.some(t => t.x === pt.x && t.y === pt.y))
+          );
+          if (overlaps) continue;
+          
+          positions.push({ x: cx, y: cy, blockTiles: tiles });
+          found = true;
+        }
+      }
+    }
+  }
+  
+  return positions;
+}
+
+// ============================================
+// LEGACY POSITION FINDING (for buildSpawnRequest)
+// ============================================
 
 /**
  * Find a single valid 3×3 block for spawning.
@@ -1517,19 +2075,41 @@ function createEnemy(rosterEntry, position, request) {
 }
 
 // ============================================
-// ENEMY DEATH CALLBACK
+// ENEMY DEATH CALLBACK (Slot-Based)
 // ============================================
 export function onEnemyDeath(enemy) {
-  // Release reserved tiles
-  if (enemy.reservedTiles && Array.isArray(enemy.reservedTiles)) {
-    releaseBlock(enemy.reservedTiles);
+  const now = nowMs();
+  
+  // Find the spawner and slot
+  const spawner = spawners.find(s => s.id === enemy.spawnerId);
+  if (!spawner) return;
+  
+  // Find the slot this enemy occupied
+  const slot = spawner.slots.find(s => s.index === enemy.slotIndex);
+  if (slot) {
+    // Clear slot occupancy
+    slot.aliveEnemyId = null;
+    
+    // For packs: check if entire pack is dead, then start respawn timer
+    if (spawner.kind === 'pack') {
+      const anyAlive = spawner.slots.some(s => s.aliveEnemyId !== null);
+      if (!anyAlive) {
+        // Entire pack dead - start respawn timer on first slot
+        const respawnDelay = randomRange(spawner.respawnMs || PACK_RESPAWN_MS.min, spawner.respawnMs * 1.5 || PACK_RESPAWN_MS.max);
+        spawner.slots[0].nextRespawnAt = now + respawnDelay;
+      }
+    } else {
+      // Stray: start individual slot respawn timer
+      const respawnDelay = randomRange(spawner.respawnMs || STRAY_RESPAWN_MS.min, spawner.respawnMs * 1.5 || STRAY_RESPAWN_MS.max);
+      slot.nextRespawnAt = now + respawnDelay;
+    }
   }
   
-  // Update spawner alive count
-  const spawner = spawners.find(s => s.id === enemy.spawnerId);
-  if (spawner) {
-    spawner.aliveCount = Math.max(0, spawner.aliveCount - 1);
-  }
+  // Update alive count
+  spawner.aliveCount = spawner.slots.filter(s => s.aliveEnemyId !== null).length;
+  
+  // NOTE: We do NOT release reserved tiles - slots own them permanently
+  // This prevents pack clumping over time
 }
 
 // ============================================
@@ -1630,13 +2210,13 @@ function debugListSpawns() {
  * Call from console: VETUU_RESERVED() or VETUU_RESERVED(true) to highlight
  */
 function debugReservedTiles(highlight = false) {
-  const count = reservedTiles.size;
-  const tiles = Array.from(reservedTiles).map(key => {
+  const count = reservedBy.size;
+  const tiles = Array.from(reservedBy.entries()).map(([key, owner]) => {
     const [x, y] = key.split(',').map(Number);
-    return { x, y };
+    return { x, y, spawnerId: owner.spawnerId, slotIndex: owner.slotIndex };
   });
   
-  console.log(`[VETUU_RESERVED] ${count} tiles reserved`);
+  console.log(`[VETUU_RESERVED] ${count} tiles reserved by ${new Set(tiles.map(t => t.spawnerId)).size} spawners`);
   
   if (highlight && count > 0) {
     // Add visual markers to the map
@@ -1645,7 +2225,16 @@ function debugReservedTiles(highlight = false) {
       // Remove existing debug markers
       actorLayer.querySelectorAll('.debug-reserved-tile').forEach(el => el.remove());
       
+      // Color by spawner for visual clarity
+      const spawnerColors = new Map();
+      const colors = ['rgba(255,0,0,0.2)', 'rgba(0,255,0,0.2)', 'rgba(0,0,255,0.2)', 
+                      'rgba(255,255,0,0.2)', 'rgba(255,0,255,0.2)', 'rgba(0,255,255,0.2)'];
+      
       for (const tile of tiles) {
+        if (!spawnerColors.has(tile.spawnerId)) {
+          spawnerColors.set(tile.spawnerId, colors[spawnerColors.size % colors.length]);
+        }
+        
         const marker = document.createElement('div');
         marker.className = 'debug-reserved-tile';
         marker.style.cssText = `
@@ -1654,8 +2243,8 @@ function debugReservedTiles(highlight = false) {
           top: ${tile.y * 24}px;
           width: 24px;
           height: 24px;
-          background: rgba(255, 0, 0, 0.2);
-          border: 1px solid rgba(255, 0, 0, 0.5);
+          background: ${spawnerColors.get(tile.spawnerId)};
+          border: 1px solid rgba(255, 255, 255, 0.5);
           pointer-events: none;
           z-index: 5;
         `;
@@ -1791,6 +2380,122 @@ function debugSpawnerMap() {
   return result;
 }
 
+/**
+ * Debug: Show slot occupancy and respawn timers for all spawners.
+ * Usage: VETUU_SPAWN_SLOTS() or VETUU_SPAWN_SLOTS('sp_nomad_inner_0')
+ */
+function debugSpawnSlots(spawnerId = null) {
+  const now = nowMs();
+  
+  const targetSpawners = spawnerId 
+    ? spawners.filter(s => s.id.includes(spawnerId))
+    : spawners;
+  
+  if (targetSpawners.length === 0) {
+    return `No spawners found${spawnerId ? ` matching "${spawnerId}"` : ''}`;
+  }
+  
+  return targetSpawners.map(s => ({
+    id: s.id,
+    kind: s.kind,
+    ring: s.ring,
+    totalSlots: s.slots.length,
+    validSlots: s.slots.filter(slot => slot.spawnX !== null).length,
+    occupiedSlots: s.slots.filter(slot => slot.aliveEnemyId !== null).length,
+    slots: s.slots.map(slot => ({
+      index: slot.index,
+      position: slot.spawnX ? `(${slot.spawnX}, ${slot.spawnY})` : 'NO_POSITION',
+      occupied: slot.aliveEnemyId ? slot.aliveEnemyId.slice(-8) : null,
+      reservedTiles: slot.reservedTiles.length,
+      nextRespawnIn: slot.nextRespawnAt <= now ? 'READY' : `${Math.round((slot.nextRespawnAt - now) / 1000)}s`
+    }))
+  }));
+}
+
+/**
+ * Debug: Show reservation ownership map.
+ * Usage: VETUU_RESERVED_MAP()
+ */
+function debugReservedMap() {
+  const result = {
+    totalReserved: reservedBy.size,
+    bySpawner: {}
+  };
+  
+  for (const [key, owner] of reservedBy) {
+    const spawnerId = owner.spawnerId;
+    if (!result.bySpawner[spawnerId]) {
+      result.bySpawner[spawnerId] = {
+        slots: {},
+        totalTiles: 0
+      };
+    }
+    
+    const slotKey = `slot_${owner.slotIndex}`;
+    if (!result.bySpawner[spawnerId].slots[slotKey]) {
+      result.bySpawner[spawnerId].slots[slotKey] = [];
+    }
+    
+    const [x, y] = key.split(',').map(Number);
+    result.bySpawner[spawnerId].slots[slotKey].push({ x, y });
+    result.bySpawner[spawnerId].totalTiles++;
+  }
+  
+  return result;
+}
+
+/**
+ * Debug: Show population summary by ring.
+ * Usage: VETUU_POPULATION()
+ */
+function debugPopulation() {
+  const enemies = currentState?.runtime?.activeEnemies || [];
+  const alive = enemies.filter(e => e.hp > 0);
+  
+  const byRing = { safe: 0, frontier: 0, wilderness: 0, danger: 0, deep: 0 };
+  const packsByRing = { safe: new Set(), frontier: new Set(), wilderness: new Set(), danger: new Set(), deep: new Set() };
+  
+  for (const e of alive) {
+    const dist = distCoords(e.spawnX || e.x, e.spawnY || e.y, baseCenter.x, baseCenter.y);
+    const ring = getRingForDistance(dist);
+    byRing[ring]++;
+    if (e.packId) packsByRing[ring].add(e.packId);
+  }
+  
+  // Count slot capacity
+  const slotCapacity = { safe: 0, frontier: 0, wilderness: 0, danger: 0, deep: 0 };
+  const occupiedSlots = { safe: 0, frontier: 0, wilderness: 0, danger: 0, deep: 0 };
+  
+  for (const s of spawners) {
+    const ring = s.ring || 'frontier';
+    const validSlots = s.slots.filter(slot => slot.spawnX !== null).length;
+    const occupied = s.slots.filter(slot => slot.aliveEnemyId !== null).length;
+    slotCapacity[ring] = (slotCapacity[ring] || 0) + validSlots;
+    occupiedSlots[ring] = (occupiedSlots[ring] || 0) + occupied;
+  }
+  
+  return {
+    totalAlive: alive.length,
+    byRing,
+    packsByRing: {
+      safe: packsByRing.safe.size,
+      frontier: packsByRing.frontier.size,
+      wilderness: packsByRing.wilderness.size,
+      danger: packsByRing.danger.size,
+      deep: packsByRing.deep.size
+    },
+    slotCapacity,
+    occupiedSlots,
+    fillRate: {
+      safe: slotCapacity.safe > 0 ? `${Math.round(occupiedSlots.safe / slotCapacity.safe * 100)}%` : 'N/A',
+      frontier: slotCapacity.frontier > 0 ? `${Math.round(occupiedSlots.frontier / slotCapacity.frontier * 100)}%` : 'N/A',
+      wilderness: slotCapacity.wilderness > 0 ? `${Math.round(occupiedSlots.wilderness / slotCapacity.wilderness * 100)}%` : 'N/A',
+      danger: slotCapacity.danger > 0 ? `${Math.round(occupiedSlots.danger / slotCapacity.danger * 100)}%` : 'N/A',
+      deep: slotCapacity.deep > 0 ? `${Math.round(occupiedSlots.deep / slotCapacity.deep * 100)}%` : 'N/A'
+    }
+  };
+}
+
 // Expose debug functions to window
 if (typeof window !== 'undefined') {
   window.VETUU_SPAWNS = debugListSpawns;
@@ -1799,6 +2504,10 @@ if (typeof window !== 'undefined') {
   window.VETUU_RING = debugPlayerRing;
   window.VETUU_SPAWN_DEBUG = debugSpawnSystem;
   window.VETUU_SPAWNER_MAP = debugSpawnerMap;
+  // New slot-based debug tools
+  window.VETUU_SPAWN_SLOTS = debugSpawnSlots;
+  window.VETUU_RESERVED_MAP = debugReservedMap;
+  window.VETUU_POPULATION = debugPopulation;
 }
 
 export { ENEMY_TYPES, RINGS };
