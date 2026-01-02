@@ -15,7 +15,7 @@ import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
-import { initDayCycle, updateDayCycle, getTimeOfDay, formatTimeOfDay, getDayPhase } from './time.js';
+import { initDayCycle, updateDayCycle, getTimeOfDay } from './time.js';
 
 // ============================================
 // GAME STATE
@@ -799,6 +799,160 @@ function hardReset() {
 // ============================================
 // GAME LOOP
 // ============================================
+// ============================================
+// CANVAS-BASED LIGHTING SYSTEM
+// ============================================
+let lightCanvas = null;
+let lightCtx = null;
+let staticLights = [];
+let lightingTileSize = 24;
+let cameraX = 0;
+let cameraY = 0;
+
+function initLightingCanvas(gameState) {
+  const world = document.getElementById('world');
+  if (!world) return;
+  
+  lightingTileSize = gameState.map.meta.tileSize || 24;
+  const width = gameState.map.meta.width * lightingTileSize;
+  const height = gameState.map.meta.height * lightingTileSize;
+  
+  // Create lighting canvas
+  lightCanvas = document.createElement('canvas');
+  lightCanvas.id = 'lighting-canvas';
+  lightCanvas.width = width;
+  lightCanvas.height = height;
+  lightCanvas.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: ${width}px;
+    height: ${height}px;
+    pointer-events: none;
+    z-index: 6;
+  `;
+  
+  // Insert after fog layer
+  const fogLayer = document.getElementById('fog-layer');
+  if (fogLayer && fogLayer.nextSibling) {
+    world.insertBefore(lightCanvas, fogLayer.nextSibling);
+  } else {
+    world.appendChild(lightCanvas);
+  }
+  
+  lightCtx = lightCanvas.getContext('2d');
+  
+  // Collect static lights (lamp posts)
+  staticLights = gameState.map.objects
+    .filter(obj => obj.type === 'lamp' && obj.light)
+    .map(obj => ({
+      x: (obj.x + 0.5) * lightingTileSize,
+      y: (obj.y + 0.5) * lightingTileSize,
+      radius: (obj.light.radius || 6) * lightingTileSize,
+      color: obj.light.color || '#FFE4B5',
+      intensity: obj.light.intensity || 0.8
+    }));
+  
+  console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights`);
+}
+
+function updateLighting() {
+  if (!lightCtx || !lightCanvas) return;
+  
+  const timeOfDay = getTimeOfDay();
+  // Night intensity: 0 at noon, ~0.85 at midnight
+  const nightIntensity = Math.pow(1 - Math.sin(timeOfDay * Math.PI), 1.5) * 0.85;
+  
+  // Skip rendering if it's basically daytime
+  if (nightIntensity < 0.05) {
+    lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
+    return;
+  }
+  
+  // Get viewport info for culling
+  const viewport = document.getElementById('viewport');
+  const viewWidth = viewport?.clientWidth || 800;
+  const viewHeight = viewport?.clientHeight || 600;
+  
+  // Calculate camera position (same logic as render.js)
+  const playerCenterX = state.player.x * lightingTileSize + lightingTileSize / 2;
+  const playerCenterY = state.player.y * lightingTileSize + lightingTileSize / 2;
+  cameraX = Math.max(0, Math.min(playerCenterX - viewWidth / 2, lightCanvas.width - viewWidth));
+  cameraY = Math.max(0, Math.min(playerCenterY - viewHeight / 2, lightCanvas.height - viewHeight));
+  
+  // Calculate visible area with margin
+  const margin = 200;
+  const visibleLeft = cameraX - margin;
+  const visibleRight = cameraX + viewWidth + margin;
+  const visibleTop = cameraY - margin;
+  const visibleBottom = cameraY + viewHeight + margin;
+  
+  // Clear only visible portion for performance
+  lightCtx.clearRect(
+    Math.max(0, visibleLeft),
+    Math.max(0, visibleTop),
+    Math.min(lightCanvas.width, visibleRight - visibleLeft),
+    Math.min(lightCanvas.height, visibleBottom - visibleTop)
+  );
+  
+  // Fill visible area with darkness
+  lightCtx.fillStyle = `rgba(10, 15, 30, ${nightIntensity})`;
+  lightCtx.fillRect(
+    Math.max(0, visibleLeft),
+    Math.max(0, visibleTop),
+    Math.min(lightCanvas.width, visibleRight - visibleLeft),
+    Math.min(lightCanvas.height, visibleBottom - visibleTop)
+  );
+  
+  // Cut out light circles using destination-out
+  lightCtx.globalCompositeOperation = 'destination-out';
+  
+  // Draw player torch
+  const playerX = (state.player.x + 0.5) * lightingTileSize;
+  const playerY = (state.player.y + 0.5) * lightingTileSize;
+  const torchRadius = 4 * lightingTileSize;
+  
+  const playerGradient = lightCtx.createRadialGradient(
+    playerX, playerY, 0,
+    playerX, playerY, torchRadius
+  );
+  playerGradient.addColorStop(0, `rgba(255, 255, 255, ${nightIntensity * 0.9})`);
+  playerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${nightIntensity * 0.5})`);
+  playerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  
+  lightCtx.fillStyle = playerGradient;
+  lightCtx.beginPath();
+  lightCtx.arc(playerX, playerY, torchRadius, 0, Math.PI * 2);
+  lightCtx.fill();
+  
+  // Draw static lights (only visible ones)
+  for (const light of staticLights) {
+    // Cull lights outside visible area
+    if (light.x < visibleLeft - light.radius || 
+        light.x > visibleRight + light.radius ||
+        light.y < visibleTop - light.radius || 
+        light.y > visibleBottom + light.radius) {
+      continue;
+    }
+    
+    const gradient = lightCtx.createRadialGradient(
+      light.x, light.y, 0,
+      light.x, light.y, light.radius
+    );
+    gradient.addColorStop(0, `rgba(255, 255, 255, ${nightIntensity * light.intensity})`);
+    gradient.addColorStop(0.4, `rgba(255, 255, 255, ${nightIntensity * light.intensity * 0.6})`);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    lightCtx.fillStyle = gradient;
+    lightCtx.beginPath();
+    lightCtx.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
+    lightCtx.fill();
+  }
+  
+  // Reset composite operation
+  lightCtx.globalCompositeOperation = 'source-over';
+}
+
 function gameLoop() {
   state.tick++;
   checkPendingAttack(); // Check if player reached attack range
@@ -811,41 +965,12 @@ function gameLoop() {
   // Update day/night cycle
   updateDayCycle();
   
-  // Update CSS day/night overlay (throttle to every 30 frames)
-  if (state.tick % 30 === 0) {
-    updateDayNightOverlay();
+  // Update canvas lighting (throttle to every 3 frames for performance)
+  if (state.tick % 3 === 0) {
+    updateLighting();
   }
   
   requestAnimationFrame(gameLoop);
-}
-
-// CSS-based day/night overlay
-function updateDayNightOverlay() {
-  const timeOfDay = getTimeOfDay();
-  // Set CSS variable for night intensity (0 at noon, 1 at midnight)
-  const nightIntensity = 1 - Math.sin(timeOfDay * Math.PI);
-  document.documentElement.style.setProperty('--night-intensity', nightIntensity.toFixed(3));
-}
-
-// Render lamp post glow elements (CSS-based)
-function renderLampPostGlows(state) {
-  const objectLayer = document.getElementById('object-layer');
-  if (!objectLayer) return;
-  
-  const tileSize = state.map.meta.tileSize || 24;
-  const lamps = state.map.objects.filter(obj => obj.type === 'lamp' && obj.light);
-  
-  for (const lamp of lamps) {
-    const glow = document.createElement('div');
-    glow.className = 'lamp-glow';
-    glow.style.left = `${lamp.x * tileSize}px`;
-    glow.style.top = `${lamp.y * tileSize}px`;
-    glow.style.setProperty('--glow-radius', `${(lamp.light.radius || 6) * tileSize}px`);
-    glow.style.setProperty('--glow-color', lamp.light.color || '#FFE4B5');
-    objectLayer.appendChild(glow);
-  }
-  
-  console.log(`[Game] Rendered ${lamps.length} lamp post glows`);
 }
 
 // ============================================
@@ -997,12 +1122,11 @@ async function init() {
     revealAround(state, state.player.x, state.player.y);
     renderFog(state);
     
-    // Initialize CSS-based day/night cycle (start at morning)
-    initDayCycle(0.35);
-    updateDayNightOverlay();
+    // Initialize canvas-based lighting system
+    initLightingCanvas(state);
     
-    // Render lamp post glows
-    renderLampPostGlows(state);
+    // Initialize day/night cycle (start at morning)
+    initDayCycle(0.35);
     
     initMinimap();
     updateHUD();
