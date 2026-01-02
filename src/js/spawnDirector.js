@@ -81,9 +81,38 @@ const ACT3_MODIFIERS = {
   neutralWildlifeMultiplier: 0.7
 };
 
-// Road exclusion - enemies can't spawn ON roads
-// Road is 7 tiles wide (center ± 3), only exclude the actual road
-const ROAD_EXCLUSION_RADIUS = 3;
+// Road exclusion - enemies can't spawn near roads
+// Keep spawns 9 tiles away from road center lines
+const ROAD_EXCLUSION_RADIUS = 9;
+
+/**
+ * Adjust a spawner position to avoid roads.
+ * Roads run through baseCenter.x (vertical) and baseCenter.y (horizontal).
+ * Pushes positions at least ROAD_EXCLUSION_RADIUS away from road center lines.
+ */
+function adjustSpawnerToAvoidRoad(x, y) {
+  const roadX = baseCenter.x; // vertical road at x=236
+  const roadY = baseCenter.y; // horizontal road at y=158
+  
+  const distToVertical = Math.abs(x - roadX);
+  const distToHorizontal = Math.abs(y - roadY);
+  
+  // If too close to vertical road
+  if (distToVertical < ROAD_EXCLUSION_RADIUS) {
+    x = x < roadX 
+      ? roadX - ROAD_EXCLUSION_RADIUS 
+      : roadX + ROAD_EXCLUSION_RADIUS;
+  }
+  
+  // If too close to horizontal road
+  if (distToHorizontal < ROAD_EXCLUSION_RADIUS) {
+    y = y < roadY 
+      ? roadY - ROAD_EXCLUSION_RADIUS 
+      : roadY + ROAD_EXCLUSION_RADIUS;
+  }
+  
+  return { x: Math.round(x), y: Math.round(y) };
+}
 
 // ============================================
 // SPAWN BLOCK CONSTANTS
@@ -560,14 +589,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2;
     const dist = 8 + Math.random() * 4; // 8-12 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_inner_${id++}`,
       kind: 'stray',
       ring: 'safe',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 3,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['nomad'],
@@ -588,14 +617,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 10; i++) {
     const angle = (i / 10) * Math.PI * 2 + Math.PI / 20;
     const dist = 14 + Math.random() * 5; // 14-19 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_mid_${id++}`,
       kind: 'stray',
       ring: 'safe',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['nomad'],
@@ -616,14 +645,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2 + Math.PI / 16;
     const dist = 21 + Math.random() * 6; // 21-27 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_outer_${id++}`,
       kind: 'stray',
       ring: 'safe',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['nomad'],
@@ -650,14 +679,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
     const dist = 32 + Math.random() * 8; // 32-40 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_frontier_stray_${id++}`,
       kind: 'stray',
       ring: 'frontier',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 5,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['nomad', 'scav_melee'],
@@ -677,14 +706,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + Math.PI / 10;
     const dist = 35 + Math.random() * 8; // 35-43 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_frontier_inner_${id++}`,
       kind: 'pack',
       ring: 'frontier',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 6,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['scav_ranged', 'scav_melee'],
@@ -707,14 +736,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + Math.PI / 5;
     const dist = 48 + Math.random() * 10; // 48-58 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_frontier_mid_${id++}`,
       kind: 'pack',
       ring: 'frontier',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 7,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['scav_ranged', 'scav_melee'],
@@ -737,14 +766,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
     const dist = 60 + Math.random() * 8; // 60-68 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_frontier_outer_${id++}`,
       kind: 'pack',
       ring: 'frontier',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['scav_ranged', 'scav_melee'],
@@ -773,14 +802,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2;
     const dist = 78 + Math.random() * 12; // 78-90 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_trog_inner_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['trog_warrior', 'trog_shaman'],
@@ -803,14 +832,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + Math.PI / 5;
     const dist = 95 + Math.random() * 15; // 95-110 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_trog_mid_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 9,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['trog_warrior', 'trog_shaman'],
@@ -833,14 +862,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
     const dist = 112 + Math.random() * 12; // 112-124 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_trog_outer_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 10,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['trog_warrior', 'trog_shaman'],
@@ -869,14 +898,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2;
     const dist = 132 + Math.random() * 15; // 132-147 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_karth_inner_${id++}`,
       kind: 'pack',
       ring: 'danger',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 10,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],
@@ -900,14 +929,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
     const dist = 155 + Math.random() * 18; // 155-173 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_karth_mid_${id++}`,
       kind: 'pack',
       ring: 'danger',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 12,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],
@@ -931,14 +960,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
     const dist = 178 + Math.random() * 10; // 178-188 tiles from center
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_karth_outer_${id++}`,
       kind: 'pack',
       ring: 'danger',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 12,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],
@@ -971,14 +1000,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = deepAngles[i];
     const dist = 180 + Math.random() * 15; // Near edge of danger ring
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_deep_${id++}`,
       kind: 'pack',
       ring: 'deep',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 12,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],
@@ -1002,14 +1031,14 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 2; i++) {
     const angle = deepAngles[i * 2]; // Only 2 spawners at opposite corners
     const dist = 190 + Math.random() * 10;
+    const rawX = baseCenter.x + Math.cos(angle) * dist;
+    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_deep_elite_${id++}`,
       kind: 'pack',
       ring: 'deep',
-      center: {
-        x: Math.round(baseCenter.x + Math.cos(angle) * dist),
-        y: Math.round(baseCenter.y + Math.sin(angle) * dist)
-      },
+      center: adjusted,
       spawnRadius: 14,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],
