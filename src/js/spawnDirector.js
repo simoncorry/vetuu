@@ -585,17 +585,18 @@ function generateDefaultSpawners() {
   // NPE zone: passive wanderers, high spacing, low density
   // 25-35 spawners spread across the safe ring
   
-  // Inner nomads (level 1, closest to base)
+  // Inner nomads (level 1, closest to base but OUTSIDE base walls)
+  // Base extends ~25 tiles from center, so start at 30+ to be safely outside
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2;
-    const dist = 8 + Math.random() * 4; // 8-12 tiles from center
+    const dist = 30 + Math.random() * 6; // 30-36 tiles from center (outside base)
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_inner_${id++}`,
       kind: 'stray',
-      ring: 'safe',
+      ring: 'frontier', // Now in frontier ring due to distance
       center: adjusted,
       spawnRadius: 3,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -613,17 +614,17 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Mid nomads (level 1-2, middle of safe zone)
+  // Mid nomads (level 1-2, further from base)
   for (let i = 0; i < 10; i++) {
     const angle = (i / 10) * Math.PI * 2 + Math.PI / 20;
-    const dist = 14 + Math.random() * 5; // 14-19 tiles from center
+    const dist = 38 + Math.random() * 8; // 38-46 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_mid_${id++}`,
       kind: 'stray',
-      ring: 'safe',
+      ring: 'frontier',
       center: adjusted,
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -641,17 +642,17 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Outer nomads (level 2-3, edge of safe zone)
+  // Outer nomads (level 2-3, outer ring)
   for (let i = 0; i < 8; i++) {
     const angle = (i / 8) * Math.PI * 2 + Math.PI / 16;
-    const dist = 21 + Math.random() * 6; // 21-27 tiles from center
+    const dist = 48 + Math.random() * 10; // 48-58 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_outer_${id++}`,
       kind: 'stray',
-      ring: 'safe',
+      ring: 'frontier',
       center: adjusted,
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
