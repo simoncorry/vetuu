@@ -368,10 +368,10 @@ export function initSpawnDirector(state) {
     
     // Define base bounds (4x scaled: 33,21 → 79,55)
     baseBounds = {
-      minX: 33 + ox,
-      maxX: 79 + ox,
-      minY: 21 + oy,
-      maxY: 55 + oy
+      minX: 11 + ox,
+      maxX: 101 + ox,
+      minY: 5 + oy,
+      maxY: 71 + oy
     };
   }
   
