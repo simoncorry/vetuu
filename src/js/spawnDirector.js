@@ -363,16 +363,15 @@ export function initSpawnDirector(state) {
   if (state.map?.meta?.originalOffset) {
     const ox = state.map.meta.originalOffset.x;
     const oy = state.map.meta.originalOffset.y;
-    // Base center (central yard hub, player start area)
-    // Perfectly centered at (60, 40) on original 120x80 map
-    baseCenter = { x: 60 + ox, y: 40 + oy };
+    // Base center (aligned with scrapTown floor tiles)
+    baseCenter = { x: 56 + ox, y: 38 + oy };
     
-    // Define base bounds (uniform rectangle: 42,23 → 78,57)
+    // Define base bounds (aligned with floor: 44,29 → 67,46)
     baseBounds = {
-      minX: 42 + ox,
-      maxX: 78 + ox,
-      minY: 23 + oy,
-      maxY: 57 + oy
+      minX: 44 + ox,
+      maxX: 67 + ox,
+      minY: 29 + oy,
+      maxY: 46 + oy
     };
   }
   

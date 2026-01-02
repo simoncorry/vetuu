@@ -1,7 +1,7 @@
 {
   "playerStart": {
-    "x": 60,
-    "y": 40,
+    "x": 56,
+    "y": 38,
     "facing": "south"
   },
   "npcs": [
@@ -9,8 +9,8 @@
       "id": "npc_dax_rowan",
       "name": "Captain Dax Rowan",
       "role": "militiaCaptain",
-      "x": 55,
-      "y": 38,
+      "x": 52,
+      "y": 36,
       "color": "#22B6B8",
       "dialogueRoot": "dlg_dax_root"
     },
@@ -18,8 +18,8 @@
       "id": "npc_sela_marr",
       "name": "Sela Marr",
       "role": "hiddenAsset",
-      "x": 60,
-      "y": 35,
+      "x": 56,
+      "y": 33,
       "color": "#77C7FF",
       "dialogueRoot": "dlg_sela_root",
       "flags": {
@@ -30,8 +30,8 @@
       "id": "npc_verdleg_trader",
       "name": "Verdleg Trader",
       "role": "nomadStall",
-      "x": 64,
-      "y": 45,
+      "x": 60,
+      "y": 40,
       "color": "#E18B37",
       "dialogueRoot": "dlg_verdleg_trader"
     },
@@ -57,8 +57,8 @@
       "id": "npc_silas_morn",
       "name": "Field Director Silas Morn",
       "role": "artLead",
-      "x": 65,
-      "y": 30,
+      "x": 62,
+      "y": 32,
       "color": "#2E343B",
       "dialogueRoot": "dlg_silas_root",
       "requires": {
@@ -69,8 +69,8 @@
       "id": "guard_north_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 58,
-      "y": 24,
+      "x": 54,
+      "y": 30,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -79,8 +79,8 @@
       "id": "guard_north_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 62,
-      "y": 24,
+      "x": 58,
+      "y": 30,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -89,8 +89,8 @@
       "id": "guard_south_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 58,
-      "y": 56,
+      "x": 54,
+      "y": 45,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -99,8 +99,8 @@
       "id": "guard_south_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 62,
-      "y": 56,
+      "x": 58,
+      "y": 45,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -109,8 +109,8 @@
       "id": "guard_east_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 77,
-      "y": 38,
+      "x": 66,
+      "y": 36,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -119,8 +119,8 @@
       "id": "guard_east_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 77,
-      "y": 42,
+      "x": 66,
+      "y": 40,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -129,8 +129,8 @@
       "id": "guard_west_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 43,
-      "y": 38,
+      "x": 45,
+      "y": 36,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -139,8 +139,8 @@
       "id": "guard_west_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 43,
-      "y": 42,
+      "x": 45,
+      "y": 40,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25
@@ -149,8 +149,8 @@
       "id": "npc_nurse_vela",
       "name": "Field Medic Vela",
       "role": "medic",
-      "x": 55,
-      "y": 44,
+      "x": 50,
+      "y": 40,
       "color": "#E85D75",
       "dialogueRoot": "dlg_vela_root",
       "isMedic": true

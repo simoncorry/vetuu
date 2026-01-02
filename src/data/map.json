@@ -220,8 +220,8 @@
     {
       "id": "sign_078",
       "type": "sign",
-      "x": 50,
-      "y": 35,
+      "x": 47,
+      "y": 33,
       "solid": false,
       "interact": {
         "action": "read",
@@ -231,22 +231,22 @@
     {
       "id": "lamp_079",
       "type": "lamp",
-      "x": 55,
+      "x": 51,
       "y": 32,
       "solid": false
     },
     {
       "id": "lamp_080",
       "type": "lamp",
-      "x": 65,
+      "x": 61,
       "y": 32,
       "solid": false
     },
     {
       "id": "stall_081",
       "type": "stall",
-      "x": 64,
-      "y": 45,
+      "x": 60,
+      "y": 40,
       "solid": true,
       "interact": {
         "action": "talk",
@@ -256,22 +256,22 @@
     {
       "id": "crate_082",
       "type": "crate",
-      "x": 56,
-      "y": 44,
+      "x": 54,
+      "y": 42,
       "solid": true
     },
     {
       "id": "junk_083",
       "type": "junk",
-      "x": 68,
-      "y": 48,
+      "x": 63,
+      "y": 43,
       "solid": true
     },
     {
       "id": "banner_084",
       "type": "banner",
-      "x": 52,
-      "y": 36,
+      "x": 48,
+      "y": 34,
       "solid": false
     },
     {
@@ -394,7 +394,7 @@
       "id": "scrapNode_100",
       "type": "scrapNode",
       "x": 48,
-      "y": 50,
+      "y": 43,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -420,7 +420,7 @@
       "id": "scrapNode_102",
       "type": "scrapNode",
       "x": 52,
-      "y": 48,
+      "y": 41,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -432,8 +432,8 @@
     {
       "id": "scrapNode_103",
       "type": "scrapNode",
-      "x": 70,
-      "y": 46,
+      "x": 64,
+      "y": 42,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -446,7 +446,7 @@
       "id": "clothNode_104",
       "type": "clothNode",
       "x": 48,
-      "y": 30,
+      "y": 32,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -458,8 +458,8 @@
     {
       "id": "clothNode_105",
       "type": "clothNode",
-      "x": 72,
-      "y": 32,
+      "x": 64,
+      "y": 33,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -472,7 +472,7 @@
       "id": "clothNode_106",
       "type": "clothNode",
       "x": 46,
-      "y": 50,
+      "y": 38,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -484,813 +484,393 @@
     {
       "id": "wall_001",
       "type": "wall",
-      "x": 42,
-      "y": 23,
+      "x": 44,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_002",
       "type": "wall",
-      "x": 43,
-      "y": 23,
+      "x": 45,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_003",
       "type": "wall",
-      "x": 44,
-      "y": 23,
+      "x": 46,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_004",
       "type": "wall",
-      "x": 45,
-      "y": 23,
+      "x": 47,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_005",
       "type": "wall",
-      "x": 46,
-      "y": 23,
+      "x": 48,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_006",
       "type": "wall",
-      "x": 47,
-      "y": 23,
+      "x": 49,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_007",
       "type": "wall",
-      "x": 48,
-      "y": 23,
+      "x": 50,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_008",
       "type": "wall",
-      "x": 49,
-      "y": 23,
+      "x": 51,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_009",
       "type": "wall",
-      "x": 50,
-      "y": 23,
+      "x": 52,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_010",
       "type": "wall",
-      "x": 51,
-      "y": 23,
+      "x": 60,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_011",
       "type": "wall",
-      "x": 52,
-      "y": 23,
+      "x": 61,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_012",
       "type": "wall",
-      "x": 53,
-      "y": 23,
+      "x": 62,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_013",
       "type": "wall",
-      "x": 54,
-      "y": 23,
+      "x": 63,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_014",
       "type": "wall",
-      "x": 55,
-      "y": 23,
+      "x": 64,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_015",
       "type": "wall",
-      "x": 56,
-      "y": 23,
+      "x": 65,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_016",
       "type": "wall",
-      "x": 64,
-      "y": 23,
+      "x": 66,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_017",
       "type": "wall",
-      "x": 65,
-      "y": 23,
+      "x": 67,
+      "y": 29,
       "solid": true
     },
     {
       "id": "wall_018",
       "type": "wall",
-      "x": 66,
-      "y": 23,
+      "x": 44,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_019",
       "type": "wall",
-      "x": 67,
-      "y": 23,
+      "x": 45,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_020",
       "type": "wall",
-      "x": 68,
-      "y": 23,
+      "x": 46,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_021",
       "type": "wall",
-      "x": 69,
-      "y": 23,
+      "x": 47,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_022",
       "type": "wall",
-      "x": 70,
-      "y": 23,
+      "x": 48,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_023",
       "type": "wall",
-      "x": 71,
-      "y": 23,
+      "x": 49,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_024",
       "type": "wall",
-      "x": 72,
-      "y": 23,
+      "x": 50,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_025",
       "type": "wall",
-      "x": 73,
-      "y": 23,
+      "x": 51,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_026",
       "type": "wall",
-      "x": 74,
-      "y": 23,
+      "x": 52,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_027",
       "type": "wall",
-      "x": 75,
-      "y": 23,
+      "x": 60,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_028",
       "type": "wall",
-      "x": 76,
-      "y": 23,
+      "x": 61,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_029",
       "type": "wall",
-      "x": 77,
-      "y": 23,
+      "x": 62,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_030",
       "type": "wall",
-      "x": 78,
-      "y": 23,
+      "x": 63,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_031",
       "type": "wall",
-      "x": 42,
-      "y": 57,
+      "x": 64,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_032",
       "type": "wall",
-      "x": 43,
-      "y": 57,
+      "x": 65,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_033",
       "type": "wall",
-      "x": 44,
-      "y": 57,
+      "x": 66,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_034",
       "type": "wall",
-      "x": 45,
-      "y": 57,
+      "x": 67,
+      "y": 46,
       "solid": true
     },
     {
       "id": "wall_035",
       "type": "wall",
-      "x": 46,
-      "y": 57,
+      "x": 44,
+      "y": 30,
       "solid": true
     },
     {
       "id": "wall_036",
       "type": "wall",
-      "x": 47,
-      "y": 57,
+      "x": 44,
+      "y": 31,
       "solid": true
     },
     {
       "id": "wall_037",
       "type": "wall",
-      "x": 48,
-      "y": 57,
+      "x": 44,
+      "y": 32,
       "solid": true
     },
     {
       "id": "wall_038",
       "type": "wall",
-      "x": 49,
-      "y": 57,
+      "x": 44,
+      "y": 33,
       "solid": true
     },
     {
       "id": "wall_039",
       "type": "wall",
-      "x": 50,
-      "y": 57,
+      "x": 44,
+      "y": 34,
       "solid": true
     },
     {
       "id": "wall_040",
       "type": "wall",
-      "x": 51,
-      "y": 57,
+      "x": 44,
+      "y": 42,
       "solid": true
     },
     {
       "id": "wall_041",
       "type": "wall",
-      "x": 52,
-      "y": 57,
+      "x": 44,
+      "y": 43,
       "solid": true
     },
     {
       "id": "wall_042",
       "type": "wall",
-      "x": 53,
-      "y": 57,
+      "x": 44,
+      "y": 44,
       "solid": true
     },
     {
       "id": "wall_043",
       "type": "wall",
-      "x": 54,
-      "y": 57,
+      "x": 44,
+      "y": 45,
       "solid": true
     },
     {
       "id": "wall_044",
       "type": "wall",
-      "x": 55,
-      "y": 57,
+      "x": 67,
+      "y": 30,
       "solid": true
     },
     {
       "id": "wall_045",
       "type": "wall",
-      "x": 56,
-      "y": 57,
+      "x": 67,
+      "y": 31,
       "solid": true
     },
     {
       "id": "wall_046",
       "type": "wall",
-      "x": 64,
-      "y": 57,
+      "x": 67,
+      "y": 32,
       "solid": true
     },
     {
       "id": "wall_047",
       "type": "wall",
-      "x": 65,
-      "y": 57,
+      "x": 67,
+      "y": 33,
       "solid": true
     },
     {
       "id": "wall_048",
       "type": "wall",
-      "x": 66,
-      "y": 57,
+      "x": 67,
+      "y": 34,
       "solid": true
     },
     {
       "id": "wall_049",
       "type": "wall",
       "x": 67,
-      "y": 57,
+      "y": 42,
       "solid": true
     },
     {
       "id": "wall_050",
       "type": "wall",
-      "x": 68,
-      "y": 57,
+      "x": 67,
+      "y": 43,
       "solid": true
     },
     {
       "id": "wall_051",
       "type": "wall",
-      "x": 69,
-      "y": 57,
+      "x": 67,
+      "y": 44,
       "solid": true
     },
     {
       "id": "wall_052",
       "type": "wall",
-      "x": 70,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_053",
-      "type": "wall",
-      "x": 71,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_054",
-      "type": "wall",
-      "x": 72,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_055",
-      "type": "wall",
-      "x": 73,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_056",
-      "type": "wall",
-      "x": 74,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_057",
-      "type": "wall",
-      "x": 75,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_058",
-      "type": "wall",
-      "x": 76,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_059",
-      "type": "wall",
-      "x": 77,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_060",
-      "type": "wall",
-      "x": 78,
-      "y": 57,
-      "solid": true
-    },
-    {
-      "id": "wall_061",
-      "type": "wall",
-      "x": 42,
-      "y": 24,
-      "solid": true
-    },
-    {
-      "id": "wall_062",
-      "type": "wall",
-      "x": 42,
-      "y": 25,
-      "solid": true
-    },
-    {
-      "id": "wall_063",
-      "type": "wall",
-      "x": 42,
-      "y": 26,
-      "solid": true
-    },
-    {
-      "id": "wall_064",
-      "type": "wall",
-      "x": 42,
-      "y": 27,
-      "solid": true
-    },
-    {
-      "id": "wall_065",
-      "type": "wall",
-      "x": 42,
-      "y": 28,
-      "solid": true
-    },
-    {
-      "id": "wall_066",
-      "type": "wall",
-      "x": 42,
-      "y": 29,
-      "solid": true
-    },
-    {
-      "id": "wall_067",
-      "type": "wall",
-      "x": 42,
-      "y": 30,
-      "solid": true
-    },
-    {
-      "id": "wall_068",
-      "type": "wall",
-      "x": 42,
-      "y": 31,
-      "solid": true
-    },
-    {
-      "id": "wall_069",
-      "type": "wall",
-      "x": 42,
-      "y": 32,
-      "solid": true
-    },
-    {
-      "id": "wall_070",
-      "type": "wall",
-      "x": 42,
-      "y": 33,
-      "solid": true
-    },
-    {
-      "id": "wall_071",
-      "type": "wall",
-      "x": 42,
-      "y": 34,
-      "solid": true
-    },
-    {
-      "id": "wall_072",
-      "type": "wall",
-      "x": 42,
-      "y": 35,
-      "solid": true
-    },
-    {
-      "id": "wall_073",
-      "type": "wall",
-      "x": 42,
-      "y": 36,
-      "solid": true
-    },
-    {
-      "id": "wall_074",
-      "type": "wall",
-      "x": 42,
-      "y": 44,
-      "solid": true
-    },
-    {
-      "id": "wall_075",
-      "type": "wall",
-      "x": 42,
+      "x": 67,
       "y": 45,
-      "solid": true
-    },
-    {
-      "id": "wall_076",
-      "type": "wall",
-      "x": 42,
-      "y": 46,
-      "solid": true
-    },
-    {
-      "id": "wall_077",
-      "type": "wall",
-      "x": 42,
-      "y": 47,
-      "solid": true
-    },
-    {
-      "id": "wall_078",
-      "type": "wall",
-      "x": 42,
-      "y": 48,
-      "solid": true
-    },
-    {
-      "id": "wall_079",
-      "type": "wall",
-      "x": 42,
-      "y": 49,
-      "solid": true
-    },
-    {
-      "id": "wall_080",
-      "type": "wall",
-      "x": 42,
-      "y": 50,
-      "solid": true
-    },
-    {
-      "id": "wall_081",
-      "type": "wall",
-      "x": 42,
-      "y": 51,
-      "solid": true
-    },
-    {
-      "id": "wall_082",
-      "type": "wall",
-      "x": 42,
-      "y": 52,
-      "solid": true
-    },
-    {
-      "id": "wall_083",
-      "type": "wall",
-      "x": 42,
-      "y": 53,
-      "solid": true
-    },
-    {
-      "id": "wall_084",
-      "type": "wall",
-      "x": 42,
-      "y": 54,
-      "solid": true
-    },
-    {
-      "id": "wall_085",
-      "type": "wall",
-      "x": 42,
-      "y": 55,
-      "solid": true
-    },
-    {
-      "id": "wall_086",
-      "type": "wall",
-      "x": 42,
-      "y": 56,
-      "solid": true
-    },
-    {
-      "id": "wall_087",
-      "type": "wall",
-      "x": 78,
-      "y": 24,
-      "solid": true
-    },
-    {
-      "id": "wall_088",
-      "type": "wall",
-      "x": 78,
-      "y": 25,
-      "solid": true
-    },
-    {
-      "id": "wall_089",
-      "type": "wall",
-      "x": 78,
-      "y": 26,
-      "solid": true
-    },
-    {
-      "id": "wall_090",
-      "type": "wall",
-      "x": 78,
-      "y": 27,
-      "solid": true
-    },
-    {
-      "id": "wall_091",
-      "type": "wall",
-      "x": 78,
-      "y": 28,
-      "solid": true
-    },
-    {
-      "id": "wall_092",
-      "type": "wall",
-      "x": 78,
-      "y": 29,
-      "solid": true
-    },
-    {
-      "id": "wall_093",
-      "type": "wall",
-      "x": 78,
-      "y": 30,
-      "solid": true
-    },
-    {
-      "id": "wall_094",
-      "type": "wall",
-      "x": 78,
-      "y": 31,
-      "solid": true
-    },
-    {
-      "id": "wall_095",
-      "type": "wall",
-      "x": 78,
-      "y": 32,
-      "solid": true
-    },
-    {
-      "id": "wall_096",
-      "type": "wall",
-      "x": 78,
-      "y": 33,
-      "solid": true
-    },
-    {
-      "id": "wall_097",
-      "type": "wall",
-      "x": 78,
-      "y": 34,
-      "solid": true
-    },
-    {
-      "id": "wall_098",
-      "type": "wall",
-      "x": 78,
-      "y": 35,
-      "solid": true
-    },
-    {
-      "id": "wall_099",
-      "type": "wall",
-      "x": 78,
-      "y": 36,
-      "solid": true
-    },
-    {
-      "id": "wall_100",
-      "type": "wall",
-      "x": 78,
-      "y": 44,
-      "solid": true
-    },
-    {
-      "id": "wall_101",
-      "type": "wall",
-      "x": 78,
-      "y": 45,
-      "solid": true
-    },
-    {
-      "id": "wall_102",
-      "type": "wall",
-      "x": 78,
-      "y": 46,
-      "solid": true
-    },
-    {
-      "id": "wall_103",
-      "type": "wall",
-      "x": 78,
-      "y": 47,
-      "solid": true
-    },
-    {
-      "id": "wall_104",
-      "type": "wall",
-      "x": 78,
-      "y": 48,
-      "solid": true
-    },
-    {
-      "id": "wall_105",
-      "type": "wall",
-      "x": 78,
-      "y": 49,
-      "solid": true
-    },
-    {
-      "id": "wall_106",
-      "type": "wall",
-      "x": 78,
-      "y": 50,
-      "solid": true
-    },
-    {
-      "id": "wall_107",
-      "type": "wall",
-      "x": 78,
-      "y": 51,
-      "solid": true
-    },
-    {
-      "id": "wall_108",
-      "type": "wall",
-      "x": 78,
-      "y": 52,
-      "solid": true
-    },
-    {
-      "id": "wall_109",
-      "type": "wall",
-      "x": 78,
-      "y": 53,
-      "solid": true
-    },
-    {
-      "id": "wall_110",
-      "type": "wall",
-      "x": 78,
-      "y": 54,
-      "solid": true
-    },
-    {
-      "id": "wall_111",
-      "type": "wall",
-      "x": 78,
-      "y": 55,
-      "solid": true
-    },
-    {
-      "id": "wall_112",
-      "type": "wall",
-      "x": 78,
-      "y": 56,
       "solid": true
     },
     {
       "id": "gate_north",
       "type": "gate",
-      "x": 60,
-      "y": 23,
+      "x": 56,
+      "y": 29,
       "solid": false
     },
     {
       "id": "gate_south",
       "type": "gate",
-      "x": 60,
-      "y": 57,
+      "x": 56,
+      "y": 46,
       "solid": false
     },
     {
       "id": "gate_west",
       "type": "gate",
-      "x": 42,
-      "y": 40,
+      "x": 44,
+      "y": 38,
       "solid": false
     },
     {
       "id": "gate_east",
       "type": "gate",
-      "x": 78,
-      "y": 40,
+      "x": 67,
+      "y": 38,
       "solid": false
     }
   ],
@@ -1299,10 +879,10 @@
       "id": "region_drycross",
       "name": "Drycross",
       "bounds": {
-        "x0": 42,
-        "y0": 23,
-        "x1": 78,
-        "y1": 57
+        "x0": 44,
+        "y0": 29,
+        "x1": 67,
+        "y1": 46
       }
     },
     {
