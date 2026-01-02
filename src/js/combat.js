@@ -3966,14 +3966,10 @@ export function useUtilityAbility(id) {
 }
 
 /**
- * Sprint: 5-tile dash in the direction player is facing (or toward target)
- * CD: 30s, collision-safe
+ * Sprint: 70% movement speed increase for 8 seconds
+ * CD: 30s
  */
 function executeSprint() {
-  if (isGhostMode) {
-    // Allow sprinting in ghost mode for corpse retrieval
-  }
-  
   if (playerImmunityActive) {
     logCombat('Cannot sprint during immunity');
     return;
@@ -3986,89 +3982,9 @@ function executeSprint() {
     return;
   }
   
-  const player = currentState.player;
-  const dashTiles = 5;
-  
-  // Determine dash direction - toward target if exists, else based on last movement
-  let dx = 0, dy = 0;
-  
-  if (currentTarget && currentTarget.hp > 0) {
-    // Dash toward target
-    const tdx = currentTarget.x - player.x;
-    const tdy = currentTarget.y - player.y;
-    const dist = Math.hypot(tdx, tdy);
-    if (dist > 0) {
-      dx = tdx / dist;
-      dy = tdy / dist;
-    }
-  } else {
-    // No target - dash in a random direction or use last movement direction
-    // For now, try to dash away from nearest enemy (defensive)
-    const enemies = currentState.runtime.activeEnemies?.filter(e => e.hp > 0) || [];
-    if (enemies.length > 0) {
-      enemies.sort((a, b) => {
-        const distA = distCoords(a.x, a.y, player.x, player.y);
-        const distB = distCoords(b.x, b.y, player.x, player.y);
-        return distA - distB;
-      });
-      const nearestEnemy = enemies[0];
-      dx = player.x - nearestEnemy.x;
-      dy = player.y - nearestEnemy.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 0) {
-        dx /= dist;
-        dy /= dist;
-      }
-    } else {
-      // No enemies - dash forward (positive y)
-      dy = -1;
-    }
-  }
-  
-  // Find furthest valid position
-  let finalX = player.x;
-  let finalY = player.y;
-  
-  for (let i = 1; i <= dashTiles; i++) {
-    const testX = Math.round(player.x + dx * i);
-    const testY = Math.round(player.y + dy * i);
-    
-    if (canMoveTo(currentState, testX, testY)) {
-      finalX = testX;
-      finalY = testY;
-    } else {
-      break; // Stop at first collision
-    }
-  }
-  
-  // Check if we actually moved
-  if (finalX === player.x && finalY === player.y) {
-    logCombat('Cannot sprint - blocked');
-    return;
-  }
-  
-  // Calculate distance before updating position (for log message)
-  const dashDistance = distCoords(player.x, player.y, finalX, finalY);
-  
-  // Execute the dash
-  player.x = finalX;
-  player.y = finalY;
-  
-  // Update player position visually with quick transition
-  const playerEl = document.getElementById('player');
-  if (playerEl) {
-    playerEl.style.transition = 'transform 0.15s ease-out';
-    playerEl.style.transform = `translate3d(${player.x * 24}px, ${player.y * 24}px, 0)`;
-    
-    // Reset transition after animation
-    setTimeout(() => {
-      playerEl.style.transition = '';
-    }, 150);
-  }
-  
-  // Update camera (dynamic import to avoid circular dependency)
-  import('./render.js').then(({ updateCamera }) => {
-    updateCamera(currentState, 150);
+  // Activate sprint buff (handled in movement.js)
+  import('./movement.js').then(({ activateSprintBuff }) => {
+    activateSprintBuff();
   });
   
   // Set cooldown
@@ -4077,7 +3993,7 @@ function executeSprint() {
   // Update UI
   updateUtilityCooldownUI('sprint');
   
-  logCombat(`Sprint! Dashed ${dashDistance} tiles`);
+  logCombat('Sprint! +70% movement speed for 8s');
 }
 
 /**

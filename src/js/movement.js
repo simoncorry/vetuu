@@ -14,8 +14,9 @@ import { tryExecuteCombatIntent, cancelCombatPursuit } from './combat.js';
 // ============================================
 const TILE_SIZE = 24;
 const MOVE_DURATION = 280; // ms per tile - Classic WoW pacing (slower, tactical)
-const SPRINT_MULTIPLIER = 0.6; // Sprint is ~1.67x faster
+const SPRINT_BUFF_MULTIPLIER = 0.59; // Sprint buff: 70% faster (1/1.7 ≈ 0.59)
 const GHOST_MULTIPLIER = 0.5; // Ghost mode is 2x faster (corpse run)
+const SPRINT_BUFF_DURATION = 8000; // Sprint buff lasts 8 seconds
 
 // ============================================
 // STATE
@@ -35,6 +36,10 @@ let lastKeyDirection = null;
 let currentPath = [];
 let pathMarkers = [];
 let interactOnArrival = false;
+
+// Sprint buff state
+let sprintBuffActive = false;
+let sprintBuffTimeout = null;
 
 // Callbacks
 let onMoveComplete = null;
@@ -116,8 +121,7 @@ function processMovementInput() {
   // Priority 1: Keyboard input (always takes precedence)
   if (lastKeyDirection) {
     const { dx, dy } = lastKeyDirection;
-    const sprint = keysHeld.has('ShiftLeft') || keysHeld.has('ShiftRight');
-    attemptMove(dx, dy, sprint);
+    attemptMove(dx, dy);
     return;
   }
   
@@ -144,7 +148,7 @@ function processMovementInput() {
 // ============================================
 // MOVEMENT EXECUTION
 // ============================================
-function attemptMove(dx, dy, sprint = false) {
+function attemptMove(dx, dy) {
   if (isMoving) return false;
   
   // Validate direction
@@ -160,22 +164,22 @@ function attemptMove(dx, dy, sprint = false) {
   }
   
   // Start movement
-  startMove(newX, newY, sprint);
+  startMove(newX, newY);
   return true;
 }
 
-function startMove(targetX, targetY, sprint = false) {
+function startMove(targetX, targetY) {
   isMoving = true;
   
   // Check if in ghost mode (corpse run) for 2x speed
   const isGhost = playerEl?.classList.contains('ghost');
   
-  // Calculate duration: ghost mode > sprint > normal
+  // Calculate duration: ghost mode > sprint buff > normal
   let duration = MOVE_DURATION;
   if (isGhost) {
     duration = MOVE_DURATION * GHOST_MULTIPLIER; // 2x faster during corpse run
-  } else if (sprint) {
-    duration = MOVE_DURATION * SPRINT_MULTIPLIER;
+  } else if (sprintBuffActive) {
+    duration = MOVE_DURATION * SPRINT_BUFF_MULTIPLIER; // 70% faster with sprint buff
   }
   
   // Update logical position immediately
@@ -539,5 +543,40 @@ export function hasActivePath() {
 
 export function getPlayerPosition() {
   return state ? { x: state.player.x, y: state.player.y } : null;
+}
+
+/**
+ * Activate sprint buff - increases movement speed by 70% for 8 seconds
+ */
+export function activateSprintBuff() {
+  // Clear any existing timeout
+  if (sprintBuffTimeout) {
+    clearTimeout(sprintBuffTimeout);
+  }
+  
+  sprintBuffActive = true;
+  
+  // Add visual indicator
+  if (playerEl) {
+    playerEl.classList.add('sprinting');
+  }
+  
+  // Auto-deactivate after duration
+  sprintBuffTimeout = setTimeout(() => {
+    sprintBuffActive = false;
+    sprintBuffTimeout = null;
+    if (playerEl) {
+      playerEl.classList.remove('sprinting');
+    }
+  }, SPRINT_BUFF_DURATION);
+  
+  return true;
+}
+
+/**
+ * Check if sprint buff is currently active
+ */
+export function isSprintBuffActive() {
+  return sprintBuffActive;
 }
 

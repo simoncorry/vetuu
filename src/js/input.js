@@ -176,8 +176,8 @@ function onKeyDown(e) {
   // ============================================
   // UTILITY ABILITIES
   // ============================================
-  // Sprint (9 primary, E secondary)
-  if (code === 'Digit9' || code === 'KeyE') { 
+  // Sprint (9 primary, R secondary)
+  if (code === 'Digit9' || code === 'KeyR') { 
     e.preventDefault(); 
     if (!dialogueOpen) targetCallback('utility', 'sprint'); 
     return; 

@@ -69,6 +69,19 @@
   display: none; /* Hide health bars in ghost mode */
 }
 
+/* Sprinting - speed boost active */
+#player.sprinting {
+  box-shadow: 
+    0 0 12px var(--player),
+    0 8px 16px rgba(0, 200, 255, 0.4),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1);
+}
+
+#player.sprinting::before {
+  box-shadow: 0 0 4px rgba(0, 200, 255, 0.6);
+}
+
 @keyframes ghost-pulse {
   0%, 100% { 
     opacity: 0.5;
