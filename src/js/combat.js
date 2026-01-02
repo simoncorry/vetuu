@@ -2781,8 +2781,9 @@ function executeRifleBurst(weapon, ability) {
       // Remove this timer from tracking (it's executing now)
       activeBurstTimers = activeBurstTimers.filter(t => t.timeoutId !== timeoutId);
       
-      // Guard: stop if target is dead or invalid
+      // Guard: stop if target is dead, invalid, or player swapped targets
       if (!target || target.hp <= 0 || target._deathHandled) return;
+      if (!currentTarget || currentTarget.id !== targetId) return; // Target swap guard
       
       const damage = calculateDamage(weapon, target, damagePerShot);
       showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FF88');
