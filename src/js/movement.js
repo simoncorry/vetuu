@@ -250,8 +250,9 @@ function canMoveTo(x, y) {
   const row = state.map.ground[y];
   if (!row) return false;
   
-  const tileId = parseInt(row[x], 36);
-  const tile = state.map.legend.tiles[tileId];
+  const tileChar = row[x];
+  // Look up by character directly (legend keys are strings)
+  const tile = state.map.legend.tiles[tileChar];
   return tile?.walkable === true;
 }
 

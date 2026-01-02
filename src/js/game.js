@@ -407,8 +407,9 @@ function initMinimap() {
   for (let y = 0; y < state.map.ground.length; y++) {
     const row = state.map.ground[y];
     for (let x = 0; x < row.length; x++) {
-      const tileId = parseInt(row[x], 36);
-      const tile = state.map.legend.tiles[tileId];
+      const tileChar = row[x];
+      // Look up by character directly (legend keys are strings)
+      const tile = state.map.legend.tiles[tileChar];
       if (tile) {
         ctx.fillStyle = tile.color;
         ctx.fillRect(x * minimapScale, y * minimapScale, Math.ceil(minimapScale), Math.ceil(minimapScale));

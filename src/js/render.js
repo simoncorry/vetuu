@@ -74,8 +74,8 @@ export function renderWorld(state) {
     const row = ground[y];
     for (let x = 0; x < row.length; x++) {
       const tileChar = row[x];
-      const tileId = parseInt(tileChar, 36);
-      const tileDef = legend.tiles[tileId];
+      // Look up by character directly (legend keys are strings)
+      const tileDef = legend.tiles[tileChar];
 
       if (tileDef) {
         groundCtx.fillStyle = tileDef.color;

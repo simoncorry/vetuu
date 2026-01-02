@@ -61,8 +61,8 @@ export function canMoveTo(state, x, y) {
   const tileChar = row[x];
   if (tileChar === undefined) return false;
 
-  const tileId = parseInt(tileChar, 36);
-  const tileDef = map.legend.tiles[tileId];
+  // Look up by character directly (legend keys are strings)
+  const tileDef = map.legend.tiles[tileChar];
 
   if (!tileDef || !tileDef.walkable) {
     return false;
