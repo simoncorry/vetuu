@@ -26,8 +26,9 @@ export const BASE_CENTER = {
 };
 
 // Terrain types for procedural generation
+// '1' (dune) is lightest and most common, '0' and '8' are accent variations
 const TERRAIN = {
-  DESERT: ['0', '1', '8'], // sand, dune, drySand
+  DESERT: ['1', '1', '1', '0', '8'], // 60% dune, 20% sand, 20% drySand
   ROCK: ['2'],
   ASH: ['6'],
   SALT: ['7']
