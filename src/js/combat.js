@@ -4338,12 +4338,12 @@ export function tryExecuteCombatIntent() {
     return;
   }
   
-  // === GUARDRAIL: Check if target has disengaged ===
-  // If target is retreating, broken off, or unaware after recent disengage,
-  // clear intent immediately and don't chase.
+  // === GUARDRAIL: Check if target has actively disengaged ===
+  // Only stop pursuit if the enemy is currently retreating or in broken-off cooldown.
+  // Do NOT check UNAWARE state here - enemies start UNAWARE and that's fine to attack.
   const intentTarget = getIntentTarget();
   if (intentTarget) {
-    // Target is retreating - stop pursuit
+    // Target is actively retreating - stop pursuit
     if (intentTarget.isRetreating) {
       logCombat('Target disengaged.');
       clearCombatIntent();
@@ -4352,17 +4352,9 @@ export function tryExecuteCombatIntent() {
       return;
     }
     
-    // Target has broken off (anti-re-aggro window) - stop pursuit
-    if (isBrokenOff(intentTarget, now)) {
-      logCombat('Target disengaged.');
-      clearCombatIntent();
-      autoAttackEnabled = false;
-      inCombat = false;
-      return;
-    }
-    
-    // Target has reset to UNAWARE state - stop pursuit (they're no longer in combat)
-    if (intentTarget.state === 'UNAWARE' && !intentTarget.isEngaged && !intentTarget.isAware) {
+    // Target has broken off (anti-re-aggro cooldown) - stop pursuit
+    // This only applies if they WERE engaged and broke off
+    if (isBrokenOff(intentTarget, now) && !intentTarget.isEngaged) {
       logCombat('Target disengaged.');
       clearCombatIntent();
       autoAttackEnabled = false;
