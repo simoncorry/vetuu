@@ -4256,18 +4256,24 @@ function clearCombatIntent() {
 }
 
 /**
- * Cancel combat pursuit (move-to-range) but preserve basic auto-attack.
- * Used when player manually moves - allows kiting while maintaining auto-attack.
- * Only clears weaponAbility intents; basic auto-attack continues.
+ * Cancel combat pursuit (move-to-range) but preserve basic auto-attack for kiting.
+ * 
+ * Behavior:
+ * - If pursuing for a WEAPON ABILITY: fully disengage (clear intent + auto-attack)
+ *   → Player explicitly chose to cancel the ability, don't start auto-attacking
+ * - If in BASIC auto-attack: keep attacking (allows kiting)
+ *   → Player is just repositioning while fighting
  */
 export function cancelCombatPursuit() {
-  // Only cancel if we're in a move-to-range pursuit (weaponAbility intent)
+  // Canceling a weapon ability pursuit = full disengage
+  // Player explicitly decided not to use the ability
   if (combatIntent?.type === 'weaponAbility') {
     clearCombatIntent();
+    autoAttackEnabled = false; // Don't start auto-attacking after canceling ability
   }
   // Clear any pending movement for attack
   pendingAttack = null;
-  // Keep autoAttackEnabled and inCombat - player can kite while attacking
+  // Basic auto-attack continues (kiting behavior preserved)
 }
 
 /**
