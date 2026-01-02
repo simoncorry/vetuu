@@ -4300,6 +4300,18 @@ function clearCombatIntent() {
 }
 
 /**
+ * Cancel combat engagement (called when player manually moves away).
+ * Clears intent, auto-attack, and pending attack.
+ * Exported for use by movement.js when movement keys override combat pathing.
+ */
+export function cancelCombatEngagement() {
+  clearCombatIntent();
+  autoAttackEnabled = false;
+  // Don't clear inCombat or target - player might still want to re-engage
+  // Just stop the automatic pursuit
+}
+
+/**
  * Get the target from current intent (resolves by id).
  */
 function getIntentTarget() {

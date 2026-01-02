@@ -5,6 +5,7 @@
  */
 
 import { createPathTo, cancelPath } from './movement.js';
+import { cancelCombatEngagement } from './combat.js';
 
 // ============================================
 // STATE
@@ -280,7 +281,8 @@ function onLeftClick(e) {
     return;
   }
 
-  // Path to empty tile
+  // Path to empty tile - cancel any combat pursuit
+  cancelCombatEngagement();
   createPathTo(x, y, false);
 }
 
