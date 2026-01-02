@@ -426,6 +426,73 @@
   box-shadow: 0 0 8px var(--accent-dim);
 }
 
+/* Running/active ability indicator - consistent stroke effect */
+.action-slot.ability-active {
+  border-color: var(--accent);
+  box-shadow: 
+    0 0 8px var(--accent),
+    0 0 16px var(--accent-dim),
+    inset 0 0 8px rgba(105, 210, 214, 0.2);
+  animation: ability-active-pulse 1.5s ease-in-out infinite;
+}
+
+.action-slot.ability-active::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  opacity: 0.6;
+  pointer-events: none;
+  animation: ability-stroke-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ability-active-pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 8px var(--accent),
+      0 0 16px var(--accent-dim),
+      inset 0 0 8px rgba(105, 210, 214, 0.2);
+  }
+  50% {
+    box-shadow: 
+      0 0 12px var(--accent),
+      0 0 24px var(--accent-dim),
+      inset 0 0 12px rgba(105, 210, 214, 0.3);
+  }
+}
+
+@keyframes ability-stroke-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+/* Utility-specific active state (sprint uses warning color) */
+.utility-slot.ability-active {
+  border-color: var(--warning);
+  box-shadow: 
+    0 0 8px var(--warning),
+    0 0 16px rgba(255, 193, 7, 0.3),
+    inset 0 0 8px rgba(255, 193, 7, 0.2);
+}
+
+.utility-slot.ability-active::before {
+  border-color: var(--warning);
+}
+
+/* Sense-specific active state */
+.sense-slot.ability-active {
+  border-color: var(--sense-color);
+  box-shadow: 
+    0 0 8px var(--sense-color),
+    0 0 16px rgba(75, 156, 214, 0.3),
+    inset 0 0 8px rgba(75, 156, 214, 0.2);
+}
+
+.sense-slot.ability-active::before {
+  border-color: var(--sense-color);
+}
+
 /* Disabled state - when targeting friendly NPC */
 .action-slot.disabled {
   opacity: 0.4;
