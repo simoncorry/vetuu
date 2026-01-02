@@ -1023,54 +1023,59 @@ function updateLighting() {
       continue;
     }
     
-    const intensity = Math.min(1, nightIntensity * light.intensity * 1.25);
+    // Match torch intensity and style
+    const intensity = Math.min(1, nightIntensity * light.intensity * 1.2);
     
-    // Use seeded offsets based on light position for consistent asymmetry
+    // Subtle flicker unique to each lamp (seeded by position)
     const seed = (light.x * 7 + light.y * 13) % 100;
+    const flickerPhase = seed * 0.1; // Different phase per lamp
+    const flicker = 1 + Math.sin(Date.now() * 0.002 + flickerPhase) * 0.015;
+    
+    // Seeded offsets for consistent asymmetry
     const offsetX1 = (seed % 10 - 5) * 0.02 * light.radius;
     const offsetY1 = ((seed * 3) % 10 - 5) * 0.02 * light.radius;
     const offsetX2 = ((seed * 7) % 10 - 5) * 0.03 * light.radius;
     const offsetY2 = ((seed * 11) % 10 - 5) * 0.03 * light.radius;
     
-    // Layer 1: Outer ambient glow (largest, softest)
-    const outerRadius = light.radius * 1.3;
+    // Layer 1: Outer ambient glow (largest, softest) - matches torch
+    const outerRadius = light.radius * 1.5 * flicker;
     const outerGradient = lightCtx.createRadialGradient(
       light.x + offsetX2, light.y + offsetY2, 0,
       light.x + offsetX2, light.y + offsetY2, outerRadius
     );
-    outerGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.15})`);
-    outerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${intensity * 0.06})`);
-    outerGradient.addColorStop(0.8, `rgba(255, 255, 255, ${intensity * 0.02})`);
+    outerGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.3})`);
+    outerGradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.15})`);
+    outerGradient.addColorStop(0.7, `rgba(255, 255, 255, ${intensity * 0.05})`);
     outerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     lightCtx.fillStyle = outerGradient;
     lightCtx.beginPath();
     lightCtx.arc(light.x + offsetX2, light.y + offsetY2, outerRadius, 0, Math.PI * 2);
     lightCtx.fill();
     
-    // Layer 2: Mid diffusion (medium size, offset)
-    const midRadius = light.radius * 1.1;
+    // Layer 2: Mid diffusion - matches torch
+    const midRadius = light.radius * 1.15 * flicker;
     const midGradient = lightCtx.createRadialGradient(
       light.x + offsetX1, light.y + offsetY1, 0,
       light.x + offsetX1, light.y + offsetY1, midRadius
     );
-    midGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.35})`);
-    midGradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.15})`);
-    midGradient.addColorStop(0.7, `rgba(255, 255, 255, ${intensity * 0.05})`);
+    midGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.5})`);
+    midGradient.addColorStop(0.3, `rgba(255, 255, 255, ${intensity * 0.3})`);
+    midGradient.addColorStop(0.6, `rgba(255, 255, 255, ${intensity * 0.1})`);
     midGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     lightCtx.fillStyle = midGradient;
     lightCtx.beginPath();
     lightCtx.arc(light.x + offsetX1, light.y + offsetY1, midRadius, 0, Math.PI * 2);
     lightCtx.fill();
     
-    // Layer 3: Core bright center (smallest, brightest)
+    // Layer 3: Core bright center - matches torch
     const coreRadius = light.radius * 0.7;
     const coreGradient = lightCtx.createRadialGradient(
       light.x, light.y, 0,
       light.x, light.y, coreRadius
     );
-    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.5})`);
-    coreGradient.addColorStop(0.3, `rgba(255, 255, 255, ${intensity * 0.2})`);
-    coreGradient.addColorStop(0.7, `rgba(255, 255, 255, ${intensity * 0.05})`);
+    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.95})`);
+    coreGradient.addColorStop(0.2, `rgba(255, 255, 255, ${intensity * 0.7})`);
+    coreGradient.addColorStop(0.5, `rgba(255, 255, 255, ${intensity * 0.3})`);
     coreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     lightCtx.fillStyle = coreGradient;
     lightCtx.beginPath();
