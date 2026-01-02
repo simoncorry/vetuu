@@ -75,9 +75,9 @@ export function expandMap(originalMap) {
           if (weatheredTile !== null) {
             tile = weatheredTile;
           }
-          // null means transparent - show world background
+          // null means missing tile - use sand (walkable terrain)
           else {
-            tile = ' ';
+            tile = '1';
           }
         }
         row += tile;
@@ -235,8 +235,8 @@ function generateTerrain(x, y, width, height) {
     if (roadTile) {
       return roadTile;
     }
-    // Missing road tile - return space for transparent (not in legend = not rendered)
-    return ' ';
+    // Missing road tile - use sand (walkable terrain that shows through)
+    return '1';
   }
   
   const distFromCenter = Math.hypot(x - centerX, y - centerY);
