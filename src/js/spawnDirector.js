@@ -366,12 +366,17 @@ export function initSpawnDirector(state) {
     // Base center (4x scaled base, centered at 56,38)
     baseCenter = { x: 56 + ox, y: 38 + oy };
     
-    // Define base bounds (28-84 x 17-59)
+    // Define base bounds (circular: center 56,38 radius 27)
     baseBounds = {
-      minX: 28 + ox,
-      maxX: 84 + ox,
-      minY: 17 + oy,
-      maxY: 59 + oy
+      minX: 29 + ox,
+      maxX: 83 + ox,
+      minY: 11 + oy,
+      maxY: 65 + oy,
+      // Circular base - use radius check
+      isCircular: true,
+      centerX: 56 + ox,
+      centerY: 38 + oy,
+      radius: 27
     };
   }
   
@@ -2149,6 +2154,14 @@ function getRingForDistance(dist) {
 function isInsideBaseBounds(x, y) {
   if (!baseBounds) return false;
   const buffer = baseBuffer;
+  
+  // Use circular check if base is circular
+  if (baseBounds.isCircular) {
+    const dist = Math.hypot(x - baseBounds.centerX, y - baseBounds.centerY);
+    return dist <= baseBounds.radius + buffer;
+  }
+  
+  // Rectangular fallback
   return x >= baseBounds.minX - buffer && 
          x <= baseBounds.maxX + buffer &&
          y >= baseBounds.minY - buffer &&

@@ -79,11 +79,12 @@ function seededRandom(x, y) {
 
 /**
  * Reveal the Drycross base and surrounding area on game start.
- * Reveals the entire base rectangle + 12 tiles beyond walls with jagged edges.
+ * Reveals a circular area around the base + 12 tiles beyond walls with jagged edges.
  */
 function revealDrycrossBase(state) {
   const BUFFER = 12;        // Tiles beyond walls to reveal
-  const JAGGED_AMOUNT = 4;  // Random variation at edges
+  const JAGGED_AMOUNT = 5;  // Random variation at edges
+  const BASE_RADIUS = 27;   // Base wall radius
   
   // Find Drycross region
   const drycross = state.map.regions?.find(r => r.id === 'region_drycross');
@@ -92,48 +93,41 @@ function revealDrycrossBase(state) {
   // Get map offset for expanded coordinates
   const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
   
-  // Base bounds (from map.json region)
-  const baseMinX = drycross.bounds.x0 + offset.x;
-  const baseMaxX = drycross.bounds.x1 + offset.x;
-  const baseMinY = drycross.bounds.y0 + offset.y;
-  const baseMaxY = drycross.bounds.y1 + offset.y;
+  // Base center (circular base)
+  const centerX = Math.floor((drycross.bounds.x0 + drycross.bounds.x1) / 2) + offset.x;
+  const centerY = Math.floor((drycross.bounds.y0 + drycross.bounds.y1) / 2) + offset.y;
   
-  // Reveal area = base + buffer
-  const revealMinX = baseMinX - BUFFER;
-  const revealMaxX = baseMaxX + BUFFER;
-  const revealMinY = baseMinY - BUFFER;
-  const revealMaxY = baseMaxY + BUFFER;
+  // Reveal radius = base radius + buffer
+  const CORE_RADIUS = BASE_RADIUS + BUFFER;
+  const OUTER_RADIUS = CORE_RADIUS + JAGGED_AMOUNT;
   
-  // Scan area (including extra for jagged edges)
-  const startX = Math.max(0, revealMinX - JAGGED_AMOUNT);
-  const startY = Math.max(0, revealMinY - JAGGED_AMOUNT);
-  const endX = Math.min(mapWidth - 1, revealMaxX + JAGGED_AMOUNT);
-  const endY = Math.min(mapHeight - 1, revealMaxY + JAGGED_AMOUNT);
+  // Scan area
+  const startX = Math.max(0, centerX - OUTER_RADIUS);
+  const startY = Math.max(0, centerY - OUTER_RADIUS);
+  const endX = Math.min(mapWidth - 1, centerX + OUTER_RADIUS);
+  const endY = Math.min(mapHeight - 1, centerY + OUTER_RADIUS);
   
   for (let y = startY; y <= endY; y++) {
     for (let x = startX; x <= endX; x++) {
       if (fogMask[y][x]) continue; // Already revealed
       
-      // Check if inside the core reveal rectangle
-      const insideX = x >= revealMinX && x <= revealMaxX;
-      const insideY = y >= revealMinY && y <= revealMaxY;
+      // Calculate distance from center
+      const dist = Math.hypot(x - centerX, y - centerY);
       
-      if (insideX && insideY) {
-        // Inside core reveal area - always reveal
+      // Inside core radius - always reveal
+      if (dist <= CORE_RADIUS) {
         fogMask[y][x] = true;
         state.runtime.revealedTiles.add(`${x},${y}`);
         continue;
       }
       
-      // Calculate distance to the reveal rectangle edge
-      const distX = x < revealMinX ? revealMinX - x : (x > revealMaxX ? x - revealMaxX : 0);
-      const distY = y < revealMinY ? revealMinY - y : (y > revealMaxY ? y - revealMaxY : 0);
-      const distToEdge = Math.hypot(distX, distY);
-      
       // Jagged edge falloff
       const jitter = (seededRandom(x, y) - 0.5) * 2 * JAGGED_AMOUNT;
-      if (distToEdge <= JAGGED_AMOUNT + jitter) {
-        const revealChance = 1 - (distToEdge / (JAGGED_AMOUNT * 2));
+      const effectiveRadius = CORE_RADIUS + JAGGED_AMOUNT + jitter;
+      
+      if (dist <= effectiveRadius) {
+        const falloffDist = dist - CORE_RADIUS;
+        const revealChance = 1 - (falloffDist / (JAGGED_AMOUNT * 2));
         if (seededRandom(x + 100, y + 100) < revealChance) {
           fogMask[y][x] = true;
           state.runtime.revealedTiles.add(`${x},${y}`);
