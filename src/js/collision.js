@@ -1,9 +1,47 @@
 /**
  * VETUU — Collision Module
  * Movement validation, object/NPC lookup, line-of-sight
+ * 
+ * OPTIMIZATION: Uses spatial index (Map) for O(1) lookups instead of O(n) array scans
  */
 
 import { hasFlag } from './save.js';
+
+// ============================================
+// SPATIAL INDEX - O(1) lookups
+// ============================================
+let objectIndex = null;  // Map<"x,y", object>
+let npcIndex = null;     // Map<"x,y", npc>
+let bossIndex = null;    // Map<"x,y", boss>
+
+/**
+ * Build spatial indices for fast lookups. Call this once after map loads.
+ */
+export function buildSpatialIndex(state) {
+  // Object index
+  objectIndex = new Map();
+  for (const obj of state.map.objects) {
+    const key = `${obj.x},${obj.y}`;
+    // Store first object at each position (matches old behavior)
+    if (!objectIndex.has(key)) {
+      objectIndex.set(key, obj);
+    }
+  }
+  
+  // NPC index
+  npcIndex = new Map();
+  for (const npc of state.entities.npcs) {
+    npcIndex.set(`${npc.x},${npc.y}`, npc);
+  }
+  
+  // Boss index
+  bossIndex = new Map();
+  for (const boss of state.entities.bosses) {
+    bossIndex.set(`${boss.x},${boss.y}`, boss);
+  }
+  
+  console.log(`[Collision] Spatial index built: ${objectIndex.size} objects, ${npcIndex.size} NPCs, ${bossIndex.size} bosses`);
+}
 
 // ============================================
 // MOVEMENT VALIDATION
@@ -156,16 +194,26 @@ function isLOSBlocked(state, x, y) {
 }
 
 // ============================================
-// OBJECT LOOKUP
+// OBJECT LOOKUP (O(1) with spatial index)
 // ============================================
 export function getObjectAt(state, x, y) {
+  // Use spatial index if available (O(1))
+  if (objectIndex) {
+    return objectIndex.get(`${x},${y}`) || null;
+  }
+  // Fallback to linear scan (O(n)) - only before index is built
   return state.map.objects.find(obj => obj.x === x && obj.y === y);
 }
 
 // ============================================
-// NPC LOOKUP
+// NPC LOOKUP (O(1) with spatial index)
 // ============================================
 export function getNpcAt(state, x, y) {
+  // Use spatial index if available (O(1))
+  if (npcIndex) {
+    return npcIndex.get(`${x},${y}`) || null;
+  }
+  // Fallback to linear scan (O(n))
   return state.entities.npcs.find(npc => npc.x === x && npc.y === y);
 }
 
@@ -194,9 +242,14 @@ export function getEnemySpawnAt(state, x, y) {
 }
 
 // ============================================
-// BOSS LOOKUP
+// BOSS LOOKUP (O(1) with spatial index)
 // ============================================
 export function getBossAt(state, x, y) {
+  // Use spatial index if available (O(1))
+  if (bossIndex) {
+    return bossIndex.get(`${x},${y}`) || null;
+  }
+  // Fallback to linear scan (O(n))
   return state.entities.bosses.find(boss => boss.x === x && boss.y === y);
 }
 
