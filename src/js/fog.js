@@ -1,8 +1,6 @@
 /**
  * VETUU — Fog of War Module
  * Canvas-based fog rendering for performance on large maps
- * 
- * OPTIMIZATION: Uses viewport-sized canvas and only renders visible area
  */
 
 const REVEAL_RADIUS = 8;
@@ -15,33 +13,22 @@ let mapWidth = 0;
 let mapHeight = 0;
 let tileSize = 24;
 
-// Viewport tracking for efficient rendering
-let viewportWidth = 0;
-let viewportHeight = 0;
-let lastCameraX = -1;
-let lastCameraY = -1;
-
 // ============================================
 // INITIALIZATION
 // ============================================
 export function initFog(state) {
   const fogLayer = document.getElementById('fog-layer');
-  const viewport = document.getElementById('viewport');
   
   mapWidth = state.map.meta.width;
   mapHeight = state.map.meta.height;
   tileSize = state.map.meta.tileSize;
-  
-  // Get viewport dimensions (with buffer for smooth scrolling)
-  viewportWidth = Math.ceil(viewport.clientWidth / tileSize) + 4;
-  viewportHeight = Math.ceil(viewport.clientHeight / tileSize) + 4;
 
-  // Create VIEWPORT-SIZED canvas (not full map!) - major optimization
+  // Create full-size fog canvas (in world coordinates)
   fogCanvas = document.createElement('canvas');
   fogCanvas.id = 'fog-canvas';
-  fogCanvas.width = viewportWidth * tileSize;
-  fogCanvas.height = viewportHeight * tileSize;
-  fogCanvas.style.cssText = 'position: fixed; top: 0; left: 0; pointer-events: none;';
+  fogCanvas.width = mapWidth * tileSize;
+  fogCanvas.height = mapHeight * tileSize;
+  fogCanvas.style.cssText = 'position: absolute; top: 0; left: 0; pointer-events: none;';
   
   fogLayer.innerHTML = '';
   fogLayer.appendChild(fogCanvas);
@@ -56,16 +43,14 @@ export function initFog(state) {
   if (saved && saved.length === mapHeight && saved[0]?.length === mapWidth) {
     fogMask = saved;
     
-    // Populate revealedTiles from saved mask (deferred to avoid blocking)
-    setTimeout(() => {
-      for (let y = 0; y < mapHeight; y++) {
-        for (let x = 0; x < mapWidth; x++) {
-          if (fogMask[y][x]) {
-            state.runtime.revealedTiles.add(`${x},${y}`);
-          }
+    // Populate revealedTiles from saved mask
+    for (let y = 0; y < mapHeight; y++) {
+      for (let x = 0; x < mapWidth; x++) {
+        if (fogMask[y][x]) {
+          state.runtime.revealedTiles.add(`${x},${y}`);
         }
       }
-    }, 0);
+    }
   } else {
     // Clear old fog data if dimensions don't match
     localStorage.removeItem(FOG_STORAGE_KEY);
@@ -81,7 +66,7 @@ export function initFog(state) {
   revealDrycrossBase(state);
 
   // Initial render
-  renderFogViewport(state, state.player.x, state.player.y);
+  renderFog(state);
 }
 
 /**
@@ -388,79 +373,75 @@ function drawDitheredTileAt(px, py, threshold) {
   }
 }
 
-export function renderFog(state) {
-  // Redirect to viewport-based rendering
-  renderFogViewport(state, state.player.x, state.player.y);
-}
-
-/**
- * Render fog for just the visible viewport area.
- * This is the main optimization - only renders ~30x20 tiles instead of entire map.
- */
-export function renderFogViewport(state, playerX, playerY) {
+export function renderFog(_state) {
   if (!fogCtx || !fogMask) return;
-  
-  const viewport = document.getElementById('viewport');
-  if (!viewport) return;
-  
-  // Calculate camera position (same logic as render.js)
-  const vw = viewport.clientWidth;
-  const vh = viewport.clientHeight;
-  
-  const targetX = playerX * tileSize + tileSize / 2 - vw / 2;
-  const targetY = playerY * tileSize + tileSize / 2 - vh / 2;
-  
-  const worldW = mapWidth * tileSize;
-  const worldH = mapHeight * tileSize;
-  
-  const cameraX = Math.max(0, Math.min(targetX, worldW - vw));
-  const cameraY = Math.max(0, Math.min(targetY, worldH - vh));
-  
-  // Convert to tile coordinates
-  const startTileX = Math.floor(cameraX / tileSize);
-  const startTileY = Math.floor(cameraY / tileSize);
-  const endTileX = Math.min(mapWidth, startTileX + viewportWidth);
-  const endTileY = Math.min(mapHeight, startTileY + viewportHeight);
-  
+
   // Clear canvas
   fogCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
   
   // Fog color
   fogCtx.fillStyle = 'rgba(10, 12, 14, 0.95)';
   
-  // Only render tiles in viewport
-  for (let y = startTileY; y < endTileY; y++) {
-    for (let x = startTileX; x < endTileX; x++) {
-      if (!fogMask[y]?.[x]) {
+  // Render unrevealed tiles with dithering at edges
+  for (let y = 0; y < mapHeight; y++) {
+    for (let x = 0; x < mapWidth; x++) {
+      if (!fogMask[y][x]) {
         const distToRevealed = getDistanceToRevealed(x, y, 2);
         
-        // Calculate screen position (relative to viewport)
-        const screenX = (x - startTileX) * tileSize - (cameraX % tileSize);
-        const screenY = (y - startTileY) * tileSize - (cameraY % tileSize);
-        
         if (distToRevealed === 1) {
-          drawDitheredTileAt(screenX, screenY, 8);
+          // Innermost fog ring - sparse dither (8/16 pixels)
+          drawDitheredTile(x, y, 8);
         } else if (distToRevealed === 2) {
-          drawDitheredTileAt(screenX, screenY, 12);
+          // Second ring - denser dither (12/16 pixels)
+          drawDitheredTile(x, y, 12);
         } else {
-          fogCtx.fillRect(screenX, screenY, tileSize, tileSize);
+          // Full fog for all other tiles
+          fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
         }
       }
     }
   }
-  
-  lastCameraX = cameraX;
-  lastCameraY = cameraY;
 }
 
-// Optimized: redraw entire viewport (simpler and fast enough with viewport-sized canvas)
-export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS, state = null) {
+// Keep this export for compatibility but it just calls renderFog
+export function renderFogViewport(state, _playerX, _playerY) {
+  renderFog(state);
+}
+
+// Optimized: only redraw affected area
+export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
   if (!fogCtx) return;
   
-  // With viewport-sized canvas, just re-render the whole viewport
-  // This is actually fast now since we're only rendering ~30x20 tiles
-  if (state) {
-    renderFogViewport(state, centerX, centerY);
+  // Expand area by 2 tiles to handle dither edge recalculation
+  const ditherMargin = 2;
+  const startX = Math.max(0, centerX - radius - ditherMargin);
+  const startY = Math.max(0, centerY - radius - ditherMargin);
+  const endX = Math.min(mapWidth, centerX + radius + 1 + ditherMargin);
+  const endY = Math.min(mapHeight, centerY + radius + 1 + ditherMargin);
+  
+  // Clear and redraw just this area
+  fogCtx.clearRect(
+    startX * tileSize, 
+    startY * tileSize, 
+    (endX - startX) * tileSize, 
+    (endY - startY) * tileSize
+  );
+  
+  fogCtx.fillStyle = 'rgba(10, 12, 14, 0.95)';
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
+      if (!fogMask[y][x]) {
+        const distToRevealed = getDistanceToRevealed(x, y, 2);
+        
+        if (distToRevealed === 1) {
+          drawDitheredTile(x, y, 8);
+        } else if (distToRevealed === 2) {
+          drawDitheredTile(x, y, 12);
+        } else {
+          fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
+      }
+    }
   }
 }
 

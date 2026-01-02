@@ -5,8 +5,6 @@
  * ANIMATION RULE: All motion uses CSS transitions/animations for GPU acceleration.
  * JavaScript only sets final positions - CSS handles interpolation.
  * Always use translate3d() for transforms, never translate().
- * 
- * OPTIMIZATION: Ground canvas is viewport-sized and re-rendered on camera move
  */
 
 import { hasFlag } from './save.js';
@@ -22,14 +20,7 @@ let actorLayer = null;
 const TILE_SIZE = 24;
 let mapWidth = 0;
 let mapHeight = 0;
-
-// Viewport tracking for efficient rendering
-let viewportTileWidth = 0;
-let viewportTileHeight = 0;
-let lastGroundCameraX = -Infinity;
-let lastGroundCameraY = -Infinity;
 let currentState = null;
-let groundLegend = null;
 
 // ============================================
 // INITIALIZATION
@@ -43,108 +34,52 @@ export function initRenderer(state) {
   mapWidth = state.map.meta.width;
   mapHeight = state.map.meta.height;
   currentState = state;
-  groundLegend = state.map.legend;
 
   // Set CSS variables for map dimensions
   document.documentElement.style.setProperty('--map-width', mapWidth);
   document.documentElement.style.setProperty('--map-height', mapHeight);
   document.documentElement.style.setProperty('--tile-size', `${state.map.meta.tileSize}px`);
 
-  // Calculate viewport size in tiles (with buffer)
-  viewportTileWidth = Math.ceil(viewport.clientWidth / TILE_SIZE) + 4;
-  viewportTileHeight = Math.ceil(viewport.clientHeight / TILE_SIZE) + 4;
-
-  // Create VIEWPORT-SIZED ground canvas (not full map!) - major optimization
+  // Create ground canvas
   const groundLayer = document.getElementById('ground-layer');
   groundCanvas = document.createElement('canvas');
   groundCanvas.id = 'ground-canvas';
-  groundCanvas.width = viewportTileWidth * TILE_SIZE;
-  groundCanvas.height = viewportTileHeight * TILE_SIZE;
-  groundCanvas.style.cssText = 'position: fixed; top: 0; left: 0;';
+  groundCanvas.width = mapWidth * TILE_SIZE;
+  groundCanvas.height = mapHeight * TILE_SIZE;
+  groundCanvas.style.cssText = 'position: absolute; top: 0; left: 0;';
   
   groundLayer.innerHTML = '';
   groundLayer.appendChild(groundCanvas);
   groundCtx = groundCanvas.getContext('2d');
 
-  // Set world dimensions (still needed for collision bounds)
+  // Set world dimensions
   world.style.width = `${mapWidth * TILE_SIZE}px`;
   world.style.height = `${mapHeight * TILE_SIZE}px`;
 }
 
 // ============================================
-// GROUND RENDERING (Viewport-based for performance)
+// GROUND RENDERING (Canvas-based)
 // ============================================
 export function renderWorld(state) {
+  const { ground, legend } = state.map;
   currentState = state;
-  groundLegend = state.map.legend;
-  // Initial render will happen when camera updates
-  renderGroundViewport(state.player.x, state.player.y);
-}
 
-/**
- * Render ground tiles for just the visible viewport.
- * Called on camera move to update the fixed-position canvas.
- */
-function renderGroundViewport(playerX, playerY) {
-  if (!groundCtx || !currentState) return;
-  
-  const { ground, legend } = currentState.map;
-  
-  // Calculate camera position
-  const vw = viewport.clientWidth;
-  const vh = viewport.clientHeight;
-  
-  const targetX = playerX * TILE_SIZE + TILE_SIZE / 2 - vw / 2;
-  const targetY = playerY * TILE_SIZE + TILE_SIZE / 2 - vh / 2;
-  
-  const worldW = mapWidth * TILE_SIZE;
-  const worldH = mapHeight * TILE_SIZE;
-  
-  const cameraX = Math.max(0, Math.min(targetX, worldW - vw));
-  const cameraY = Math.max(0, Math.min(targetY, worldH - vh));
-  
-  // Only re-render if camera moved significantly (by at least 1 tile)
-  const cameraTileX = Math.floor(cameraX / TILE_SIZE);
-  const cameraTileY = Math.floor(cameraY / TILE_SIZE);
-  
-  if (cameraTileX === lastGroundCameraX && cameraTileY === lastGroundCameraY) {
-    return; // No need to re-render, camera hasn't moved enough
-  }
-  
-  lastGroundCameraX = cameraTileX;
-  lastGroundCameraY = cameraTileY;
-  
-  // Calculate tile range to render
-  const startTileX = Math.max(0, cameraTileX);
-  const startTileY = Math.max(0, cameraTileY);
-  const endTileX = Math.min(mapWidth, cameraTileX + viewportTileWidth);
-  const endTileY = Math.min(mapHeight, cameraTileY + viewportTileHeight);
-  
+  if (!groundCtx) return;
+
   // Clear canvas
   groundCtx.clearRect(0, 0, groundCanvas.width, groundCanvas.height);
-  
-  // Calculate pixel offset for smooth scrolling
-  const offsetX = cameraX % TILE_SIZE;
-  const offsetY = cameraY % TILE_SIZE;
-  
-  // Draw only visible ground tiles
-  for (let y = startTileY; y < endTileY; y++) {
+
+  // Draw ground tiles (full map, rendered once)
+  for (let y = 0; y < ground.length; y++) {
     const row = ground[y];
-    if (!row) continue;
-    
-    for (let x = startTileX; x < endTileX; x++) {
+    for (let x = 0; x < row.length; x++) {
       const tileChar = row[x];
-      if (tileChar === undefined) continue;
-      
       const tileId = parseInt(tileChar, 36);
       const tileDef = legend.tiles[tileId];
 
       if (tileDef) {
         groundCtx.fillStyle = tileDef.color;
-        // Position relative to viewport
-        const screenX = (x - cameraTileX) * TILE_SIZE - offsetX;
-        const screenY = (y - cameraTileY) * TILE_SIZE - offsetY;
-        groundCtx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        groundCtx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
       }
     }
   }
@@ -348,9 +283,6 @@ export function updateCamera(state, duration = null) {
 
   // Use translate3d for GPU acceleration
   world.style.transform = `translate3d(${-x}px, ${-y}px, 0)`;
-  
-  // Re-render ground tiles for new camera position
-  renderGroundViewport(state.player.x, state.player.y);
 }
 
 // ============================================

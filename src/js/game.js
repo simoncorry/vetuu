@@ -7,7 +7,7 @@ import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects } 
 import { initInput } from './input.js';
 import { initMovement, createPathTo } from './movement.js';
 import { getObjectAt, getNpcAt, buildSpatialIndex } from './collision.js';
-import { initFog, revealAround, renderFog, updateFogArea, renderFogViewport } from './fog.js';
+import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
 import { initCombat, handleTargeting, renderEnemies, playerSpecial, checkPendingAttack, checkCorpseReached, isInGhostMode } from './combat.js';
@@ -722,9 +722,9 @@ function onMoveComplete(x, y) {
   // Update camera
   updateCamera(state);
   
-  // Reveal fog and re-render viewport
+  // Reveal fog
   revealAround(state, x, y);
-  renderFogViewport(state, x, y);
+  updateFogArea(x, y);
   
   // Check if player reached their corpse (ghost mode)
   if (isInGhostMode()) {
