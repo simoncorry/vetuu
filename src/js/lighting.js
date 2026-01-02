@@ -46,7 +46,6 @@ const FRAGMENT_SHADER = `
   uniform vec2 u_resolution;
   uniform vec4 u_ambientColor;
   uniform float u_tileSize;
-  uniform vec2 u_cameraOffset;
   
   // Light data: x, y, radius, intensity (packed as vec4)
   uniform vec4 u_lights[${MAX_LIGHTS}];
@@ -63,8 +62,9 @@ const FRAGMENT_SHADER = `
   }
   
   void main() {
-    // Convert to world pixel coordinates
-    vec2 pixelCoord = v_texCoord * u_resolution + u_cameraOffset;
+    // Convert texture coords to world pixel coordinates (scaled)
+    // v_texCoord is 0-1 across the canvas, which covers the full world at half res
+    vec2 pixelCoord = v_texCoord * u_resolution;
     
     // Start with ambient darkness
     vec3 finalColor = u_ambientColor.rgb;
@@ -194,7 +194,6 @@ export function initLighting(container, width, height, tileSz) {
     resolution: gl.getUniformLocation(program, 'u_resolution'),
     ambientColor: gl.getUniformLocation(program, 'u_ambientColor'),
     tileSize: gl.getUniformLocation(program, 'u_tileSize'),
-    cameraOffset: gl.getUniformLocation(program, 'u_cameraOffset'),
     lights: gl.getUniformLocation(program, 'u_lights'),
     lightColors: gl.getUniformLocation(program, 'u_lightColors'),
     lightCount: gl.getUniformLocation(program, 'u_lightCount')
@@ -373,7 +372,6 @@ export function renderLighting(timeOfDay = 0.5) {
   gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
   gl.uniform4f(uniforms.ambientColor, ambient.r, ambient.g, ambient.b, ambient.a);
   gl.uniform1f(uniforms.tileSize, tileSize * LIGHT_TEXTURE_SCALE);
-  gl.uniform2f(uniforms.cameraOffset, cameraX * LIGHT_TEXTURE_SCALE, cameraY * LIGHT_TEXTURE_SCALE);
   gl.uniform4fv(uniforms.lights, lightData);
   gl.uniform3fv(uniforms.lightColors, colorData);
   gl.uniform1i(uniforms.lightCount, count);
@@ -387,20 +385,22 @@ export function renderLighting(timeOfDay = 0.5) {
 
 /**
  * Cull lights outside viewport for performance
+ * Uses camera position to only process visible lights
  */
 function cullLights(allLights) {
-  const viewWidth = canvas.width / LIGHT_TEXTURE_SCALE / tileSize;
-  const viewHeight = canvas.height / LIGHT_TEXTURE_SCALE / tileSize;
+  // Calculate viewport bounds in tile coordinates
+  const viewWidthTiles = canvas.width / LIGHT_TEXTURE_SCALE / tileSize;
+  const viewHeightTiles = canvas.height / LIGHT_TEXTURE_SCALE / tileSize;
   const viewX = cameraX / tileSize;
   const viewY = cameraY / tileSize;
   
-  const margin = 10;  // Extra tiles for light radius spillover
+  const margin = 15;  // Extra tiles for light radius spillover
   
   return allLights.filter(light => {
     return light.x >= viewX - margin &&
-           light.x <= viewX + viewWidth + margin &&
+           light.x <= viewX + viewWidthTiles + margin &&
            light.y >= viewY - margin &&
-           light.y <= viewY + viewHeight + margin;
+           light.y <= viewY + viewHeightTiles + margin;
   });
 }
 
@@ -469,12 +469,20 @@ export function destroyLighting() {
 // DEBUG
 // ============================================
 if (typeof window !== 'undefined') {
-  window.VETUU_LIGHTING_DEBUG = () => ({
-    initialized,
-    staticLights: staticLights.length,
-    dynamicLights: lights.length,
-    canvas: canvas ? { width: canvas.width, height: canvas.height } : null
-  });
+  window.VETUU_LIGHTING_DEBUG = () => {
+    const visibleCount = cullLights([...staticLights, ...lights]).length;
+    return {
+      initialized,
+      staticLights: staticLights.length,
+      dynamicLights: lights.length,
+      visibleLights: visibleCount,
+      canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
+      tileSize,
+      scaledTileSize: tileSize * LIGHT_TEXTURE_SCALE,
+      camera: { x: cameraX, y: cameraY },
+      sampleLight: staticLights[0] || null
+    };
+  };
   
   window.VETUU_SET_TIME = (t) => {
     if (t >= 0 && t <= 1) {
@@ -482,6 +490,13 @@ if (typeof window !== 'undefined') {
       return `Set time to ${t} (${t < 0.25 ? 'night' : t < 0.5 ? 'morning' : t < 0.75 ? 'afternoon' : 'evening'})`;
     }
     return 'Time must be 0-1 (0=midnight, 0.5=noon)';
+  };
+  
+  window.VETUU_LIGHTS_NEAR = (tileX, tileY, radius = 20) => {
+    const allLights = [...staticLights, ...lights];
+    return allLights.filter(l => 
+      Math.abs(l.x - tileX) < radius && Math.abs(l.y - tileY) < radius
+    ).map(l => ({ x: l.x.toFixed(1), y: l.y.toFixed(1), radius: l.radius, intensity: l.intensity }));
   };
 }
 

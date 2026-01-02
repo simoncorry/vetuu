@@ -371,7 +371,7 @@ function generateRoadLampPosts(width, height, offsetX, offsetY) {
         x: centerX + (lampOffset * verticalSide),
         y: nextLampY,
         solid: true,
-        light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+        light: { radius: 8, color: '#FFE4B5', intensity: 0.9 }
       });
       
       // Alternate side for next lamp
@@ -398,7 +398,7 @@ function generateRoadLampPosts(width, height, offsetX, offsetY) {
         x: nextLampX,
         y: centerY + (lampOffset * horizontalSide),
         solid: true,
-        light: { radius: 5, color: '#FFE4B5', intensity: 0.6 }
+        light: { radius: 8, color: '#FFE4B5', intensity: 0.9 }
       });
       
       // Alternate side for next lamp
