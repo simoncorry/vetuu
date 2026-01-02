@@ -864,32 +864,82 @@ function createPlayerTorch() {
   const player = document.getElementById('player');
   if (!player) return;
   
+  // Create layered torch for natural light diffusion
+  const torchSize = 8 * lightingTileSize;
+  
+  // Main torch container
   const torch = document.createElement('div');
   torch.id = 'player-torch';
   torch.style.cssText = `
     position: absolute;
-    width: ${8 * lightingTileSize}px;
-    height: ${8 * lightingTileSize}px;
+    width: ${torchSize}px;
+    height: ${torchSize}px;
     top: 50%;
     left: 50%;
     transform: translate3d(-50%, -50%, 0);
     pointer-events: none;
-    border-radius: 50%;
-    background: radial-gradient(
-      circle,
-      rgba(255, 245, 230, 0.85) 0%,
-      rgba(255, 240, 220, 0.8) 10%,
-      rgba(255, 235, 210, 0.65) 25%,
-      rgba(255, 225, 195, 0.45) 40%,
-      rgba(255, 215, 180, 0.25) 60%,
-      rgba(255, 200, 160, 0.08) 80%,
-      transparent 100%
-    );
-    mix-blend-mode: screen;
     opacity: 0;
     z-index: 7;
   `;
   
+  // Layer 1: Core bright center (small, warm)
+  const core = document.createElement('div');
+  core.style.cssText = `
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse 45% 50% at 52% 48%,
+      rgba(255, 250, 240, 0.7) 0%,
+      rgba(255, 245, 230, 0.3) 30%,
+      transparent 70%
+    );
+    mix-blend-mode: screen;
+  `;
+  
+  // Layer 2: Mid diffusion (slightly offset, irregular)
+  const mid = document.createElement('div');
+  mid.style.cssText = `
+    position: absolute;
+    width: 110%;
+    height: 105%;
+    top: -2%;
+    left: -5%;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse 55% 48% at 48% 52%,
+      rgba(255, 240, 220, 0.5) 0%,
+      rgba(255, 230, 200, 0.25) 40%,
+      rgba(255, 220, 180, 0.08) 70%,
+      transparent 100%
+    );
+    mix-blend-mode: screen;
+  `;
+  
+  // Layer 3: Outer ambient glow (large, soft, asymmetric)
+  const outer = document.createElement('div');
+  outer.style.cssText = `
+    position: absolute;
+    width: 130%;
+    height: 125%;
+    top: -12%;
+    left: -15%;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse 60% 52% at 50% 50%,
+      rgba(255, 235, 210, 0.2) 0%,
+      rgba(255, 225, 195, 0.1) 50%,
+      rgba(255, 215, 180, 0.03) 80%,
+      transparent 100%
+    );
+    mix-blend-mode: screen;
+    filter: blur(2px);
+  `;
+  
+  torch.appendChild(outer);
+  torch.appendChild(mid);
+  torch.appendChild(core);
   player.appendChild(torch);
 }
 
