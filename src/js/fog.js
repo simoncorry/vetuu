@@ -79,12 +79,12 @@ function seededRandom(x, y) {
 
 /**
  * Reveal the Drycross base and surrounding area on game start.
- * Reveals a circular area around the base + 12 tiles beyond walls with jagged edges.
+ * Reveals a circular area around the base center + 12 tiles beyond walls.
+ * Base is a rounded rectangle but fog reveal is circular for natural look.
  */
 function revealDrycrossBase(state) {
   const BUFFER = 12;        // Tiles beyond walls to reveal
   const JAGGED_AMOUNT = 5;  // Random variation at edges
-  const BASE_RADIUS = 27;   // Base wall radius
   
   // Find Drycross region
   const drycross = state.map.regions?.find(r => r.id === 'region_drycross');
@@ -93,11 +93,16 @@ function revealDrycrossBase(state) {
   // Get map offset for expanded coordinates
   const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
   
-  // Base center (circular base)
+  // Base center
   const centerX = Math.floor((drycross.bounds.x0 + drycross.bounds.x1) / 2) + offset.x;
   const centerY = Math.floor((drycross.bounds.y0 + drycross.bounds.y1) / 2) + offset.y;
   
-  // Reveal radius = base radius + buffer
+  // Calculate base half-dimensions to determine reveal radius
+  const halfWidth = Math.floor((drycross.bounds.x1 - drycross.bounds.x0) / 2);
+  const halfHeight = Math.floor((drycross.bounds.y1 - drycross.bounds.y0) / 2);
+  
+  // Use the larger dimension + buffer as reveal radius
+  const BASE_RADIUS = Math.max(halfWidth, halfHeight);
   const CORE_RADIUS = BASE_RADIUS + BUFFER;
   const OUTER_RADIUS = CORE_RADIUS + JAGGED_AMOUNT;
   
