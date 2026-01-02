@@ -867,7 +867,7 @@ function createPlayerTorch() {
   // Create layered torch for natural light diffusion
   const torchSize = 8 * lightingTileSize;
   
-  // Main torch container
+  // Main torch container - z-index -1 to render under character
   const torch = document.createElement('div');
   torch.id = 'player-torch';
   torch.style.cssText = `
@@ -879,10 +879,10 @@ function createPlayerTorch() {
     transform: translate3d(-50%, -50%, 0);
     pointer-events: none;
     opacity: 0;
-    z-index: 7;
+    z-index: -1;
   `;
   
-  // Layer 1: Core bright center (small, warm)
+  // Layer 1: Core bright center (small, warm) - reduced intensity
   const core = document.createElement('div');
   core.style.cssText = `
     position: absolute;
@@ -891,14 +891,14 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 45% 50% at 52% 48%,
-      rgba(255, 250, 240, 0.7) 0%,
-      rgba(255, 245, 230, 0.3) 30%,
+      rgba(255, 250, 240, 0.4) 0%,
+      rgba(255, 245, 230, 0.15) 30%,
       transparent 70%
     );
     mix-blend-mode: screen;
   `;
   
-  // Layer 2: Mid diffusion (slightly offset, irregular)
+  // Layer 2: Mid diffusion (slightly offset, irregular) - reduced intensity
   const mid = document.createElement('div');
   mid.style.cssText = `
     position: absolute;
@@ -909,15 +909,15 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 55% 48% at 48% 52%,
-      rgba(255, 240, 220, 0.5) 0%,
-      rgba(255, 230, 200, 0.25) 40%,
-      rgba(255, 220, 180, 0.08) 70%,
+      rgba(255, 240, 220, 0.25) 0%,
+      rgba(255, 230, 200, 0.12) 40%,
+      rgba(255, 220, 180, 0.04) 70%,
       transparent 100%
     );
     mix-blend-mode: screen;
   `;
   
-  // Layer 3: Outer ambient glow (large, soft, asymmetric)
+  // Layer 3: Outer ambient glow (large, soft, asymmetric) - reduced intensity
   const outer = document.createElement('div');
   outer.style.cssText = `
     position: absolute;
@@ -928,9 +928,9 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 60% 52% at 50% 50%,
-      rgba(255, 235, 210, 0.2) 0%,
-      rgba(255, 225, 195, 0.1) 50%,
-      rgba(255, 215, 180, 0.03) 80%,
+      rgba(255, 235, 210, 0.1) 0%,
+      rgba(255, 225, 195, 0.05) 50%,
+      rgba(255, 215, 180, 0.015) 80%,
       transparent 100%
     );
     mix-blend-mode: screen;
@@ -1005,34 +1005,69 @@ function updateLighting() {
   // Cut out light circles using destination-out
   lightCtx.globalCompositeOperation = 'destination-out';
   
-  // Draw static lights (only visible ones) with smooth gradients
+  // Draw static lights with 3-layer natural diffusion (like torch)
   for (const light of staticLights) {
-    // Cull lights outside visible area
-    if (light.x < visibleLeft - light.radius || 
-        light.x > visibleRight + light.radius ||
-        light.y < visibleTop - light.radius || 
-        light.y > visibleBottom + light.radius) {
+    // Cull lights outside visible area (use largest layer radius)
+    const maxRadius = light.radius * 1.3;
+    if (light.x < visibleLeft - maxRadius || 
+        light.x > visibleRight + maxRadius ||
+        light.y < visibleTop - maxRadius || 
+        light.y > visibleBottom + maxRadius) {
       continue;
     }
     
-    // Create smooth gradient with more stops for natural falloff
-    const gradient = lightCtx.createRadialGradient(
-      light.x, light.y, 0,
-      light.x, light.y, light.radius
-    );
-    // Boost intensity by 25% for brighter lamps
     const intensity = Math.min(1, nightIntensity * light.intensity * 1.25);
-    gradient.addColorStop(0, `rgba(255, 255, 255, ${intensity})`);
-    gradient.addColorStop(0.1, `rgba(255, 255, 255, ${intensity * 0.95})`);
-    gradient.addColorStop(0.25, `rgba(255, 255, 255, ${intensity * 0.8})`);
-    gradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.55})`);
-    gradient.addColorStop(0.6, `rgba(255, 255, 255, ${intensity * 0.3})`);
-    gradient.addColorStop(0.8, `rgba(255, 255, 255, ${intensity * 0.12})`);
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     
-    lightCtx.fillStyle = gradient;
+    // Use seeded offsets based on light position for consistent asymmetry
+    const seed = (light.x * 7 + light.y * 13) % 100;
+    const offsetX1 = (seed % 10 - 5) * 0.02 * light.radius;
+    const offsetY1 = ((seed * 3) % 10 - 5) * 0.02 * light.radius;
+    const offsetX2 = ((seed * 7) % 10 - 5) * 0.03 * light.radius;
+    const offsetY2 = ((seed * 11) % 10 - 5) * 0.03 * light.radius;
+    
+    // Layer 1: Outer ambient glow (largest, softest)
+    const outerRadius = light.radius * 1.3;
+    const outerGradient = lightCtx.createRadialGradient(
+      light.x + offsetX2, light.y + offsetY2, 0,
+      light.x + offsetX2, light.y + offsetY2, outerRadius
+    );
+    outerGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.15})`);
+    outerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${intensity * 0.06})`);
+    outerGradient.addColorStop(0.8, `rgba(255, 255, 255, ${intensity * 0.02})`);
+    outerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    lightCtx.fillStyle = outerGradient;
     lightCtx.beginPath();
-    lightCtx.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
+    lightCtx.arc(light.x + offsetX2, light.y + offsetY2, outerRadius, 0, Math.PI * 2);
+    lightCtx.fill();
+    
+    // Layer 2: Mid diffusion (medium size, offset)
+    const midRadius = light.radius * 1.1;
+    const midGradient = lightCtx.createRadialGradient(
+      light.x + offsetX1, light.y + offsetY1, 0,
+      light.x + offsetX1, light.y + offsetY1, midRadius
+    );
+    midGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.35})`);
+    midGradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.15})`);
+    midGradient.addColorStop(0.7, `rgba(255, 255, 255, ${intensity * 0.05})`);
+    midGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    lightCtx.fillStyle = midGradient;
+    lightCtx.beginPath();
+    lightCtx.arc(light.x + offsetX1, light.y + offsetY1, midRadius, 0, Math.PI * 2);
+    lightCtx.fill();
+    
+    // Layer 3: Core bright center (smallest, brightest)
+    const coreRadius = light.radius * 0.7;
+    const coreGradient = lightCtx.createRadialGradient(
+      light.x, light.y, 0,
+      light.x, light.y, coreRadius
+    );
+    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.5})`);
+    coreGradient.addColorStop(0.3, `rgba(255, 255, 255, ${intensity * 0.2})`);
+    coreGradient.addColorStop(0.7, `rgba(255, 255, 255, ${intensity * 0.05})`);
+    coreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    lightCtx.fillStyle = coreGradient;
+    lightCtx.beginPath();
+    lightCtx.arc(light.x, light.y, coreRadius, 0, Math.PI * 2);
     lightCtx.fill();
   }
   
