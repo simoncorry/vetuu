@@ -877,11 +877,12 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      rgba(255, 240, 220, 0.95) 0%,
-      rgba(255, 230, 200, 0.7) 15%,
-      rgba(255, 220, 180, 0.4) 35%,
-      rgba(255, 200, 150, 0.15) 60%,
-      rgba(255, 180, 120, 0.05) 80%,
+      rgba(255, 245, 230, 0.85) 0%,
+      rgba(255, 240, 220, 0.8) 10%,
+      rgba(255, 235, 210, 0.65) 25%,
+      rgba(255, 225, 195, 0.45) 40%,
+      rgba(255, 215, 180, 0.25) 60%,
+      rgba(255, 200, 160, 0.08) 80%,
       transparent 100%
     );
     mix-blend-mode: screen;
@@ -969,13 +970,14 @@ function updateLighting() {
       light.x, light.y, 0,
       light.x, light.y, light.radius
     );
-    const intensity = nightIntensity * light.intensity;
+    // Boost intensity by 25% for brighter lamps
+    const intensity = Math.min(1, nightIntensity * light.intensity * 1.25);
     gradient.addColorStop(0, `rgba(255, 255, 255, ${intensity})`);
     gradient.addColorStop(0.1, `rgba(255, 255, 255, ${intensity * 0.95})`);
     gradient.addColorStop(0.25, `rgba(255, 255, 255, ${intensity * 0.8})`);
     gradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.55})`);
     gradient.addColorStop(0.6, `rgba(255, 255, 255, ${intensity * 0.3})`);
-    gradient.addColorStop(0.8, `rgba(255, 255, 255, ${intensity * 0.1})`);
+    gradient.addColorStop(0.8, `rgba(255, 255, 255, ${intensity * 0.12})`);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     
     lightCtx.fillStyle = gradient;
