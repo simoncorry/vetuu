@@ -30,7 +30,7 @@ import {
   getAggroRadius,
   startRetreat, setOnEnemyDisengageCallback,
   shouldBreakOffFromGuards, checkLeashAndDeaggro,
-  retreatPack, ensureEffects
+  ensureEffects
 } from './aiUtils.js';
 
 // Enemy type configurations (Simplified - no weakness/resistance)
@@ -565,7 +565,7 @@ let provokedEnemies = new Set();
  * @param {string} reason - Why disengaging: 'leash', 'guards', 'lost', 'pack'
  * @param {number} t - Current time
  */
-function onEnemyDisengage(enemy, reason, t) {
+function onEnemyDisengage(enemy, reason, _t) {
   if (!enemy) return;
   
   const isCurrentTarget = currentTarget?.id === enemy.id;
@@ -2322,50 +2322,6 @@ export function playerAttack() {
   inCombat = true;
   setAutoAttackIntent(currentTarget);
   tryExecuteCombatIntent();
-}
-
-function executeAttack(weapon) {
-  if (!currentTarget || currentTarget.hp <= 0) return;
-  if (!weapon) return;
-
-  // Check spawn immunity (spawn camping prevention)
-  if (hasSpawnImmunity(currentTarget)) {
-    logCombat('Enemy is still materializing...');
-    return;
-  }
-
-  // Provoke the target if it's passive
-  provokeEnemy(currentTarget);
-
-  const player = currentState.player;
-  let damage = calculateDamage(weapon, currentTarget);
-
-  if (weapon.type === 'ranged') {
-    showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, weapon.projectileColor || '#00FFFF');
-  } else {
-    showMeleeSwipe(player.x, player.y, currentTarget.x, currentTarget.y, weapon.projectileColor || '#00FFFF');
-  }
-
-  currentTarget.hp -= damage;
-  markCombatEvent(); // Track combat activity for regen gating
-  
-  // Use crit flag from calculateDamage instead of heuristic
-  const isCrit = !!weapon.__lastCrit;
-  weapon.__lastCrit = false;
-  showDamageNumber(currentTarget.x, currentTarget.y, damage, isCrit);
-  logCombat(`${damage} damage with ${weapon.name || 'attack'}`);
-
-  updateEnemyHealthBar(currentTarget);
-  updateTargetFrame();
-
-  // Set cooldown from first ability or default (basic attack uses slot 1)
-  const cooldown = weapon.abilities?.[1]?.cooldownMs || 1500;
-  actionCooldowns[1] = cooldown;
-  actionMaxCooldowns[1] = cooldown;
-
-  if (currentTarget.hp <= 0) {
-    handleEnemyDeath(currentTarget);
-  }
 }
 
 async function moveToAttackRange(target, range, actionType) {
