@@ -812,7 +812,7 @@ function gameLoop() {
 // ============================================
 // GUARD PATROL SYSTEM
 // ============================================
-const GUARD_PATROL_INTERVAL = 2000; // Move every 2 seconds
+const GUARD_PATROL_INTERVAL = 4000; // Move every 4 seconds (slower patrol)
 const guardLastMove = new Map();
 
 function tickGuardPatrol() {
