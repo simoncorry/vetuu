@@ -81,6 +81,9 @@ const ACT3_MODIFIERS = {
   neutralWildlifeMultiplier: 0.7
 };
 
+// Road exclusion - enemies can't spawn near roads
+const ROAD_EXCLUSION_RADIUS = 8;
+
 // ============================================
 // SPAWN BLOCK CONSTANTS
 // ============================================
@@ -158,6 +161,10 @@ function isBlockValid(cx, cy) {
     }
     // Check base exclusion
     if (isInsideBaseBounds(tile.x, tile.y)) {
+      return false;
+    }
+    // Check road exclusion
+    if (isNearRoad(tile.x, tile.y)) {
       return false;
     }
   }
@@ -1416,6 +1423,9 @@ function isSpawnerEligible(spawner, now, counts) {
   // D) Base bounds exclusion
   if (isInsideBaseBounds(spawner.center.x, spawner.center.y)) return false;
   
+  // D2) Road exclusion - spawner center can't be near roads
+  if (isNearRoad(spawner.center.x, spawner.center.y)) return false;
+  
   // E) Density caps
   if (spawner.kind === 'pack' && counts.packs >= MAX_PACKS) return false;
   if (spawner.kind === 'stray' && counts.strays >= MAX_STRAYS) return false;
@@ -1631,6 +1641,8 @@ function isBlockValidForSlot(cx, cy) {
     if (isReserved(tile.x, tile.y)) return false;
     // Not in base bounds
     if (isInsideBaseBounds(tile.x, tile.y)) return false;
+    // Not near roads
+    if (isNearRoad(tile.x, tile.y)) return false;
   }
   
   return true;
@@ -2153,6 +2165,30 @@ function isInsideBaseBounds(x, y) {
          x <= baseBounds.maxX + buffer &&
          y >= baseBounds.minY - buffer &&
          y <= baseBounds.maxY + buffer;
+}
+
+/**
+ * Check if a position is too close to a road
+ * Roads run N-S and E-W through the base center
+ */
+function isNearRoad(x, y) {
+  // Road center lines (in expanded map coordinates)
+  const roadCenterX = baseCenter.x;
+  const roadCenterY = baseCenter.y;
+  
+  // Check distance to vertical road (N-S)
+  const distToVerticalRoad = Math.abs(x - roadCenterX);
+  if (distToVerticalRoad <= ROAD_EXCLUSION_RADIUS) {
+    return true;
+  }
+  
+  // Check distance to horizontal road (E-W)
+  const distToHorizontalRoad = Math.abs(y - roadCenterY);
+  if (distToHorizontalRoad <= ROAD_EXCLUSION_RADIUS) {
+    return true;
+  }
+  
+  return false;
 }
 
 // ============================================
