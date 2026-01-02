@@ -30,7 +30,8 @@ import {
   getAggroRadius,
   startRetreat, setOnEnemyDisengageCallback,
   shouldBreakOffFromGuards, checkLeashAndDeaggro,
-  ensureEffects
+  ensureEffects,
+  retreatPack
 } from './aiUtils.js';
 import { isRevealed } from './fog.js';
 
@@ -84,6 +85,17 @@ const PASSIVE_CRITTER_MAX_LEVEL = 5;
 // 3. Weapon baseDamage in weapons.js (pace of fights)
 
 let COMBAT_DEBUG = false; // Toggle via VETUU_COMBAT_DEBUG_ON()
+
+// ============================================
+// RETREAT STATISTICS (for debugging)
+// ============================================
+const retreatStats = {
+  retreatsStarted: 0,
+  trueHomeSnaps: 0,       // Snap to exact spawn point
+  nearFootprintSnaps: 0,  // Snap to nearby footprint tile (not exact dest)
+  totalStuckDuration: 0,  // Sum of all stuck durations
+  stuckCount: 0           // Number of stuck events
+};
 
 // Defense curve: damage% = DEF_K / (DEF_K + def)
 // Lower DEF_K = stronger defense. At DEF_K=20: 10 DEF = 33% reduction
@@ -386,6 +398,96 @@ if (typeof window !== 'undefined') {
         settle: getSpawnSettleRemaining(e, t) > 0
       }));
   };
+  
+  /**
+   * Debug info for a specific pack.
+   * Shows each member's spawn, retreat status, and footprint conflicts.
+   * Usage: VETUU_PACK('pack_abc123') or VETUU_PACK() for all packs
+   */
+  window.VETUU_PACK = (packId) => {
+    if (!currentState?.runtime?.activeEnemies) return 'No enemies';
+    
+    const enemies = currentState.runtime.activeEnemies.filter(e => e.hp > 0);
+    
+    // If no packId, show all packs
+    if (!packId) {
+      const packs = new Set(enemies.map(e => e.packId).filter(Boolean));
+      return Array.from(packs).map(pid => window.VETUU_PACK(pid));
+    }
+    
+    const packMembers = enemies.filter(e => e.packId === packId);
+    if (packMembers.length === 0) return `No pack found: ${packId}`;
+    
+    // Check for footprint conflicts
+    const footprintConflicts = [];
+    for (const e of packMembers) {
+      for (const other of packMembers) {
+        if (e.id === other.id) continue;
+        
+        // Check if e is inside other's footprint
+        const otherSpawnX = other.spawnX ?? other.x;
+        const otherSpawnY = other.spawnY ?? other.y;
+        const dx = Math.abs(e.x - otherSpawnX);
+        const dy = Math.abs(e.y - otherSpawnY);
+        
+        if (dx <= 1 && dy <= 1) {
+          footprintConflicts.push({
+            enemy: e.id.slice(-8),
+            insideFootprintOf: other.id.slice(-8),
+            position: `(${e.x}, ${e.y})`,
+            otherSpawn: `(${otherSpawnX}, ${otherSpawnY})`
+          });
+        }
+      }
+    }
+    
+    return {
+      packId,
+      memberCount: packMembers.length,
+      members: packMembers.map(e => ({
+        id: e.id.slice(-8),
+        name: e.name,
+        position: `(${e.x}, ${e.y})`,
+        spawnPoint: `(${e.spawnX}, ${e.spawnY})`,
+        retreatTo: e.retreatTo ? `(${e.retreatTo.x}, ${e.retreatTo.y})` : null,
+        isRetreating: e.isRetreating,
+        retreatReason: e.retreatReason,
+        stuckSince: e.retreatStuckSince ? `${Date.now() - e.retreatStuckSince}ms ago` : null,
+        reservedTilesCount: e.reservedTiles?.length || 0
+      })),
+      footprintConflicts: footprintConflicts.length > 0 ? footprintConflicts : 'None (good!)',
+      healthySeparation: footprintConflicts.length === 0
+    };
+  };
+  
+  /**
+   * Retreat statistics for debugging.
+   * Shows snap counts, stuck durations, and other metrics.
+   * Usage: VETUU_RETREAT_STATS() or VETUU_RETREAT_STATS(true) to reset
+   */
+  window.VETUU_RETREAT_STATS = (reset = false) => {
+    if (reset) {
+      retreatStats.retreatsStarted = 0;
+      retreatStats.trueHomeSnaps = 0;
+      retreatStats.nearFootprintSnaps = 0;
+      retreatStats.totalStuckDuration = 0;
+      retreatStats.stuckCount = 0;
+      return 'Retreat stats reset';
+    }
+    
+    const avgStuck = retreatStats.stuckCount > 0 
+      ? Math.round(retreatStats.totalStuckDuration / retreatStats.stuckCount) 
+      : 0;
+    
+    return {
+      retreatsStarted: retreatStats.retreatsStarted,
+      trueHomeSnaps: retreatStats.trueHomeSnaps,
+      nearFootprintSnaps: retreatStats.nearFootprintSnaps,
+      avgStuckDurationMs: avgStuck,
+      stuckEvents: retreatStats.stuckCount,
+      note: 'After fixes, nearFootprintSnaps should be rare'
+    };
+  };
 }
 
 // ============================================
@@ -586,6 +688,9 @@ let activeBurstTimers = [];
 function onEnemyDisengage(enemy, reason, _t) {
   if (!enemy) return;
   
+  // Track retreat start for debugging stats
+  retreatStats.retreatsStarted++;
+  
   const isCurrentTarget = currentTarget?.id === enemy.id;
   const isIntentTarget = combatIntent?.targetId === enemy.id;
   
@@ -627,20 +732,6 @@ function onEnemyDisengage(enemy, reason, _t) {
                    : reason === 'lost' ? 'lost interest'
                    : 'disengaged';
   logCombat(`${enemy.name} ${reasonText}.`);
-}
-
-/**
- * Retreat all pack members, passing state for unique retreat destinations.
- * Wrapper around retreatPack that provides collision checking.
- */
-function retreatPackWithState(packId, enemies, t, reason) {
-  if (!packId || !enemies) return;
-  
-  for (const enemy of enemies) {
-    if (enemy.packId === packId && enemy.hp > 0 && !enemy.isRetreating) {
-      startRetreat(enemy, t, reason, currentState, canMoveTo);
-    }
-  }
 }
 
 // ============================================
@@ -1247,7 +1338,7 @@ function processEnemyAI(enemy, t) {
     releaseAttackerSlot(enemy);
     
     if (enemy.packId) {
-      retreatPackWithState(enemy.packId, currentState.runtime.activeEnemies, t, 'guards');
+      retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'guards');
     }
     
     updateEnemyVisuals();
@@ -1286,7 +1377,7 @@ function processEnemyAI(enemy, t) {
       releaseAttackerSlot(enemy);
       
       if (retreatReason === 'leash' && enemy.packId) {
-        retreatPackWithState(enemy.packId, currentState.runtime.activeEnemies, t, 'leash');
+        retreatPack(enemy.packId, currentState.runtime.activeEnemies, t, 'leash');
       }
       
       updateEnemyVisuals();
@@ -1530,24 +1621,42 @@ function handleRetreatState(enemy, t) {
     const stuckDuration = t - enemy.retreatStuckSince;
     const retreatDur = t - (enemy.retreatStartedAt ?? t);
     
-    // Determine snap conditions:
-    // 1. Stuck for extended time (2s if far, 4s if close)
-    // 2. OR total retreat time exceeded timeout
-    const stuckThreshold = distToDest <= 2 ? 4000 : 2000; // More patient when close
-    const shouldSnap = stuckDuration > stuckThreshold || retreatDur > AI.RETREAT_TIMEOUT_MS;
+    // Track stuck events for debugging
+    if (stuckDuration > 0) {
+      retreatStats.totalStuckDuration += stuckDuration;
+      retreatStats.stuckCount++;
+    }
     
-    // Additional check: if destination is blocked by another enemy, wait longer
+    // Check if destination is blocked by another enemy
     const destBlocked = !canEnemyMoveToRetreat(destX, destY, enemy.id);
-    const blockedThreshold = destBlocked ? 6000 : stuckThreshold;
     
-    if (stuckDuration > blockedThreshold || retreatDur > AI.RETREAT_TIMEOUT_MS * 1.5) {
+    // PHASE 4: Very conservative snap thresholds near home
+    // When close (distToDest <= 2), we're patient and NEVER use retreatDur timeout
+    // The enemy will wait for the destination to become free
+    const isNearHome = distToDest <= 2;
+    
+    let shouldSnap = false;
+    
+    if (isNearHome) {
+      // Near home: only snap if stuck for a VERY long time (8-10s)
+      // Never snap based on total retreat duration when close
+      const nearHomeStuckThreshold = destBlocked ? 10000 : 8000;
+      shouldSnap = stuckDuration > nearHomeStuckThreshold;
+    } else {
+      // Far from home: more aggressive snap behavior
+      const farStuckThreshold = destBlocked ? 6000 : 2000;
+      shouldSnap = stuckDuration > farStuckThreshold || retreatDur > AI.RETREAT_TIMEOUT_MS * 1.5;
+    }
+    
+    if (shouldSnap) {
       // LAST RESORT: Snap to destination
       // But first, check if destination is actually reachable (not occupied)
       if (!destBlocked) {
         snapEnemyToHome(enemy, t);
       } else {
         // Destination is blocked - find nearest free tile in footprint
-        snapToNearestFreeInFootprint(enemy, t);
+        // NOTE: snapNearHomeWithinFootprint does NOT finish retreat
+        snapNearHomeWithinFootprint(enemy, t);
       }
       return;
     }
@@ -1567,8 +1676,14 @@ function handleRetreatState(enemy, t) {
 /**
  * Snap enemy to nearest free tile within their 3×3 footprint.
  * Used when the exact spawn position is blocked.
+ * 
+ * IMPORTANT: This does NOT finish retreat - it's a "relocation" step.
+ * The enemy keeps isRetreating=true and retreatTo unchanged, so they
+ * continue moving toward their true spawn point once it's free.
+ * 
+ * @returns {boolean} True if snapped successfully, false if all tiles blocked
  */
-function snapToNearestFreeInFootprint(enemy, t) {
+function snapNearHomeWithinFootprint(enemy, t) {
   const spawnX = enemy.spawnX ?? enemy.retreatTo?.x ?? enemy.x;
   const spawnY = enemy.spawnY ?? enemy.retreatTo?.y ?? enemy.y;
   
@@ -1595,35 +1710,117 @@ function snapToNearestFreeInFootprint(enemy, t) {
         el.offsetHeight;
         requestAnimationFrame(() => {
           el.classList.remove('is-teleporting');
-          el.classList.remove('retreating');
+          // Keep 'retreating' class - we're NOT finished yet
         });
       }
       
-      finishRetreat(enemy, t);
-      return;
+      // CRITICAL: Do NOT call finishRetreat!
+      // - Keep enemy.isRetreating = true
+      // - Keep enemy.retreatTo unchanged (still the true spawn point)
+      // - Reset stuck timer so we don't re-snap immediately
+      enemy.retreatStuckSince = null;
+      // Add move cooldown to prevent immediate step
+      enemy.moveCooldown = t + 320;
+      
+      // Track snap for debugging
+      retreatStats.nearFootprintSnaps++;
+      
+      return true;
     }
   }
   
-  // All footprint tiles blocked - just finish retreat where we are
-  finishRetreat(enemy, t);
+  // All footprint tiles blocked - don't finish retreat, just wait
+  // Reset stuck timer to give more time
+  enemy.retreatStuckSince = null;
+  enemy.moveCooldown = t + 500;
+  return false;
 }
 
 /**
- * Movement check for retreating enemies - more lenient
+ * Check if a tile is within an enemy's reserved 3×3 footprint.
+ * @param {object} enemy - Enemy with reservedTiles array
+ * @param {number} x - Tile X coordinate
+ * @param {number} y - Tile Y coordinate
+ * @returns {boolean} True if tile is in enemy's footprint
+ */
+function isTileInFootprint(enemy, x, y) {
+  if (!enemy.reservedTiles || !Array.isArray(enemy.reservedTiles)) {
+    // Fallback: check 3×3 around spawn point
+    const spawnX = enemy.spawnX ?? enemy.x;
+    const spawnY = enemy.spawnY ?? enemy.y;
+    return Math.abs(x - spawnX) <= 1 && Math.abs(y - spawnY) <= 1;
+  }
+  
+  for (const tile of enemy.reservedTiles) {
+    if (tile.x === x && tile.y === y) return true;
+  }
+  return false;
+}
+
+/**
+ * Check if a tile is inside any OTHER living enemy's reserved footprint.
+ * Used to prevent pack members from crowding each other's spawn zones during retreat.
+ * @param {string} enemyId - ID of the enemy we're moving (excluded from check)
+ * @param {number} x - Tile X coordinate
+ * @param {number} y - Tile Y coordinate
+ * @returns {boolean} True if tile is in another enemy's footprint
+ */
+function isTileInAnyOtherFootprint(enemyId, x, y) {
+  const enemies = currentState?.runtime?.activeEnemies || [];
+  
+  for (const other of enemies) {
+    // Skip self
+    if (other.id === enemyId) continue;
+    // Skip dead enemies (their footprint is released)
+    if (other.hp <= 0) continue;
+    // Skip enemies without footprints
+    if (!other.reservedTiles && !other.spawnX) continue;
+    
+    if (isTileInFootprint(other, x, y)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Movement check for retreating enemies - footprint-aware.
+ * 
+ * PHASE 2: This now enforces footprint ownership:
+ * - ✅ Allow tile if it's in MY reservedTiles (still must not be occupied)
+ * - ❌ Block tile if it's in any OTHER living enemy's reservedTiles
+ * 
+ * This prevents packs from "crowding" each other's 3×3 zones during retreat,
+ * which reduces "destBlocked", "stuck", and snap frequency.
  */
 function canEnemyMoveToRetreat(x, y, enemyId) {
   // Basic walkability check
   if (!canMoveTo(currentState, x, y)) return false;
   
-  // Don't collide with other enemies
+  // Don't collide with player
+  const player = currentState.player;
+  if (player.x === x && player.y === y) return false;
+  
+  // Don't collide with other enemies (exact position check)
   for (const other of currentState.runtime.activeEnemies || []) {
     if (other.id === enemyId || other.hp <= 0) continue;
     if (other.x === x && other.y === y) return false;
   }
   
-  // Don't collide with player
-  const player = currentState.player;
-  if (player.x === x && player.y === y) return false;
+  // PHASE 2: Footprint ownership check
+  // Get the moving enemy to check if this tile is in their OWN footprint
+  const movingEnemy = (currentState.runtime.activeEnemies || []).find(e => e.id === enemyId);
+  
+  // If tile is in our own footprint, that's fine (we own it)
+  if (movingEnemy && isTileInFootprint(movingEnemy, x, y)) {
+    return true;
+  }
+  
+  // If tile is in ANOTHER enemy's footprint, block it
+  // This prevents pack members from crowding each other's home zones
+  if (isTileInAnyOtherFootprint(enemyId, x, y)) {
+    return false;
+  }
   
   return true;
 }
@@ -1632,6 +1829,9 @@ function canEnemyMoveToRetreat(x, y, enemyId) {
  * Snap enemy to retreat destination (used when stuck as LAST RESORT).
  * Uses unique spawnX/spawnY to avoid clumping at shared locations.
  * If destination is blocked, falls back to nearest free tile in footprint.
+ * 
+ * NOTE: This function DOES call finishRetreat because we're snapping to
+ * the EXACT destination (enemy.x === destX && enemy.y === destY).
  */
 function snapEnemyToHome(enemy, t) {
   // CRITICAL: Use retreatTo if set (already unique), else use authoritative spawn point
@@ -1639,11 +1839,14 @@ function snapEnemyToHome(enemy, t) {
   const destX = enemy.retreatTo?.x ?? enemy.spawnX ?? enemy.home?.x ?? enemy.x;
   const destY = enemy.retreatTo?.y ?? enemy.spawnY ?? enemy.home?.y ?? enemy.y;
   
-  // Check if destination is blocked - if so, use fallback
+  // Check if destination is blocked - if so, use fallback (which does NOT finish retreat)
   if (!canEnemyMoveToRetreat(destX, destY, enemy.id)) {
-    snapToNearestFreeInFootprint(enemy, t);
+    snapNearHomeWithinFootprint(enemy, t);
     return;
   }
+  
+  // Track for debugging
+  retreatStats.trueHomeSnaps++;
   
   // Update position in data
   enemy.x = destX;
@@ -1664,6 +1867,7 @@ function snapEnemyToHome(enemy, t) {
     });
   }
   
+  // This is the only snap path that finishes retreat (because we reached exact dest)
   finishRetreat(enemy, t);
 }
 

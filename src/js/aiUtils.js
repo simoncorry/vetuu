@@ -468,6 +468,9 @@ export function retreatPack(packId, enemies, t = nowMs(), reason = 'pack') {
 /**
  * Check if any pack member has exceeded leash significantly
  * (prevents pack from splitting too far)
+ * 
+ * NOTE: Uses dist() which is Euclidean (same as distCoords in utils.js).
+ * This matches the distance calculation used throughout the retreat system.
  */
 export function checkPackLeash(packId, enemies, maxExcessTiles = 5) {
   if (!packId || !enemies) return false;
@@ -476,6 +479,7 @@ export function checkPackLeash(packId, enemies, maxExcessTiles = 5) {
     if (enemy.packId !== packId || enemy.hp <= 0) continue;
     if (!enemy.home) continue;
     
+    // Euclidean distance to home - consistent with combat.js retreat logic
     const dHome = dist(enemy.x, enemy.y, enemy.home.x, enemy.home.y);
     const leashRadius = getLeashRadius(enemy);
     
