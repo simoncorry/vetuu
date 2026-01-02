@@ -4404,20 +4404,17 @@ function executeBasicIntent(now) {
   
   const player = currentState.player;
   const dist = distCoords(player.x, player.y, target.x, target.y);
+  const hasLOS = !combatIntent.requiresLOS || hasLineOfSight(currentState, player.x, player.y, target.x, target.y);
   
-  // Out of range - move to attack range
-  if (dist > combatIntent.requiredRange) {
-    if (!pendingAttack) {
+  // Out of range or no LOS
+  if (dist > combatIntent.requiredRange || !hasLOS) {
+    // Initial engagement (never attacked yet): path to enemy
+    // This handles right-click on out-of-range enemy
+    if (!combatIntent.lastSuccessAt && !pendingAttack) {
       moveToAttackRange(target, combatIntent.requiredRange, 'basic');
     }
-    return;
-  }
-  
-  // No LOS - move to attack range (for ranged weapons)
-  if (combatIntent.requiresLOS && !hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
-    if (!pendingAttack) {
-      moveToAttackRange(target, combatIntent.requiredRange, 'basic');
-    }
+    // Already in combat (has attacked): don't auto-chase, allows kiting
+    // Player controls movement; attacks resume when back in range
     return;
   }
   
