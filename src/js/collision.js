@@ -217,6 +217,22 @@ export function getNpcAt(state, x, y) {
   return state.entities.npcs.find(npc => npc.x === x && npc.y === y);
 }
 
+/**
+ * Update NPC position in spatial index (for patrol movement)
+ */
+export function updateNpcPosition(npc, oldX, oldY, newX, newY) {
+  if (!npcIndex) return;
+  
+  // Remove from old position
+  const oldKey = `${oldX},${oldY}`;
+  if (npcIndex.get(oldKey) === npc) {
+    npcIndex.delete(oldKey);
+  }
+  
+  // Add to new position
+  npcIndex.set(`${newX},${newY}`, npc);
+}
+
 // ============================================
 // ENEMY LOOKUP
 // ============================================

@@ -6,7 +6,7 @@
 import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects } from './render.js';
 import { initInput } from './input.js';
 import { initMovement, createPathTo } from './movement.js';
-import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo } from './collision.js';
+import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo, updateNpcPosition } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
@@ -853,14 +853,19 @@ function tickGuardPatrol() {
     if (newX === state.player.x && newY === state.player.y) continue;
     
     // Move the guard
+    const oldX = npc.x;
+    const oldY = npc.y;
     npc.x = newX;
     npc.y = newY;
     guardLastMove.set(npc.id, now);
     
+    // Update spatial index
+    updateNpcPosition(npc, oldX, oldY, newX, newY);
+    
     // Update visual position
-    const npcEl = document.querySelector(\`[data-npc-id="\${npc.id}"]\`);
+    const npcEl = document.querySelector(`[data-npc-id="${npc.id}"]`);
     if (npcEl) {
-      npcEl.style.transform = \`translate3d(\${newX * 24}px, \${newY * 24}px, 0)\`;
+      npcEl.style.transform = `translate3d(${newX * 24}px, ${newY * 24}px, 0)`;
     }
   }
 }
