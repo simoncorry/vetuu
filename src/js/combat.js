@@ -32,6 +32,7 @@ import {
   shouldBreakOffFromGuards, checkLeashAndDeaggro,
   ensureEffects
 } from './aiUtils.js';
+import { isRevealed } from './fog.js';
 
 // Enemy type configurations (Simplified - no weakness/resistance)
 // All enemies are either melee (range 2) or ranged (range 6)
@@ -5158,8 +5159,48 @@ export function handleTargeting(action, data) {
   }
 }
 
+/**
+ * Check if an enemy is visible to the player (in viewport and not fogged).
+ */
+function isEnemyVisible(enemy) {
+  // Must not be in fog
+  if (!isRevealed(enemy.x, enemy.y)) {
+    return false;
+  }
+  
+  // Must be within viewport bounds
+  const viewport = document.getElementById('viewport');
+  const world = document.getElementById('world');
+  if (!viewport || !world) return true; // Fallback to visible if no viewport
+  
+  const tileSize = currentState.map.meta.tileSize;
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  
+  // Get camera position from world transform
+  const style = window.getComputedStyle(world);
+  const matrix = new DOMMatrix(style.transform);
+  const camX = -matrix.m41; // Camera offset is negative of world position
+  const camY = -matrix.m42;
+  
+  // Calculate enemy screen position
+  const enemyScreenX = enemy.x * tileSize - camX;
+  const enemyScreenY = enemy.y * tileSize - camY;
+  
+  // Add small buffer to account for tile size
+  const buffer = tileSize;
+  return enemyScreenX >= -buffer && 
+         enemyScreenX <= vw + buffer && 
+         enemyScreenY >= -buffer && 
+         enemyScreenY <= vh + buffer;
+}
+
 function cycleTarget() {
-  const enemies = currentState.runtime.activeEnemies.filter(e => e.hp > 0);
+  // Filter to enemies that are alive, visible, and not fogged
+  const enemies = currentState.runtime.activeEnemies.filter(e => 
+    e.hp > 0 && isEnemyVisible(e)
+  );
+  
   if (enemies.length === 0) {
     clearTarget();
     return;

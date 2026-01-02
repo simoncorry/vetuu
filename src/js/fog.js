@@ -142,20 +142,95 @@ export function getFogMask() {
 // ============================================
 // FOG RENDERING (Canvas-based)
 // ============================================
+
+/**
+ * Get the distance from a fogged tile to the nearest revealed tile.
+ * Returns 0 if revealed, Infinity if no revealed neighbors within range.
+ */
+function getDistanceToRevealed(x, y, maxDist = 2) {
+  if (fogMask[y]?.[x]) return 0; // Already revealed
+  
+  // Check in expanding rings
+  for (let dist = 1; dist <= maxDist; dist++) {
+    for (let dy = -dist; dy <= dist; dy++) {
+      for (let dx = -dist; dx <= dist; dx++) {
+        // Only check tiles at exactly this distance (Chebyshev)
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== dist) continue;
+        
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < mapWidth && ny < mapHeight) {
+          if (fogMask[ny][nx]) return dist;
+        }
+      }
+    }
+  }
+  return Infinity;
+}
+
+/**
+ * 8-bit Bayer dithering pattern (4x4 matrix).
+ * Values 0-15, lower = more transparent at lower thresholds.
+ */
+const BAYER_4X4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5]
+];
+
+/**
+ * Draw a dithered fog tile using pixel-level Bayer dithering.
+ * Threshold determines how many pixels are drawn (0-16 scale).
+ */
+function drawDitheredTile(x, y, threshold) {
+  const px = x * tileSize;
+  const py = y * tileSize;
+  
+  // Calculate how many "dither cells" fit in a tile (6 cells = 4px each for 24px tile)
+  const cellSize = 4;
+  const cells = tileSize / cellSize;
+  
+  for (let cy = 0; cy < cells; cy++) {
+    for (let cx = 0; cx < cells; cx++) {
+      const bayerValue = BAYER_4X4[cy % 4][cx % 4];
+      if (bayerValue < threshold) {
+        fogCtx.fillRect(
+          px + cx * cellSize,
+          py + cy * cellSize,
+          cellSize,
+          cellSize
+        );
+      }
+    }
+  }
+}
+
 export function renderFog(_state) {
   if (!fogCtx || !fogMask) return;
 
   // Clear canvas
   fogCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
   
-  // Draw fog (black with alpha)
+  // Fog color
   fogCtx.fillStyle = 'rgba(10, 12, 14, 0.95)';
   
-  // Only draw unrevealed tiles
+  // Render unrevealed tiles with dithering at edges
   for (let y = 0; y < mapHeight; y++) {
     for (let x = 0; x < mapWidth; x++) {
       if (!fogMask[y][x]) {
-        fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        const distToRevealed = getDistanceToRevealed(x, y, 2);
+        
+        if (distToRevealed === 1) {
+          // Innermost fog ring - sparse dither (8/16 pixels)
+          drawDitheredTile(x, y, 8);
+        } else if (distToRevealed === 2) {
+          // Second ring - denser dither (12/16 pixels)
+          drawDitheredTile(x, y, 12);
+        } else {
+          // Full fog for all other tiles
+          fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
       }
     }
   }
@@ -165,10 +240,12 @@ export function renderFog(_state) {
 export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
   if (!fogCtx) return;
   
-  const startX = Math.max(0, centerX - radius);
-  const startY = Math.max(0, centerY - radius);
-  const endX = Math.min(mapWidth, centerX + radius + 1);
-  const endY = Math.min(mapHeight, centerY + radius + 1);
+  // Expand area by 2 tiles to handle dither edge recalculation
+  const ditherMargin = 2;
+  const startX = Math.max(0, centerX - radius - ditherMargin);
+  const startY = Math.max(0, centerY - radius - ditherMargin);
+  const endX = Math.min(mapWidth, centerX + radius + 1 + ditherMargin);
+  const endY = Math.min(mapHeight, centerY + radius + 1 + ditherMargin);
   
   // Clear and redraw just this area
   fogCtx.clearRect(
@@ -182,7 +259,18 @@ export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
   for (let y = startY; y < endY; y++) {
     for (let x = startX; x < endX; x++) {
       if (!fogMask[y][x]) {
-        fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        const distToRevealed = getDistanceToRevealed(x, y, 2);
+        
+        if (distToRevealed === 1) {
+          // Innermost fog ring - sparse dither (8/16 pixels)
+          drawDitheredTile(x, y, 8);
+        } else if (distToRevealed === 2) {
+          // Second ring - denser dither (12/16 pixels)
+          drawDitheredTile(x, y, 12);
+        } else {
+          // Full fog for all other tiles
+          fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
       }
     }
   }
