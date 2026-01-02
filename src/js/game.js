@@ -1023,8 +1023,8 @@ function updateLighting() {
       continue;
     }
     
-    // Match torch intensity and style
-    const baseIntensity = Math.min(1, nightIntensity * light.intensity * 1.2);
+    // Lamp posts: slightly dimmer than torch, cooler color temp
+    const baseIntensity = Math.min(1, nightIntensity * light.intensity * 0.9);
     
     // Sci-fi LED behavior: electronic hum + occasional energy surges
     const seed = (light.x * 7 + light.y * 13) % 100;
@@ -1082,15 +1082,15 @@ function updateLighting() {
     lightCtx.arc(light.x + offsetX1, light.y + offsetY1, midRadius, 0, Math.PI * 2);
     lightCtx.fill();
     
-    // Layer 3: Core bright center - matches torch
-    const coreRadius = light.radius * 0.7;
+    // Layer 3: Core - dimmer than torch, wider spread for infrastructure feel
+    const coreRadius = light.radius * 0.8; // Slightly wider core
     const coreGradient = lightCtx.createRadialGradient(
       light.x, light.y, 0,
       light.x, light.y, coreRadius
     );
-    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.95})`);
-    coreGradient.addColorStop(0.2, `rgba(255, 255, 255, ${intensity * 0.7})`);
-    coreGradient.addColorStop(0.5, `rgba(255, 255, 255, ${intensity * 0.3})`);
+    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.75})`);
+    coreGradient.addColorStop(0.25, `rgba(255, 255, 255, ${intensity * 0.5})`);
+    coreGradient.addColorStop(0.55, `rgba(255, 255, 255, ${intensity * 0.2})`);
     coreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     lightCtx.fillStyle = coreGradient;
     lightCtx.beginPath();
@@ -1103,7 +1103,7 @@ function updateLighting() {
   updateTorchPosition();
   const playerX = torchAnim.currentX;
   const playerY = torchAnim.currentY;
-  const torchBaseRadius = 8 * lightingTileSize;
+  const torchBaseRadius = 7.2 * lightingTileSize; // 10% smaller than before
   const now = Date.now();
   
   // Player torch: steady electronic hum (well-maintained equipment)
