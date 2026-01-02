@@ -944,6 +944,51 @@ function findNearestEnemy() {
   return hostile[0];
 }
 
+/**
+ * Find the closest valid enemy within a specific range.
+ * Used by weapon abilities to auto-acquire targets within ability range.
+ * 
+ * @param {object} options
+ * @param {number} options.maxRange - Maximum distance to consider
+ * @param {boolean} options.requireLOS - Whether line of sight is required
+ * @returns {object|null} - The closest valid enemy or null
+ */
+function acquireClosestEnemyInRange({ maxRange, requireLOS = false }) {
+  const player = currentState.player;
+  const enemies = currentState.runtime.activeEnemies || [];
+  
+  // Filter to valid candidates
+  const candidates = enemies.filter(e => {
+    // Must be alive
+    if (e.hp <= 0) return false;
+    
+    // Skip retreating enemies
+    if (e.isRetreating) return false;
+    
+    // Check distance
+    const dist = distCoords(player.x, player.y, e.x, e.y);
+    if (dist > maxRange) return false;
+    
+    // Check LOS if required
+    if (requireLOS && !hasLineOfSight(currentState, player.x, player.y, e.x, e.y)) {
+      return false;
+    }
+    
+    return true;
+  });
+  
+  if (candidates.length === 0) return null;
+  
+  // Sort by distance and return closest
+  candidates.sort((a, b) => {
+    const distA = distCoords(player.x, player.y, a.x, a.y);
+    const distB = distCoords(player.x, player.y, b.x, b.y);
+    return distA - distB;
+  });
+  
+  return candidates[0];
+}
+
 // ============================================
 // REGENERATION SYSTEM
 // ============================================
@@ -2563,22 +2608,28 @@ export function useWeaponAbility(slot) {
     return;
   }
   
-  // If no target, find nearest enemy
+  // Get ability range and LOS requirements
+  const abilityRange = ability.range || weapon.range;
+  const needsLOS = weapon.combatType === 'ranged';
+  
+  // If no target, auto-acquire nearest enemy within ability range
   if (!currentTarget || currentTarget.hp <= 0) {
-    const nearbyEnemy = findNearestEnemy();
-    if (nearbyEnemy) {
-      selectTarget(nearbyEnemy);
-      logCombat(`Targeting ${nearbyEnemy.name}`);
+    const candidate = acquireClosestEnemyInRange({
+      maxRange: abilityRange,
+      requireLOS: needsLOS
+    });
+    
+    if (candidate) {
+      selectTarget(candidate);
+      logCombat(`Targeting ${candidate.name}`);
     } else {
-      logCombat('No enemies nearby');
+      logCombat('No enemies in range.');
       return;
     }
   }
   
   const player = currentState.player;
-  const abilityRange = ability.range || weapon.range;
   const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
-  const needsLOS = weapon.combatType === 'ranged';
   const hasLOS = !needsLOS || hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y);
   
   // If out of range or no LOS, set intent and let intent system handle move-then-cast
@@ -2929,28 +2980,51 @@ export function useSenseAbility(slot) {
     return;
   }
   
+  // === OPTION 2: Check for enemies BEFORE spending resources ===
+  // Sense abilities are AoE centered on player - no target required.
+  // Only spend Sense and start cooldown if enemies are in range.
+  const enemies = currentState.runtime.activeEnemies || [];
+  const affectedEnemies = enemies.filter(e => {
+    if (e.hp <= 0) return false;
+    const dist = distCoords(player.x, player.y, e.x, e.y);
+    // Push: enemies within radius
+    // Pull: enemies within radius AND further than pullToDistance
+    if (ability.id === 'push') {
+      return dist <= ability.radius;
+    } else if (ability.id === 'pull') {
+      return dist <= ability.radius && dist > ability.pullToDistance;
+    }
+    return false;
+  });
+  
+  // No enemies in range - early return without cost or cooldown
+  if (affectedEnemies.length === 0) {
+    logCombat('No enemies in range.');
+    return;
+  }
+  
   // Remember if auto-attack was enabled (to resume after ability)
   const wasAutoAttackEnabled = autoAttackEnabled;
   const previousTarget = currentTarget;
   
-  // Execute ability
+  // Execute ability (enemies confirmed in range)
   switch (ability.id) {
     case 'push':
-      executePush(ability);
+      executePushWithEnemies(ability, affectedEnemies);
       break;
     case 'pull':
-      executePull(ability);
+      executePullWithEnemies(ability, affectedEnemies);
       break;
     default:
       logCombat('Unknown sense ability');
       return;
   }
   
-  // Spend Sense
+  // Spend Sense (only after successful execution)
   player.sense = Math.max(0, player.sense - ability.senseCost);
   updatePlayerSenseBar();
   
-  // Set cooldown
+  // Set cooldown (only after successful execution)
   SENSE_COOLDOWNS[slot].current = ability.cooldownMs;
   SENSE_COOLDOWNS[slot].max = ability.cooldownMs;
   updateSenseCooldownUI(slot);
@@ -2965,6 +3039,7 @@ export function useSenseAbility(slot) {
 /**
  * Push: Pushes enemies within radius to be at least pushToDistance tiles away
  * Collision-safe displacement
+ * @deprecated Use executePushWithEnemies for Option 2 behavior
  */
 function executePush(ability) {
   const player = currentState.player;
@@ -2982,9 +3057,19 @@ function executePush(ability) {
   
   if (affected.length === 0) {
     logCombat('No enemies in Push range');
-    // Still consume Sense and cooldown
     return;
   }
+  
+  executePushWithEnemies(ability, affected);
+}
+
+/**
+ * Push with pre-filtered enemy list (Option 2: enemies already validated)
+ * @param {object} ability - The push ability config
+ * @param {array} affected - Pre-filtered list of enemies to push
+ */
+function executePushWithEnemies(ability, affected) {
+  const player = currentState.player;
   
   // Visual effect - expanding ring
   showPushEffect(player.x, player.y);
@@ -2993,7 +3078,7 @@ function executePush(ability) {
   for (const enemy of affected) {
     pushEnemyAway(enemy, player, ability.pushToDistance);
     
-    // Provoke passive enemies
+    // Provoke passive enemies (makes them aggro)
     provokeEnemy(enemy, nowMs(), 'push');
     
     // Flash enemy outline to show they were affected
@@ -3009,6 +3094,7 @@ function executePush(ability) {
 /**
  * Pull: Pulls enemies within radius to within pullToDistance tiles
  * Collision-safe displacement
+ * @deprecated Use executePullWithEnemies for Option 2 behavior
  */
 function executePull(ability) {
   const player = currentState.player;
@@ -3026,9 +3112,19 @@ function executePull(ability) {
   
   if (affected.length === 0) {
     logCombat('No enemies in Pull range');
-    // Still consume Sense and cooldown
     return;
   }
+  
+  executePullWithEnemies(ability, affected);
+}
+
+/**
+ * Pull with pre-filtered enemy list (Option 2: enemies already validated)
+ * @param {object} ability - The pull ability config
+ * @param {array} affected - Pre-filtered list of enemies to pull
+ */
+function executePullWithEnemies(ability, affected) {
+  const player = currentState.player;
   
   // Visual effect - contracting ring
   showPullEffect(player.x, player.y);
@@ -3037,7 +3133,7 @@ function executePull(ability) {
   for (const enemy of affected) {
     pullEnemyToward(enemy, player, ability.pullToDistance);
     
-    // Provoke passive enemies
+    // Provoke passive enemies (makes them aggro)
     provokeEnemy(enemy, nowMs(), 'pull');
     
     // Flash enemy outline to show they were affected
