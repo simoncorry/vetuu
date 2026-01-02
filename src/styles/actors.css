@@ -38,11 +38,15 @@
   position: absolute;
   top: -8px;
   left: 2px;
-  width: calc((var(--player-hp-pct, 100) / 100) * (var(--tile-size) - 4px));
+  width: calc(var(--tile-size) - 4px);
   height: 4px;
   background: var(--hp-color);
   border-radius: 2px;
-  transition: width 0.3s ease;
+  /* GPU-accelerated: use scaleX instead of width */
+  transform: scaleX(calc(var(--player-hp-pct, 100) / 100));
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 #player.moving {
@@ -197,6 +201,9 @@
   background: var(--npc-color, var(--militia));
   box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
   cursor: pointer;
+  /* GPU-accelerated movement for patrol etc */
+  transition: transform 280ms ease-out;
+  will-change: transform;
 }
 
 /* NPC selected (not in combat) - offset stroke */
@@ -463,9 +470,13 @@
 
 .enemy-hp-fill {
   height: 100%;
-  width: calc(var(--hp-pct, 100) * 1%);
+  width: 100%;
   background: var(--danger);
-  transition: width 0.2s ease;
+  /* GPU-accelerated: use scaleX instead of width */
+  transform: scaleX(calc(var(--hp-pct, 100) / 100));
+  transform-origin: left center;
+  transition: transform 0.2s ease;
+  will-change: transform;
 }
 
 /* Boss */

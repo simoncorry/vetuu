@@ -3764,25 +3764,28 @@ function animateEnemyDisplacement(enemy) {
 
 /**
  * Show push visual effect (expanding ring)
+ * Uses scale3d for GPU-accelerated animation
  */
 function showPushEffect(x, y) {
   const world = document.getElementById('world');
   if (!world) return;
   
+  const size = 6 * 24 * 2; // Final size
   const effect = document.createElement('div');
   effect.className = 'push-effect';
   effect.style.cssText = `
     position: absolute;
     left: ${x * 24 + 12}px;
     top: ${y * 24 + 12}px;
-    width: 0;
-    height: 0;
+    width: ${size}px;
+    height: ${size}px;
     border: 3px solid var(--sense-color);
     border-radius: 50%;
     pointer-events: none;
     z-index: 150;
-    animation: push-expand 0.4s ease-out forwards;
-    transform: translate(-50%, -50%);
+    animation: push-expand-gpu 0.4s ease-out forwards;
+    transform: translate3d(-50%, -50%, 0) scale3d(0, 0, 1);
+    will-change: transform, opacity;
   `;
   
   world.appendChild(effect);
@@ -3794,25 +3797,28 @@ function showPushEffect(x, y) {
 
 /**
  * Show pull visual effect (contracting ring)
+ * Uses scale3d for GPU-accelerated animation
  */
 function showPullEffect(x, y) {
   const world = document.getElementById('world');
   if (!world) return;
   
+  const size = 6 * 24 * 2; // Starting size
   const effect = document.createElement('div');
   effect.className = 'pull-effect';
   effect.style.cssText = `
     position: absolute;
     left: ${x * 24 + 12}px;
     top: ${y * 24 + 12}px;
-    width: ${6 * 24 * 2}px;
-    height: ${6 * 24 * 2}px;
+    width: ${size}px;
+    height: ${size}px;
     border: 3px solid var(--sense-color);
     border-radius: 50%;
     pointer-events: none;
     z-index: 150;
-    animation: pull-contract 0.4s ease-in forwards;
-    transform: translate(-50%, -50%);
+    animation: pull-contract-gpu 0.4s ease-in forwards;
+    transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+    will-change: transform, opacity;
   `;
   
   world.appendChild(effect);
@@ -3843,8 +3849,9 @@ function showSenseAbilityText(x, y, text, color) {
     text-shadow: 0 0 8px ${color}, 0 0 12px ${color}, 2px 2px 2px rgba(0, 0, 0, 0.9);
     pointer-events: none;
     z-index: 200;
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
     animation: sense-text-float 0.8s ease-out forwards;
+    will-change: transform, opacity;
   `;
   
   world.appendChild(textEl);

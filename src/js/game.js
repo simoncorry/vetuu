@@ -862,7 +862,7 @@ function tickGuardPatrol() {
     // Update spatial index
     updateNpcPosition(npc, oldX, oldY, newX, newY);
     
-    // Update visual position
+    // Update visual position (CSS handles the smooth transition)
     const npcEl = document.querySelector(`[data-npc-id="${npc.id}"]`);
     if (npcEl) {
       npcEl.style.transform = `translate3d(${newX * 24}px, ${newY * 24}px, 0)`;

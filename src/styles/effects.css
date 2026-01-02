@@ -55,14 +55,15 @@
   position: absolute;
   top: -18px;
   left: 50%;
-  transform: translateX(-50%) scaleX(-1); /* Running away */
+  transform: translate3d(-50%, 0, 0) scaleX(-1); /* Running away */
   font-size: 14px;
   animation: retreat-bounce 0.4s ease-in-out infinite;
+  will-change: transform;
 }
 
 @keyframes retreat-bounce {
-  0%, 100% { transform: translateX(-50%) scaleX(-1) translateY(0); }
-  50% { transform: translateX(-50%) scaleX(-1) translateY(-3px); }
+  0%, 100% { transform: translate3d(-50%, 0, 0) scaleX(-1); }
+  50% { transform: translate3d(-50%, -3px, 0) scaleX(-1); }
 }
 
 /* Spawn immunity visual - brief invulnerability */
@@ -100,11 +101,11 @@
 @keyframes sense-text-float {
   0% {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translate3d(-50%, 0, 0);
   }
   100% {
     opacity: 0;
-    transform: translateX(-50%) translateY(-32px);
+    transform: translate3d(-50%, -32px, 0);
   }
 }
 
@@ -126,31 +127,7 @@
   }
 }
 
-/* Push expanding ring animation */
-@keyframes push-expand {
-  0% {
-    width: 0;
-    height: 0;
-    opacity: 1;
-  }
-  100% {
-    width: calc(2 * 24px * 3);
-    height: calc(2 * 24px * 3);
-    opacity: 0;
-  }
-}
-
-/* Pull contracting ring animation */
-@keyframes pull-contract {
-  0% {
-    opacity: 1;
-  }
-  100% {
-    width: 0;
-    height: 0;
-    opacity: 0;
-  }
-}
+/* Push/Pull animations moved to combat.css with GPU acceleration */
 
 /* ============================================
    FOG REVEAL FADE

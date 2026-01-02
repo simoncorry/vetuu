@@ -51,10 +51,14 @@
 .stat-fill {
   display: block;
   height: 100%;
-  width: calc(var(--pct) * 1%);
+  width: 100%;
   background: var(--hp-color);
   border-radius: 4px;
-  transition: width 0.3s ease;
+  /* GPU-accelerated: scaleX instead of width */
+  transform: scaleX(calc(var(--pct, 100) / 100));
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 .sense-bar { background: var(--sense-bg); }
@@ -310,9 +314,13 @@
   top: 0;
   left: 0;
   height: 100%;
-  width: calc(var(--hp-pct, 100) * 1%);
+  width: 100%;
   background: var(--hp-color);
-  transition: width 0.3s ease;
+  /* GPU-accelerated: scaleX instead of width */
+  transform: scaleX(calc(var(--hp-pct, 100) / 100));
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 .frame-sense-fill {
@@ -320,9 +328,13 @@
   top: 0;
   left: 0;
   height: 100%;
-  width: calc(var(--sense-pct, 100) * 1%);
+  width: 100%;
   background: var(--sense-color);
-  transition: width 0.3s ease;
+  /* GPU-accelerated: scaleX instead of width */
+  transform: scaleX(calc(var(--sense-pct, 100) / 100));
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 #target-frame .frame-hp-fill {
@@ -457,12 +469,16 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(var(--cooldown-pct, 0) * 1%);
+  height: 100%;
   background: rgba(0, 0, 0, 0.7);
   border-radius: 0 0 4px 4px;
   pointer-events: none;
   z-index: 5;
-  transition: height 0.1s linear;
+  /* GPU-accelerated: scaleY from bottom instead of height */
+  transform: scaleY(calc(var(--cooldown-pct, 0) / 100));
+  transform-origin: bottom center;
+  transition: transform 0.1s linear;
+  will-change: transform;
 }
 
 /* Cooldown timer text */
@@ -682,10 +698,14 @@
   top: 0;
   left: 0;
   height: 100%;
-  width: calc(var(--xp-pct, 0) * 1%);
+  width: 100%;
   background: linear-gradient(180deg, #9B59B6 0%, #6B3D8E 50%, #4A2963 100%);
   box-shadow: 0 0 8px rgba(155, 89, 182, 0.5);
-  transition: width 0.4s ease-out;
+  /* GPU-accelerated: scaleX instead of width */
+  transform: scaleX(calc(var(--xp-pct, 0) / 100));
+  transform-origin: left center;
+  transition: transform 0.4s ease-out;
+  will-change: transform;
 }
 
 #xp-bar-notches {
