@@ -547,6 +547,7 @@ export function getPlayerPosition() {
 
 // Sprint timer SVG state
 let sprintTimerPathLength = null;
+let sprintDurationInterval = null;
 
 /**
  * Initialize sprint timer SVG (called once on first use)
@@ -561,15 +562,35 @@ function initSprintTimer() {
 }
 
 /**
- * Activate sprint buff - increases movement speed by 70% for 8 seconds
+ * Update the sprint duration countdown display
  */
-export function activateSprintBuff() {
-  // Clear any existing timeout
+function updateSprintDurationDisplay(remainingMs) {
+  const timerEl = document.querySelector('[data-slot="sprint"] .cooldown-timer');
+  if (!timerEl) return;
+  
+  if (remainingMs <= 0) {
+    timerEl.textContent = '';
+  } else {
+    const seconds = Math.ceil(remainingMs / 1000);
+    timerEl.textContent = seconds;
+  }
+}
+
+/**
+ * Activate sprint buff - increases movement speed by 70% for 8 seconds
+ * @param {Function} onComplete - Callback when buff ends (to start cooldown)
+ */
+export function activateSprintBuff(onComplete) {
+  // Clear any existing timeout/interval
   if (sprintBuffTimeout) {
     clearTimeout(sprintBuffTimeout);
   }
+  if (sprintDurationInterval) {
+    clearInterval(sprintDurationInterval);
+  }
   
   sprintBuffActive = true;
+  const startTime = Date.now();
   
   // Add visual indicator on player
   if (playerEl) {
@@ -580,6 +601,7 @@ export function activateSprintBuff() {
   initSprintTimer();
   const wrapper = document.querySelector('.sprint-slot-wrapper');
   const fillPath = document.querySelector('#sprint-timer-svg .sprint-timer-fill');
+  const sprintSlot = document.querySelector('[data-slot="sprint"]');
   
   if (wrapper && fillPath && sprintTimerPathLength) {
     wrapper.classList.add('sprint-active');
@@ -596,10 +618,32 @@ export function activateSprintBuff() {
     fillPath.style.strokeDashoffset = sprintTimerPathLength;
   }
   
+  // Add active class to slot for visual feedback
+  if (sprintSlot) {
+    sprintSlot.classList.add('buff-active');
+  }
+  
+  // Start duration countdown display
+  updateSprintDurationDisplay(SPRINT_BUFF_DURATION);
+  sprintDurationInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    const remaining = SPRINT_BUFF_DURATION - elapsed;
+    updateSprintDurationDisplay(remaining);
+  }, 100);
+  
   // Auto-deactivate after duration
   sprintBuffTimeout = setTimeout(() => {
     sprintBuffActive = false;
     sprintBuffTimeout = null;
+    
+    // Clear countdown interval
+    if (sprintDurationInterval) {
+      clearInterval(sprintDurationInterval);
+      sprintDurationInterval = null;
+    }
+    
+    // Clear duration display
+    updateSprintDurationDisplay(0);
     
     if (playerEl) {
       playerEl.classList.remove('sprinting');
@@ -608,6 +652,16 @@ export function activateSprintBuff() {
     // Remove sprint timer visual
     if (wrapper) {
       wrapper.classList.remove('sprint-active');
+    }
+    
+    // Remove active class from slot
+    if (sprintSlot) {
+      sprintSlot.classList.remove('buff-active');
+    }
+    
+    // Call completion callback (starts cooldown)
+    if (onComplete) {
+      onComplete();
     }
   }, SPRINT_BUFF_DURATION);
   

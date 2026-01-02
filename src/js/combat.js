@@ -3967,7 +3967,7 @@ export function useUtilityAbility(id) {
 
 /**
  * Sprint: 70% movement speed increase for 8 seconds
- * CD: 30s
+ * CD: 30s (starts AFTER buff ends)
  */
 function executeSprint() {
   if (playerImmunityActive) {
@@ -3983,15 +3983,14 @@ function executeSprint() {
   }
   
   // Activate sprint buff (handled in movement.js)
+  // Pass callback to start cooldown when buff ends
   import('./movement.js').then(({ activateSprintBuff }) => {
-    activateSprintBuff();
+    activateSprintBuff(() => {
+      // Buff ended - NOW start cooldown
+      UTILITY_COOLDOWNS.sprint.current = UTILITY_COOLDOWNS.sprint.max;
+      updateUtilityCooldownUI('sprint');
+    });
   });
-  
-  // Set cooldown
-  UTILITY_COOLDOWNS.sprint.current = UTILITY_COOLDOWNS.sprint.max;
-  
-  // Update UI
-  updateUtilityCooldownUI('sprint');
   
   logCombat('Sprint! +70% movement speed for 8s');
 }

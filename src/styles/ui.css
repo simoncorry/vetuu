@@ -699,6 +699,17 @@
   /* Transition set dynamically by JS for precise timing */
 }
 
+/* Buff active state - duration countdown display */
+.action-slot.buff-active {
+  border-color: var(--accent);
+}
+
+.action-slot.buff-active .cooldown-timer {
+  color: var(--accent);
+  font-size: 1rem;
+  text-shadow: 0 0 6px var(--accent);
+}
+
 /* ============================================
    XP BAR (WoW-style)
    ============================================ */
