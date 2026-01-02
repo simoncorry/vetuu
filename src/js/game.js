@@ -860,7 +860,7 @@ function initLightingCanvas(gameState) {
     width: ${width}px;
     height: ${height}px;
     pointer-events: none;
-    z-index: 6;
+    z-index: 15;
     transform: translate3d(0, 0, 0);
     will-change: contents;
     contain: strict;
@@ -915,7 +915,7 @@ function createPlayerTorch() {
     height: ${torchSize}px;
     pointer-events: none;
     opacity: 0;
-    z-index: 9;
+    z-index: 16;
     transition: transform var(--move-duration, 200ms) linear, opacity 0.1s linear;
     will-change: transform, opacity;
     backface-visibility: hidden;
