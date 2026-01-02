@@ -69,8 +69,29 @@ export function initFog(state) {
 // ============================================
 // REVEAL MECHANICS
 // ============================================
+
+/**
+ * Create a temporary DOM element that fades out to smooth fog reveal.
+ * CSS handles the animation; element is removed after animation completes.
+ */
+function createFogFadeElement(x, y) {
+  const fogLayer = document.getElementById('fog-layer');
+  if (!fogLayer) return;
+  
+  const el = document.createElement('div');
+  el.className = 'fog-fade';
+  el.style.left = `${x * tileSize}px`;
+  el.style.top = `${y * tileSize}px`;
+  
+  fogLayer.appendChild(el);
+  
+  // Remove after animation completes (400ms)
+  el.addEventListener('animationend', () => el.remove(), { once: true });
+}
+
 export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
   let changed = false;
+  const newlyRevealed = [];
 
   // Ensure runtime.revealedTiles exists
   if (!state.runtime.revealedTiles) {
@@ -91,6 +112,7 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
         if (!fogMask[y][x]) {
           fogMask[y][x] = true;
           state.runtime.revealedTiles.add(`${x},${y}`);
+          newlyRevealed.push({ x, y });
           changed = true;
         }
       }
@@ -99,6 +121,12 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
 
   if (changed) {
     saveFogMask();
+    
+    // Create fade elements for newly revealed tiles
+    // Only create for edge tiles to reduce DOM overhead
+    for (const tile of newlyRevealed) {
+      createFogFadeElement(tile.x, tile.y);
+    }
   }
 }
 

@@ -152,3 +152,25 @@
   }
 }
 
+/* ============================================
+   FOG REVEAL FADE
+   ============================================ */
+.fog-fade {
+  position: absolute;
+  width: var(--tile-size, 24px);
+  height: var(--tile-size, 24px);
+  background: rgba(10, 12, 14, 0.95);
+  pointer-events: none;
+  opacity: 1;
+  animation: fog-reveal 400ms ease-out forwards;
+}
+
+@keyframes fog-reveal {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
