@@ -25,6 +25,10 @@ export const BASE_CENTER = {
   y: ORIGINAL_BASE_CENTER.y + EXPANSION_OFFSET.y   // 158
 };
 
+// Road dimensions (used for object filtering and terrain generation)
+const ROAD_MAIN_HALF = 1;      // Main road is 3 tiles wide (center ± 1)
+const ROAD_TOTAL_HALF = 3;     // Total footprint is 7 tiles wide (center ± 3)
+
 // Terrain types for procedural generation
 // '1' (dune) is lightest and most common, '0' and '8' are accent variations
 const TERRAIN = {
@@ -85,12 +89,19 @@ export function expandMap(originalMap) {
     expandedGround.push(row);
   }
 
-  // Expand objects with new positions
-  const expandedObjects = originalMap.objects.map(obj => ({
-    ...obj,
-    x: obj.x + offsetX,
-    y: obj.y + offsetY
-  }));
+  // Expand objects with new positions, filtering out those on road footprint
+  const expandedObjects = originalMap.objects
+    .map(obj => ({
+      ...obj,
+      x: obj.x + offsetX,
+      y: obj.y + offsetY
+    }))
+    .filter(obj => {
+      // Keep objects that are NOT on the road footprint
+      const onVerticalRoad = Math.abs(obj.x - BASE_CENTER.x) <= ROAD_TOTAL_HALF;
+      const onHorizontalRoad = Math.abs(obj.y - BASE_CENTER.y) <= ROAD_TOTAL_HALF;
+      return !onVerticalRoad && !onHorizontalRoad;
+    });
 
   // Add border walls/cliffs
   const borderObjects = generateBorderObjects(newWidth, newHeight);
@@ -124,10 +135,6 @@ const ROAD_TILES = {
   worn: 'e',
   cracked: 'f'
 };
-
-// Road dimensions
-const ROAD_MAIN_HALF = 1;      // Main road is 3 tiles wide (center ± 1)
-const ROAD_TOTAL_HALF = 3;    // Total footprint is 7 tiles wide (center ± 3)
 
 /**
  * Apply weathering to an existing road tile
