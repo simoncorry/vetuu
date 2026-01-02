@@ -79,12 +79,52 @@ export function expandMap(originalMap) {
   };
 }
 
+// Road tile types (must match legend in map.json)
+const ROAD_TILES = {
+  normal: '3',
+  worn: 'e',
+  cracked: 'f',
+  missing: '0'  // Reverts to sand
+};
+
+/**
+ * Check if position is on a road and return appropriate road tile
+ * Roads run N-S and E-W through map center
+ */
+function getRoadTile(x, y, centerX, centerY) {
+  const roadHalfWidth = 1;
+  const isOnVerticalRoad = Math.abs(x - centerX) <= roadHalfWidth;
+  const isOnHorizontalRoad = Math.abs(y - centerY) <= roadHalfWidth;
+  
+  if (!isOnVerticalRoad && !isOnHorizontalRoad) {
+    return null;
+  }
+  
+  // Apply weathering effect
+  const rand = seededRandom(x * 1000 + y);
+  if (rand < 0.06) {
+    return ROAD_TILES.missing;
+  } else if (rand < 0.18) {
+    return ROAD_TILES.worn;
+  } else if (rand < 0.26) {
+    return ROAD_TILES.cracked;
+  }
+  return ROAD_TILES.normal;
+}
+
 /**
  * Generate terrain based on position
  */
 function generateTerrain(x, y, width, height) {
   const centerX = width / 2;
   const centerY = height / 2;
+  
+  // Check for road first - roads extend to map edges
+  const roadTile = getRoadTile(x, y, centerX, centerY);
+  if (roadTile) {
+    return roadTile;
+  }
+  
   const distFromCenter = Math.hypot(x - centerX, y - centerY);
   const maxDist = Math.hypot(width / 2, height / 2);
   const normalizedDist = distFromCenter / maxDist;
