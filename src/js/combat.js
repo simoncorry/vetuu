@@ -1409,7 +1409,8 @@ function regenAtHome(enemy, t) {
  * 1. Retreat destination is ALWAYS enemy.spawnX/spawnY (never recomputed dynamically)
  * 2. Arrival is EXACT grid match (enemy.x === retreatTo.x && enemy.y === retreatTo.y)
  * 3. Movement is CLAMPED to 1 tile per move step (no multi-tile jumps)
- * 4. Timeout snap is LAST RESORT only (uses unique spawnX/spawnY, not shared home)
+ * 4. Timeout snap is LAST RESORT only - requires being stuck AND far from destination
+ * 5. When close to destination, be patient - don't snap for temporary blockages
  */
 function handleRetreatState(enemy, t) {
   // CRITICAL: Retreat destination is per-enemy spawn point (never shared, never recomputed)
@@ -1424,6 +1425,7 @@ function handleRetreatState(enemy, t) {
   
   const destX = enemy.retreatTo.x;
   const destY = enemy.retreatTo.y;
+  const distToDest = distCoords(enemy.x, enemy.y, destX, destY);
   
   // Heal while retreating (15% per second = 1.5% per 100ms tick)
   const retreatMax = getMaxHP(enemy);
@@ -1440,16 +1442,13 @@ function handleRetreatState(enemy, t) {
     return;
   }
   
-  // Check if stuck too long - snap as LAST RESORT only
-  const retreatDur = t - (enemy.retreatStartedAt ?? t);
-  if (retreatDur > AI.RETREAT_TIMEOUT_MS) {
-    snapEnemyToHome(enemy, t);
-    return;
-  }
-  
   // Move toward retreat destination (faster movement during retreat)
   const moveCD = 320; // Faster than normal
   if (!isExpired(enemy.moveCooldown, t)) return;
+  
+  // Store previous distance to track if we're making progress
+  const prevDist = enemy._retreatPrevDist ?? Infinity;
+  enemy._retreatPrevDist = distToDest;
   
   // CRITICAL: Movement is EXACTLY 1 tile per step (dx and dy are -1, 0, or 1)
   const dx = Math.sign(destX - enemy.x);
@@ -1513,12 +1512,32 @@ function handleRetreatState(enemy, t) {
     }
   }
   
-  // Track if stuck
+  // Track if stuck and determine if we should snap
+  // STABILITY: Only snap if truly stuck AND not making progress AND far enough to warrant it
   if (!moved) {
     enemy.retreatStuckSince = enemy.retreatStuckSince ?? t;
-    // If stuck for 2 seconds, snap (last resort)
-    if (t - enemy.retreatStuckSince > 2000) {
-      snapEnemyToHome(enemy, t);
+    const stuckDuration = t - enemy.retreatStuckSince;
+    const retreatDur = t - (enemy.retreatStartedAt ?? t);
+    
+    // Determine snap conditions:
+    // 1. Stuck for extended time (2s if far, 4s if close)
+    // 2. OR total retreat time exceeded timeout
+    const stuckThreshold = distToDest <= 2 ? 4000 : 2000; // More patient when close
+    const shouldSnap = stuckDuration > stuckThreshold || retreatDur > AI.RETREAT_TIMEOUT_MS;
+    
+    // Additional check: if destination is blocked by another enemy, wait longer
+    const destBlocked = !canEnemyMoveToRetreat(destX, destY, enemy.id);
+    const blockedThreshold = destBlocked ? 6000 : stuckThreshold;
+    
+    if (stuckDuration > blockedThreshold || retreatDur > AI.RETREAT_TIMEOUT_MS * 1.5) {
+      // LAST RESORT: Snap to destination
+      // But first, check if destination is actually reachable (not occupied)
+      if (!destBlocked) {
+        snapEnemyToHome(enemy, t);
+      } else {
+        // Destination is blocked - find nearest free tile in footprint
+        snapToNearestFreeInFootprint(enemy, t);
+      }
       return;
     }
   } else {
@@ -1532,6 +1551,50 @@ function handleRetreatState(enemy, t) {
   if (el && !el.classList.contains('retreating')) {
     el.classList.add('retreating');
   }
+}
+
+/**
+ * Snap enemy to nearest free tile within their 3×3 footprint.
+ * Used when the exact spawn position is blocked.
+ */
+function snapToNearestFreeInFootprint(enemy, t) {
+  const spawnX = enemy.spawnX ?? enemy.retreatTo?.x ?? enemy.x;
+  const spawnY = enemy.spawnY ?? enemy.retreatTo?.y ?? enemy.y;
+  
+  // Check all tiles in 3×3 footprint, starting from center
+  const offsets = [
+    { dx: 0, dy: 0 },   // center first
+    { dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+    { dx: 1, dy: 1 }, { dx: -1, dy: 1 }, { dx: 1, dy: -1 }, { dx: -1, dy: -1 }
+  ];
+  
+  for (const off of offsets) {
+    const testX = spawnX + off.dx;
+    const testY = spawnY + off.dy;
+    
+    if (canEnemyMoveToRetreat(testX, testY, enemy.id)) {
+      // Found a free tile - snap to it
+      enemy.x = testX;
+      enemy.y = testY;
+      
+      const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+      if (el) {
+        el.classList.add('is-teleporting');
+        el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+        el.offsetHeight;
+        requestAnimationFrame(() => {
+          el.classList.remove('is-teleporting');
+          el.classList.remove('retreating');
+        });
+      }
+      
+      finishRetreat(enemy, t);
+      return;
+    }
+  }
+  
+  // All footprint tiles blocked - just finish retreat where we are
+  finishRetreat(enemy, t);
 }
 
 /**
@@ -1557,12 +1620,19 @@ function canEnemyMoveToRetreat(x, y, enemyId) {
 /**
  * Snap enemy to retreat destination (used when stuck as LAST RESORT).
  * Uses unique spawnX/spawnY to avoid clumping at shared locations.
+ * If destination is blocked, falls back to nearest free tile in footprint.
  */
 function snapEnemyToHome(enemy, t) {
   // CRITICAL: Use retreatTo if set (already unique), else use authoritative spawn point
   // Priority: retreatTo > spawnX/spawnY > home > current position
   const destX = enemy.retreatTo?.x ?? enemy.spawnX ?? enemy.home?.x ?? enemy.x;
   const destY = enemy.retreatTo?.y ?? enemy.spawnY ?? enemy.home?.y ?? enemy.y;
+  
+  // Check if destination is blocked - if so, use fallback
+  if (!canEnemyMoveToRetreat(destX, destY, enemy.id)) {
+    snapToNearestFreeInFootprint(enemy, t);
+    return;
+  }
   
   // Update position in data
   enemy.x = destX;
@@ -1597,6 +1667,7 @@ function finishRetreat(enemy, t) {
   enemy.retreatStartedAt = null;
   enemy.retreatStuckSince = null;
   enemy.retreatTo = null; // Clear retreat destination
+  enemy._retreatPrevDist = null; // Clear progress tracking
   
   // Clear combat state
   enemy.targetId = null;
