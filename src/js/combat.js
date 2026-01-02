@@ -535,7 +535,20 @@ function getAttackerSlotsDebug(t = nowMs()) {
 // Guard state
 let guards = [];
 
-// Auto-move state
+/**
+ * Pending attack state - tracks "move to range then execute" flow.
+ * 
+ * This bridges movement with attack execution:
+ * - Set by moveToAttackRange() when player needs to move to attack
+ * - Checked by checkPendingAttack() every frame
+ * - Cleared when: arriving in range, target invalid, or intent system takes over
+ * 
+ * NOTE: The intent system (combatIntent) owns "what to do" while pendingAttack
+ * tracks "movement in progress for attack". When both exist, intent wins.
+ * 
+ * Schema: { target: Enemy, range: number, actionType: string }
+ * actionType: 'basic' | 'attack' | 'weaponAbility_N' | '1'|'2'|'3' (legacy)
+ */
 let pendingAttack = null;
 
 // Auto-attack state
@@ -2367,21 +2380,28 @@ function findTileInRange(fromX, fromY, targetX, targetY, range) {
   return candidates[0] || null;
 }
 
+/**
+ * Check if player has arrived in range for a pending attack.
+ * Called every frame from game loop.
+ * 
+ * NOTE: This bridges the legacy action system with the intent system.
+ * - If there's a combatIntent, the intent system owns execution
+ * - Legacy paths (useAction, numbered keys) create pendingAttack
+ * - When arriving in range, we route to the appropriate handler
+ */
 export function checkPendingAttack() {
   // If there's an active combat intent, let the intent system handle execution
   // This prevents race conditions between the two systems
   if (combatIntent) {
-    // Intent system will handle this via tryExecuteCombatIntent()
-    pendingAttack = null; // Clear pendingAttack since intent system owns execution
+    pendingAttack = null; // Intent system owns execution
     return;
   }
   
-  if (!pendingAttack) {
-    return;
-  }
+  if (!pendingAttack) return;
   
-  // Target died or became invalid
-  if (!currentTarget || currentTarget.hp <= 0) {
+  // Validate target
+  const targetCheck = isInvalidCombatTarget(pendingAttack.target, nowMs());
+  if (targetCheck.invalid) {
     pendingAttack = null;
     return;
   }
@@ -2389,55 +2409,62 @@ export function checkPendingAttack() {
   const player = currentState.player;
   const targetDist = distCoords(player.x, player.y, pendingAttack.target.x, pendingAttack.target.y);
   
-  if (targetDist <= pendingAttack.range) {
-    const weapon = WEAPONS[currentWeapon];
-    if (!weapon) {
-      pendingAttack = null;
-      return;
+  // Not in range yet - keep waiting
+  if (targetDist > pendingAttack.range) return;
+  
+  // Check LOS
+  if (!hasLineOfSight(currentState, player.x, player.y, pendingAttack.target.x, pendingAttack.target.y)) {
+    return; // No LOS - keep moving
+  }
+  
+  // In range with LOS - execute
+  const weapon = WEAPONS[currentWeapon];
+  if (!weapon) {
+    pendingAttack = null;
+    return;
+  }
+  
+  const actionType = pendingAttack.actionType;
+  pendingAttack = null; // Clear before executing to prevent re-entry
+  
+  // Route to appropriate handler
+  if (actionType === 'basic' || actionType === 'attack') {
+    // Basic attack - use intent system
+    if (currentTarget && currentTarget.hp > 0) {
+      setAutoAttackIntent(currentTarget);
+      tryExecuteCombatIntent();
     }
-    
-    if (hasLineOfSight(currentState, player.x, player.y, pendingAttack.target.x, pendingAttack.target.y)) {
-      const actionType = pendingAttack.actionType;
-      
-      // Handle basic attack - delegate to intent system (NOT executeAttack!)
-      if (actionType === 'basic' || actionType === 'attack') {
-        pendingAttack = null;
-        // Create intent and execute via new system
-        if (currentTarget && currentTarget.hp > 0) {
-          setAutoAttackIntent(currentTarget);
-          tryExecuteCombatIntent();
-        }
+  } else if (actionType.startsWith('weaponAbility_')) {
+    // Weapon ability from intent system - execute directly
+    const slot = parseInt(actionType.split('_')[1], 10);
+    if (!isNaN(slot) && actionCooldowns[slot] <= 0) {
+      executeWeaponAbilityDirect(slot);
+      // Resume auto-attack after ability
+      if (autoAttackEnabled && currentTarget?.hp > 0) {
+        setAutoAttackIntent(currentTarget);
       }
-      // Handle weapon ability (weaponAbility_1, weaponAbility_2, weaponAbility_3)
-      else if (actionType.startsWith('weaponAbility_')) {
-        const slot = parseInt(actionType.split('_')[1], 10);
-        if (!isNaN(slot) && actionCooldowns[slot] <= 0) {
-          pendingAttack = null;
-          executeWeaponAbilityDirect(slot);
-          // Resume auto-attack after ability
-          if (autoAttackEnabled && currentTarget && currentTarget.hp > 0) {
-            setAutoAttackIntent(currentTarget);
-          }
-        }
-      }
-      // Handle legacy numbered action keys (1, 2, 3)
-      else {
-        const keyNum = parseInt(actionType, 10);
-        if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 3) {
-          if (actionCooldowns[keyNum] <= 0) {
-            pendingAttack = null;
-            useAction(keyNum);
-          }
-        } else {
-          pendingAttack = null;
-        }
-      }
-    } else {
-      // No LOS - will need to keep moving
+    }
+  } else {
+    // Legacy numbered action keys (1, 2, 3) - route through useAction
+    // TODO: Migrate useAction callers to useWeaponAbility for full intent system coverage
+    const keyNum = parseInt(actionType, 10);
+    if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 3 && actionCooldowns[keyNum] <= 0) {
+      useAction(keyNum);
     }
   }
 }
 
+/**
+ * Legacy action handler for weapon abilities (slots 1-3).
+ * 
+ * TECH DEBT: This predates the intent system and handles its own move-to-range.
+ * New code should use useWeaponAbility() which creates proper intents.
+ * 
+ * Still used by:
+ * - playerSpecial() → calls useAction('3')
+ * - checkPendingAttack() → legacy numbered key handling
+ * - handleTargeting('action', data) → legacy action case
+ */
 export function useAction(actionKey) {
   if (isGhostMode) {
     logCombat('You are a spirit... find your corpse to revive.');
@@ -3973,6 +4000,10 @@ function executeDash(weapon, action) {
   }
 }
 
+/**
+ * Legacy "special attack" function - triggers slot 3 ability.
+ * TODO: Migrate callers to use handleTargeting('weaponAbility', 3) instead
+ */
 export function playerSpecial() {
   useAction('3');
 }
@@ -4225,6 +4256,40 @@ const INTENT_TIMEOUT_MS = 10000; // 10s - clear intent if no successful attack
 let combatIntent = null;
 
 /**
+ * Check if an enemy is an invalid combat target.
+ * Centralizes all "should stop attacking this target" logic.
+ * 
+ * @param {object} enemy - The enemy to check
+ * @param {number} t - Current time (performance.now())
+ * @returns {{ invalid: boolean, reason: string|null }}
+ */
+function isInvalidCombatTarget(enemy, t = nowMs()) {
+  // No enemy
+  if (!enemy) {
+    return { invalid: true, reason: 'no_target' };
+  }
+  
+  // Dead
+  if (enemy.hp <= 0 || enemy._deathHandled) {
+    return { invalid: true, reason: 'dead' };
+  }
+  
+  // Actively retreating - has disengaged
+  if (enemy.isRetreating) {
+    return { invalid: true, reason: 'retreating' };
+  }
+  
+  // Broken off AND not currently engaged - has disengaged
+  // (If still engaged, they're in combat and valid)
+  if (isBrokenOff(enemy, t) && !enemy.isEngaged) {
+    return { invalid: true, reason: 'broken_off' };
+  }
+  
+  // Valid target
+  return { invalid: false, reason: null };
+}
+
+/**
  * Set basic auto-attack intent on a target.
  * Intent persists until target dies, player cancels, or timeout.
  * Uses weapon.basic spec for damage/range/LOS (NOT slot 1 ability).
@@ -4373,29 +4438,18 @@ export function tryExecuteCombatIntent() {
     return;
   }
   
-  // === GUARDRAIL: Check if target has actively disengaged ===
-  // Only stop pursuit if the enemy is currently retreating or in broken-off cooldown.
-  // Do NOT check UNAWARE state here - enemies start UNAWARE and that's fine to attack.
+  // === GUARDRAIL: Check if target is invalid ===
+  // Centralized check for all "should stop attacking" conditions
   const intentTarget = getIntentTarget();
-  if (intentTarget) {
-    // Target is actively retreating - stop pursuit
-    if (intentTarget.isRetreating) {
-      logCombat('Target disengaged.');
-      clearCombatIntent();
-      autoAttackEnabled = false;
-      inCombat = false;
-      return;
-    }
-    
-    // Target has broken off (anti-re-aggro cooldown) - stop pursuit
-    // This only applies if they WERE engaged and broke off
-    if (isBrokenOff(intentTarget, now) && !intentTarget.isEngaged) {
-      logCombat('Target disengaged.');
-      clearCombatIntent();
-      autoAttackEnabled = false;
-      inCombat = false;
-      return;
-    }
+  const targetCheck = isInvalidCombatTarget(intentTarget, now);
+  if (targetCheck.invalid && targetCheck.reason !== 'dead') {
+    // Dead targets are handled by executeBasicIntent (reacquisition logic)
+    // Other invalid states (retreating, broken_off) = stop pursuit
+    logCombat('Target disengaged.');
+    clearCombatIntent();
+    autoAttackEnabled = false;
+    inCombat = false;
+    return;
   }
   
   // Throttle retries (prevent spam when immune)
@@ -4709,7 +4763,52 @@ function executeWeaponAbilityDirect(slot) {
 
 // Debug helpers
 if (typeof window !== 'undefined') {
-  window.VETUU_INTENT = () => combatIntent;
+  /**
+   * Get current combat intent with computed status.
+   * Status: no_intent | no_target | invalid_target | waiting_range | waiting_los | waiting_cd | ready | executing
+   */
+  window.VETUU_INTENT = () => {
+    if (!combatIntent) return { status: 'no_intent', intent: null };
+    
+    const now = nowMs();
+    const target = getIntentTarget();
+    const targetCheck = isInvalidCombatTarget(target, now);
+    
+    // Compute status
+    let status = 'ready';
+    if (!target) {
+      status = 'no_target';
+    } else if (targetCheck.invalid) {
+      status = `invalid_target:${targetCheck.reason}`;
+    } else if (combatIntent.nextAttackAt > now) {
+      status = 'waiting_cd';
+    } else {
+      // Check range/LOS
+      const player = currentState?.player;
+      if (player && target) {
+        const dist = Math.hypot(target.x - player.x, target.y - player.y);
+        if (dist > combatIntent.requiredRange) {
+          status = 'waiting_range';
+        } else if (combatIntent.requiresLOS && !hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
+          status = 'waiting_los';
+        }
+      }
+    }
+    
+    return {
+      status,
+      type: combatIntent.type,
+      slot: combatIntent.slot,
+      targetId: combatIntent.targetId,
+      targetName: target?.name,
+      lastSuccessAt: combatIntent.lastSuccessAt,
+      nextAttackAt: combatIntent.nextAttackAt,
+      retryAt: combatIntent.retryAt,
+      expiresAt: combatIntent.expiresAt,
+      msUntilReady: Math.max(0, (combatIntent.nextAttackAt || 0) - now),
+      msUntilExpiry: Math.max(0, combatIntent.expiresAt - now)
+    };
+  };
   
   window.VETUU_SENSE = () => {
     const p = currentState?.player;
@@ -4729,18 +4828,44 @@ if (typeof window !== 'undefined') {
     timers: activeBurstTimers.map(t => ({ targetId: t.targetId }))
   });
   
+  /**
+   * Get current target info with validity check.
+   */
   window.VETUU_TARGET = () => {
-    if (!currentTarget) return null;
+    if (!currentTarget) return { status: 'no_target', target: null };
+    
+    const now = nowMs();
+    const check = isInvalidCombatTarget(currentTarget, now);
+    
     return {
+      status: check.invalid ? `invalid:${check.reason}` : 'valid',
       id: currentTarget.id,
       name: currentTarget.name,
       hp: currentTarget.hp,
       maxHp: currentTarget.maxHp ?? currentTarget.maxHP,
       state: currentTarget.state,
       isRetreating: currentTarget.isRetreating,
+      isEngaged: currentTarget.isEngaged,
+      brokenOffUntil: currentTarget.brokenOffUntil,
+      spawnImmunityUntil: currentTarget.spawnImmunityUntil,
       _deathHandled: currentTarget._deathHandled
     };
   };
+  
+  /**
+   * Get combat system state overview.
+   */
+  window.VETUU_COMBAT = () => ({
+    inCombat,
+    autoAttackEnabled,
+    currentWeapon,
+    hasTarget: !!currentTarget,
+    hasIntent: !!combatIntent,
+    pendingAttack: !!pendingAttack,
+    provokedCount: provokedEnemies.size,
+    activeBurstTimers: activeBurstTimers.length,
+    attackerSlots: attackerSlots.size
+  });
 }
 
 // ============================================
