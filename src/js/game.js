@@ -859,17 +859,15 @@ function initLightingCanvas(gameState) {
   console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights`);
 }
 
-// Player torch as sibling element (not child) so it renders UNDER the player
+// Player torch - placed in #world directly, above darkness canvas (z-index 6), below actors (z-index 10)
 function createPlayerTorch() {
-  const player = document.getElementById('player');
-  const actors = document.getElementById('actors');
-  if (!player || !actors) return;
+  const world = document.getElementById('world');
+  if (!world) return;
   
   // Create layered torch for natural light diffusion
   const torchSize = 8 * lightingTileSize;
-  const halfTorch = torchSize / 2;
   
-  // Main torch container - z-index 50 (below player's 100)
+  // Main torch container - z-index 8 (above darkness at 6, below actors at 10)
   const torch = document.createElement('div');
   torch.id = 'player-torch';
   torch.style.cssText = `
@@ -878,12 +876,12 @@ function createPlayerTorch() {
     height: ${torchSize}px;
     pointer-events: none;
     opacity: 0;
-    z-index: 50;
+    z-index: 8;
     transition: transform var(--move-duration, 200ms) linear;
     will-change: transform;
   `;
   
-  // Layer 1: Core bright center (small, warm) - further reduced
+  // Layer 1: Core bright center (small, warm)
   const core = document.createElement('div');
   core.style.cssText = `
     position: absolute;
@@ -892,8 +890,8 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 45% 50% at 52% 48%,
-      rgba(255, 250, 240, 0.2) 0%,
-      rgba(255, 245, 230, 0.08) 30%,
+      rgba(255, 250, 240, 0.25) 0%,
+      rgba(255, 245, 230, 0.1) 30%,
       transparent 70%
     );
     mix-blend-mode: screen;
@@ -929,9 +927,9 @@ function createPlayerTorch() {
     border-radius: 50%;
     background: radial-gradient(
       ellipse 60% 52% at 50% 50%,
-      rgba(255, 235, 210, 0.1) 0%,
-      rgba(255, 225, 195, 0.05) 50%,
-      rgba(255, 215, 180, 0.015) 80%,
+      rgba(255, 235, 210, 0.12) 0%,
+      rgba(255, 225, 195, 0.06) 50%,
+      rgba(255, 215, 180, 0.02) 80%,
       transparent 100%
     );
     mix-blend-mode: screen;
@@ -942,8 +940,8 @@ function createPlayerTorch() {
   torch.appendChild(mid);
   torch.appendChild(core);
   
-  // Insert torch before player so it renders underneath
-  actors.insertBefore(torch, player);
+  // Insert into world
+  world.appendChild(torch);
   
   // Initial position sync
   syncTorchPosition();
