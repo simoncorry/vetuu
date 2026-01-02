@@ -471,8 +471,8 @@
     {
       "id": "clothNode_106",
       "type": "clothNode",
-      "x": 40,
-      "y": 54,
+      "x": 42,
+      "y": 48,
       "solid": false,
       "interact": {
         "action": "collect",
@@ -562,8 +562,8 @@
     {
       "id": "lamp_pad_se",
       "type": "lamp",
-      "x": 78,
-      "y": 33,
+      "x": 79,
+      "y": 32,
       "solid": false
     },
     {
@@ -1460,13 +1460,6 @@
       "type": "wall",
       "x": 80,
       "y": 32,
-      "solid": true
-    },
-    {
-      "id": "wall_129",
-      "type": "wall",
-      "x": 80,
-      "y": 33,
       "solid": true
     },
     {
