@@ -878,10 +878,11 @@ function handleGuardDeath(guard) {
   const guardEl = document.querySelector(`[data-npc-id="${guard.id}"]`);
   if (guardEl) {
     guardEl.classList.add('dying');
-    setTimeout(() => {
+    guardEl.addEventListener('animationend', function handler() {
       guardEl.classList.remove('dying');
       guardEl.classList.add('downed');
-    }, 500);
+      guardEl.removeEventListener('animationend', handler);
+    });
   }
   
   // Respawn guard after 30 seconds
@@ -3785,10 +3786,11 @@ function animateEnemyDisplacement(enemy) {
     enemyEl.style.transition = 'transform 0.2s ease-out';
     enemyEl.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
     
-    // Reset transition after animation
-    setTimeout(() => {
+    // Reset transition after animation completes
+    enemyEl.addEventListener('transitionend', function handler() {
       enemyEl.style.transition = '';
-    }, 200);
+      enemyEl.removeEventListener('transitionend', handler);
+    });
   }
 }
 
@@ -3803,10 +3805,12 @@ function showPushEffect(x, y) {
   const size = 6 * 24 * 2; // Final size
   const effect = document.createElement('div');
   effect.className = 'push-effect';
+  effect.style.setProperty('--pos-x', `${x * 24 + 12}px`);
+  effect.style.setProperty('--pos-y', `${y * 24 + 12}px`);
   effect.style.cssText = `
     position: absolute;
-    left: ${x * 24 + 12}px;
-    top: ${y * 24 + 12}px;
+    left: 0;
+    top: 0;
     width: ${size}px;
     height: ${size}px;
     border: 3px solid var(--sense-color);
@@ -3814,12 +3818,12 @@ function showPushEffect(x, y) {
     pointer-events: none;
     z-index: 150;
     animation: push-expand-gpu 0.4s ease-out forwards;
-    transform: translate3d(-50%, -50%, 0) scale3d(0, 0, 1);
+    transform: translate3d(calc(var(--pos-x) - 50%), calc(var(--pos-y) - 50%), 0) scale3d(0, 0, 1);
     will-change: transform, opacity;
   `;
   
   world.appendChild(effect);
-  setTimeout(() => effect.remove(), 400);
+  effect.addEventListener('animationend', () => effect.remove(), { once: true });
   
   // Show floating "PUSH!" text
   showSenseAbilityText(x, y, 'PUSH!', '#4B9CD6');
@@ -3836,10 +3840,12 @@ function showPullEffect(x, y) {
   const size = 6 * 24 * 2; // Starting size
   const effect = document.createElement('div');
   effect.className = 'pull-effect';
+  effect.style.setProperty('--pos-x', `${x * 24 + 12}px`);
+  effect.style.setProperty('--pos-y', `${y * 24 + 12}px`);
   effect.style.cssText = `
     position: absolute;
-    left: ${x * 24 + 12}px;
-    top: ${y * 24 + 12}px;
+    left: 0;
+    top: 0;
     width: ${size}px;
     height: ${size}px;
     border: 3px solid var(--sense-color);
@@ -3847,12 +3853,12 @@ function showPullEffect(x, y) {
     pointer-events: none;
     z-index: 150;
     animation: pull-contract-gpu 0.4s ease-in forwards;
-    transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+    transform: translate3d(calc(var(--pos-x) - 50%), calc(var(--pos-y) - 50%), 0) scale3d(1, 1, 1);
     will-change: transform, opacity;
   `;
   
   world.appendChild(effect);
-  setTimeout(() => effect.remove(), 400);
+  effect.addEventListener('animationend', () => effect.remove(), { once: true });
   
   // Show floating "PULL!" text
   showSenseAbilityText(x, y, 'PULL!', '#9B59B6');
@@ -3868,10 +3874,12 @@ function showSenseAbilityText(x, y, text, color) {
   const textEl = document.createElement('div');
   textEl.className = 'sense-ability-text';
   textEl.textContent = text;
+  textEl.style.setProperty('--pos-x', `${x * 24 + 12}px`);
+  textEl.style.setProperty('--pos-y', `${y * 24 - 8}px`);
   textEl.style.cssText = `
     position: absolute;
-    left: ${x * 24 + 12}px;
-    top: ${y * 24 - 8}px;
+    left: 0;
+    top: 0;
     color: ${color};
     font-family: var(--font-display, 'Rajdhani', sans-serif);
     font-size: 1rem;
@@ -3879,13 +3887,13 @@ function showSenseAbilityText(x, y, text, color) {
     text-shadow: 0 0 8px ${color}, 0 0 12px ${color}, 2px 2px 2px rgba(0, 0, 0, 0.9);
     pointer-events: none;
     z-index: 200;
-    transform: translate3d(-50%, 0, 0);
+    transform: translate3d(calc(var(--pos-x) - 50%), var(--pos-y), 0);
     animation: sense-text-float 0.8s ease-out forwards;
     will-change: transform, opacity;
   `;
   
   world.appendChild(textEl);
-  setTimeout(() => textEl.remove(), 800);
+  textEl.addEventListener('animationend', () => textEl.remove(), { once: true });
 }
 
 /**
@@ -3898,10 +3906,11 @@ function flashEnemyAffected(enemy) {
   // Add the flash class
   enemyEl.classList.add('sense-affected');
   
-  // Remove after animation
-  setTimeout(() => {
+  // Remove after animation completes
+  enemyEl.addEventListener('animationend', function handler() {
     enemyEl.classList.remove('sense-affected');
-  }, 400);
+    enemyEl.removeEventListener('animationend', handler);
+  });
 }
 
 /**
@@ -4060,16 +4069,14 @@ function executeHeal() {
   // Apply heal
   player.hp = Math.min(maxHp, player.hp + healAmount);
   
-  // Visual feedback
+  // Visual feedback - healing glow animation
   const playerEl = document.getElementById('player');
   if (playerEl) {
-    playerEl.style.filter = 'brightness(1.5) saturate(1.3)';
-    playerEl.style.boxShadow = '0 0 20px #5DAD5D, 0 0 40px rgba(93, 173, 93, 0.5)';
-    
-    setTimeout(() => {
-      playerEl.style.filter = '';
-      playerEl.style.boxShadow = '';
-    }, 500);
+    playerEl.classList.add('healing');
+    playerEl.addEventListener('animationend', function handler() {
+      playerEl.classList.remove('healing');
+      playerEl.removeEventListener('animationend', handler);
+    });
   }
   
   // Show heal number
@@ -4095,15 +4102,11 @@ function showHealNumber(x, y, amount) {
   const heal = document.createElement('div');
   heal.className = 'damage-number heal-number';
   heal.textContent = `+${amount}`;
-  heal.style.cssText = `
-    left: ${x * 24 + 12}px;
-    top: ${y * 24}px;
-    color: #5DAD5D;
-    text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.9);
-  `;
+  heal.style.setProperty('--pos-x', `${x * 24 + 12}px`);
+  heal.style.setProperty('--pos-y', `${y * 24}px`);
   
   world.appendChild(heal);
-  setTimeout(() => heal.remove(), 1000);
+  heal.addEventListener('animationend', () => heal.remove(), { once: true });
 }
 
 /**
@@ -5573,7 +5576,7 @@ async function handleEnemyDeath(enemy) {
   const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (el) {
     el.classList.add('dying');
-    setTimeout(() => el.remove(), 500);
+    el.addEventListener('animationend', () => el.remove(), { once: true });
   }
 
   if (currentTarget?.id === enemy.id) {

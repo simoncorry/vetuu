@@ -93,7 +93,7 @@
    SENSE ABILITY EFFECTS (Push/Pull)
    ============================================ */
 
-/* Floating ability text (PUSH!/PULL!) */
+/* Floating ability text (PUSH!/PULL!) - GPU accelerated via transform */
 .sense-ability-text {
   letter-spacing: 0.1em;
 }
@@ -101,11 +101,11 @@
 @keyframes sense-text-float {
   0% {
     opacity: 1;
-    transform: translate3d(-50%, 0, 0);
+    transform: translate3d(calc(var(--pos-x, 0) - 50%), var(--pos-y, 0), 0);
   }
   100% {
     opacity: 0;
-    transform: translate3d(-50%, -32px, 0);
+    transform: translate3d(calc(var(--pos-x, 0) - 50%), calc(var(--pos-y, 0) - 32px), 0);
   }
 }
 

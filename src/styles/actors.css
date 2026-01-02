@@ -50,7 +50,15 @@
 }
 
 #player.moving {
-  animation: actor-bob var(--move-duration) steps(var(--move-steps), end);
+  /* Combine translation bob with sprite swap */
+  animation: 
+    actor-bob var(--move-duration) steps(var(--move-steps), end),
+    sprite-walk 0.4s steps(1) infinite;
+}
+
+@keyframes sprite-walk {
+  0%, 49% { background-image: var(--sprite-idle); }
+  50%, 100% { background-image: var(--sprite-bob); }
 }
 
 /* Ghost mode - player is semi-transparent and ethereal */
@@ -80,6 +88,22 @@
 
 #player.sprinting::before {
   box-shadow: 0 0 4px rgba(0, 200, 255, 0.6);
+}
+
+/* Healing - brief glow effect with fade */
+#player.healing {
+  animation: heal-glow 0.5s ease-out forwards;
+}
+
+@keyframes heal-glow {
+  0% {
+    filter: brightness(1.5) saturate(1.3);
+    box-shadow: 0 0 20px #5DAD5D, 0 0 40px rgba(93, 173, 93, 0.5);
+  }
+  100% {
+    filter: none;
+    box-shadow: 0 0 8px var(--player), inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  }
 }
 
 @keyframes ghost-pulse {

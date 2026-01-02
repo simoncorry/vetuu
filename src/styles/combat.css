@@ -149,7 +149,7 @@
 
 /* ---------- Sense Ability Effects ---------- */
 
-/* Push effect - expanding ring (GPU-accelerated) */
+/* Push effect - expanding ring (GPU-accelerated via transform) */
 .push-effect {
   box-shadow: 0 0 20px var(--sense-color), inset 0 0 10px rgba(75, 156, 214, 0.3);
 }
@@ -157,15 +157,15 @@
 @keyframes push-expand-gpu {
   0% {
     opacity: 1;
-    transform: translate3d(-50%, -50%, 0) scale3d(0, 0, 1);
+    transform: translate3d(calc(var(--pos-x, 0) - 50%), calc(var(--pos-y, 0) - 50%), 0) scale3d(0, 0, 1);
   }
   100% {
     opacity: 0;
-    transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+    transform: translate3d(calc(var(--pos-x, 0) - 50%), calc(var(--pos-y, 0) - 50%), 0) scale3d(1, 1, 1);
   }
 }
 
-/* Pull effect - contracting ring (GPU-accelerated) */
+/* Pull effect - contracting ring (GPU-accelerated via transform) */
 .pull-effect {
   box-shadow: 0 0 20px var(--sense-color), inset 0 0 10px rgba(75, 156, 214, 0.3);
 }
@@ -173,11 +173,11 @@
 @keyframes pull-contract-gpu {
   0% {
     opacity: 0.8;
-    transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+    transform: translate3d(calc(var(--pos-x, 0) - 50%), calc(var(--pos-y, 0) - 50%), 0) scale3d(1, 1, 1);
   }
   100% {
     opacity: 0;
-    transform: translate3d(-50%, -50%, 0) scale3d(0.1, 0.1, 1);
+    transform: translate3d(calc(var(--pos-x, 0) - 50%), calc(var(--pos-y, 0) - 50%), 0) scale3d(0.1, 0.1, 1);
   }
 }
 

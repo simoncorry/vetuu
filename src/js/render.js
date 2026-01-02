@@ -9,6 +9,7 @@
 
 import { hasFlag } from './save.js';
 import { getNpcQuestMarker } from './quests.js';
+import { SPRITES } from './sprites.js';
 
 let viewport = null;
 let world = null;
@@ -156,6 +157,17 @@ export function renderActors(state) {
     player.className = 'actor';
     player.style.transition = 'none'; // Prevent transition on initial placement
     player.style.transform = `translate3d(${state.player.x * TILE_SIZE}px, ${state.player.y * TILE_SIZE}px, 0)`;
+    
+    // Apply Sprite Variables
+    player.style.setProperty('--sprite-idle', `url('${SPRITES.cpt.idle}')`);
+    player.style.setProperty('--sprite-bob', `url('${SPRITES.cpt.bob}')`);
+    
+    // Default to idle
+    player.style.backgroundImage = `var(--sprite-idle)`;
+    player.style.backgroundSize = 'contain';
+    player.style.backgroundRepeat = 'no-repeat';
+    player.style.backgroundColor = 'transparent'; // Override default color
+
     fragment.appendChild(player);
   }
 
