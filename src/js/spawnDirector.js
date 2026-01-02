@@ -81,8 +81,9 @@ const ACT3_MODIFIERS = {
   neutralWildlifeMultiplier: 0.7
 };
 
-// Road exclusion - enemies can't spawn near roads
-const ROAD_EXCLUSION_RADIUS = 8;
+// Road exclusion - enemies can't spawn on/near roads
+// Road is 7 tiles wide (center ± 3), so 4 = just beyond road edge
+const ROAD_EXCLUSION_RADIUS = 4;
 
 // ============================================
 // SPAWN BLOCK CONSTANTS
