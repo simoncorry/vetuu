@@ -15,7 +15,7 @@
   position: absolute;
   width: calc(var(--map-width) * var(--tile-size));
   height: calc(var(--map-height) * var(--tile-size));
-  background-color: var(--dune); /* Shows through transparent road gaps - matches dominant terrain */
+  background-color: var(--sand); /* Shows through transparent road gaps */
   /* Linear for smooth continuous movement - matches player */
   transition: transform var(--move-duration) linear;
   will-change: transform;
