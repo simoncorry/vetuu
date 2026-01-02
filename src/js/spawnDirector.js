@@ -67,7 +67,7 @@ const ACT3_MODIFIERS = {
 // SPAWN BLOCK CONSTANTS
 // ============================================
 const BLOCK_SIZE = 3;           // 3×3 tiles per spawn footprint
-const BLOCK_STRIDE = 3;         // Block spacing (could use 4 for 1-tile buffer)
+const BLOCK_STRIDE = 4;         // Block spacing (4 = 1-tile buffer between footprints)
 const MIN_PACK_SIZE = 2;        // Minimum enemies per pack
 const MAX_PACK_SIZE = 8;        // Maximum enemies per pack
 

@@ -1175,10 +1175,12 @@ function processEnemyAI(enemy, t) {
     enemy.state = AI.STATES.UNAWARE;
     releaseAttackerSlot(enemy);
     
-    // Return home
-    const dHome = enemy.home ? distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y) : 0;
-    if (dHome > 2) {
-      moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
+    // Return home if outside footprint (Chebyshev > 1)
+    const homeX = enemy.spawnX ?? enemy.home?.x ?? enemy.x;
+    const homeY = enemy.spawnY ?? enemy.home?.y ?? enemy.y;
+    const dHomeCheb = Math.max(Math.abs(enemy.x - homeX), Math.abs(enemy.y - homeY));
+    if (dHomeCheb > 1) {
+      moveEnemyTowardHome(enemy, homeX, homeY);
     }
     return;
   }
@@ -1223,10 +1225,12 @@ function processEnemyAI(enemy, t) {
     enemy.isAware = false;
     releaseAttackerSlot(enemy);
     
-    // Move toward home or idle
-    const dHome = enemy.home ? distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y) : 0;
-    if (dHome > 2) {
-      moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
+    // Move toward home or idle - use Chebyshev distance for footprint
+    const homeX = enemy.spawnX ?? enemy.home?.x ?? enemy.x;
+    const homeY = enemy.spawnY ?? enemy.home?.y ?? enemy.y;
+    const dHomeCheb = Math.max(Math.abs(enemy.x - homeX), Math.abs(enemy.y - homeY));
+    if (dHomeCheb > 1) {
+      moveEnemyTowardHome(enemy, homeX, homeY);
     } else if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.02) {
       aiIdle(enemy, t, weapon);
     }
@@ -1357,6 +1361,7 @@ function initEnemyAIFields(enemy) {
 
 /**
  * Handle unaware state - idle or return home
+ * Uses Chebyshev distance to stay within 3×3 footprint (distance <= 1 from spawn)
  */
 function handleUnawareState(enemy, t, weapon) {
   enemy.isEngaged = false;
@@ -1364,14 +1369,18 @@ function handleUnawareState(enemy, t, weapon) {
   
   if (!enemy.home) return;
   
-  const dHome = distCoords(enemy.x, enemy.y, enemy.home.x, enemy.home.y);
+  // Use Chebyshev distance (max of dx, dy) to respect 3×3 footprint
+  // Footprint is 1 tile from center, so we're "at home" if Chebyshev <= 1
+  const homeX = enemy.spawnX ?? enemy.home.x;
+  const homeY = enemy.spawnY ?? enemy.home.y;
+  const dHomeCheb = Math.max(Math.abs(enemy.x - homeX), Math.abs(enemy.y - homeY));
   
-  if (dHome > 2) {
-    // Return home and regenerate
-    moveEnemyTowardHome(enemy, enemy.home.x, enemy.home.y);
+  if (dHomeCheb > 1) {
+    // Outside footprint - return home
+    moveEnemyTowardHome(enemy, homeX, homeY);
     regenAtHome(enemy, t);
   } else {
-    // At home - regenerate and maybe idle
+    // Inside footprint - regenerate and maybe idle
     regenAtHome(enemy, t);
     
     if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.02) {
@@ -1702,7 +1711,7 @@ function finishRetreat(enemy, t) {
 }
 
 /**
- * Move enemy toward home point (legacy wrapper)
+ * Move enemy toward home point, respecting pack member footprints.
  */
 function moveEnemyTowardHome(enemy, targetX, targetY) {
   const t = nowMs();
@@ -1714,13 +1723,27 @@ function moveEnemyTowardHome(enemy, targetX, targetY) {
   const dx = Math.sign(targetX - enemy.x);
   const dy = Math.sign(targetY - enemy.y);
   
-  // Try direct path first
-  if (dx !== 0 && dy !== 0 && canEnemyMoveTo(enemy.x + dx, enemy.y + dy, enemy.id)) {
-    updateEnemyPosition(enemy, enemy.x + dx, enemy.y + dy);
-  } else if (dx !== 0 && canEnemyMoveTo(enemy.x + dx, enemy.y, enemy.id)) {
-    updateEnemyPosition(enemy, enemy.x + dx, enemy.y);
-  } else if (dy !== 0 && canEnemyMoveTo(enemy.x, enemy.y + dy, enemy.id)) {
-    updateEnemyPosition(enemy, enemy.x, enemy.y + dy);
+  const moves = [];
+  if (dx !== 0 && dy !== 0) moves.push({ x: enemy.x + dx, y: enemy.y + dy });
+  if (dx !== 0) moves.push({ x: enemy.x + dx, y: enemy.y });
+  if (dy !== 0) moves.push({ x: enemy.x, y: enemy.y + dy });
+  
+  // First pass: prefer moves that don't enter pack member footprints
+  for (const move of moves) {
+    if (canEnemyMoveToEx(move.x, move.y, enemy, true)) {
+      updateEnemyPosition(enemy, move.x, move.y);
+      enemy.moveCooldown = t + moveCD;
+      return;
+    }
+  }
+  
+  // Second pass: allow footprint entry if necessary
+  for (const move of moves) {
+    if (canEnemyMoveTo(move.x, move.y, enemy.id)) {
+      updateEnemyPosition(enemy, move.x, move.y);
+      enemy.moveCooldown = t + moveCD;
+      return;
+    }
   }
   
   enemy.moveCooldown = t + moveCD;
