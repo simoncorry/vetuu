@@ -296,29 +296,39 @@ function createFogFadeElement(x, y, fromState, toState) {
   el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
+// Track tiles that changed for batched fade animation
+let pendingFadeUpdates = [];
+let fadeUpdateScheduled = false;
+
 export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
   // Ensure runtime.revealedTiles exists
   if (!state.runtime.revealedTiles) {
     state.runtime.revealedTiles = new Set();
   }
 
-  // Expand scan area to include dither margin
-  const ditherMargin = 3;
-  const scanStartX = Math.max(0, centerX - radius - ditherMargin);
-  const scanStartY = Math.max(0, centerY - radius - ditherMargin);
-  const scanEndX = Math.min(mapWidth, centerX + radius + 1 + ditherMargin);
-  const scanEndY = Math.min(mapHeight, centerY + radius + 1 + ditherMargin);
-  
-  // 1. Capture BEFORE states for all tiles in affected area
-  const beforeStates = new Map();
-  for (let y = scanStartY; y < scanEndY; y++) {
-    for (let x = scanStartX; x < scanEndX; x++) {
-      beforeStates.set(`${x},${y}`, getTileState(x, y));
+  // Quick check: if center tile is already revealed with full radius, skip heavy work
+  // This is the common case when walking in already-revealed areas
+  let allRevealed = true;
+  for (let dy = -radius; dy <= radius && allRevealed; dy++) {
+    for (let dx = -radius; dx <= radius && allRevealed; dx++) {
+      const x = centerX + dx;
+      const y = centerY + dy;
+      if (x >= 0 && y >= 0 && x < mapWidth && y < mapHeight) {
+        const dist = Math.hypot(dx, dy);
+        if (dist <= radius && !fogMask[y]?.[x]) {
+          allRevealed = false;
+        }
+      }
     }
   }
   
-  // 2. Update fogMask with newly revealed tiles
+  // Early return if nothing to reveal (most common case)
+  if (allRevealed) return;
+  
+  // Update fogMask with newly revealed tiles
   let changed = false;
+  const newlyRevealed = [];
+  
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
       const x = centerX + dx;
@@ -333,6 +343,7 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
         if (!fogMask[y][x]) {
           fogMask[y][x] = true;
           state.runtime.revealedTiles.add(`${x},${y}`);
+          newlyRevealed.push({ x, y });
           changed = true;
         }
       }
@@ -342,18 +353,36 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
   if (changed) {
     saveFogMask();
     
-    // 3. Create fade elements for tiles whose state changed
-    for (let y = scanStartY; y < scanEndY; y++) {
-      for (let x = scanStartX; x < scanEndX; x++) {
-        const key = `${x},${y}`;
-        const beforeState = beforeStates.get(key);
-        const afterState = getTileState(x, y);
-        
-        if (beforeState !== afterState) {
-          createFogFadeElement(x, y, beforeState, afterState);
-        }
-      }
+    // Queue fade updates instead of creating DOM elements immediately
+    // This batches multiple reveals into a single DOM update
+    for (const tile of newlyRevealed) {
+      pendingFadeUpdates.push(tile);
     }
+    
+    // Schedule batched fade update on next frame
+    if (!fadeUpdateScheduled) {
+      fadeUpdateScheduled = true;
+      requestAnimationFrame(processPendingFades);
+    }
+  }
+}
+
+function processPendingFades() {
+  fadeUpdateScheduled = false;
+  
+  // Limit fade elements to prevent DOM overload
+  const MAX_FADES = 20;
+  const tiles = pendingFadeUpdates.splice(0, MAX_FADES);
+  
+  for (const { x, y } of tiles) {
+    // Simple fade for newly revealed tiles
+    createFogFadeElement(x, y, FOG_STATE.INNER_DITHER, FOG_STATE.REVEALED);
+  }
+  
+  // If more pending, schedule another batch
+  if (pendingFadeUpdates.length > 0) {
+    fadeUpdateScheduled = true;
+    requestAnimationFrame(processPendingFades);
   }
 }
 
@@ -401,25 +430,37 @@ export function getFogMask() {
 /**
  * Get the distance from a fogged tile to the nearest revealed tile.
  * Returns 0 if revealed, Infinity if no revealed neighbors within range.
+ * Optimized: checks direct neighbors first (most common case).
  */
 function getDistanceToRevealed(x, y, maxDist = 2) {
   if (fogMask[y]?.[x]) return 0; // Already revealed
   
-  // Check in expanding rings
-  for (let dist = 1; dist <= maxDist; dist++) {
-    for (let dy = -dist; dy <= dist; dy++) {
-      for (let dx = -dist; dx <= dist; dx++) {
-        // Only check tiles at exactly this distance (Chebyshev)
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== dist) continue;
-        
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx >= 0 && ny >= 0 && nx < mapWidth && ny < mapHeight) {
-          if (fogMask[ny][nx]) return dist;
-        }
+  // Fast path: check immediate 4 neighbors (most common for dither edge)
+  if (fogMask[y - 1]?.[x] || fogMask[y + 1]?.[x] || 
+      fogMask[y]?.[x - 1] || fogMask[y]?.[x + 1]) {
+    return 1;
+  }
+  
+  // Check diagonal neighbors for distance 1
+  if (fogMask[y - 1]?.[x - 1] || fogMask[y - 1]?.[x + 1] ||
+      fogMask[y + 1]?.[x - 1] || fogMask[y + 1]?.[x + 1]) {
+    return 1;
+  }
+  
+  if (maxDist < 2) return Infinity;
+  
+  // Check distance 2 ring (only if needed)
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== 2) continue;
+      const ny = y + dy;
+      const nx = x + dx;
+      if (ny >= 0 && ny < mapHeight && nx >= 0 && nx < mapWidth) {
+        if (fogMask[ny][nx]) return 2;
       }
     }
   }
+  
   return Infinity;
 }
 
@@ -576,17 +617,38 @@ export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
   lastUpdateX = centerX;
   lastUpdateY = centerY;
   
-  perfStart('fog:update');
-  
   // Check if we need to reposition the canvas
   const repositioned = checkRepositionNeeded(centerX, centerY);
   
   if (repositioned) {
     // Full redraw after repositioning
+    perfStart('fog:update');
     renderFogViewport();
     perfEnd('fog:update');
     return;
   }
+  
+  // Quick check: if player is deep in revealed area, skip canvas update
+  // Only need to update canvas when near fog boundary
+  const margin = radius + 3;
+  let nearFog = false;
+  outer: for (let dy = -margin; dy <= margin && !nearFog; dy++) {
+    for (let dx = -margin; dx <= margin && !nearFog; dx++) {
+      const x = centerX + dx;
+      const y = centerY + dy;
+      if (x >= 0 && y >= 0 && x < mapWidth && y < mapHeight) {
+        if (!fogMask[y][x]) {
+          nearFog = true;
+          break outer;
+        }
+      }
+    }
+  }
+  
+  // Skip expensive canvas update if nowhere near fog
+  if (!nearFog) return;
+  
+  perfStart('fog:update');
   
   // Partial update - only redraw affected area
   const ditherMargin = 2;
