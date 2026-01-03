@@ -40,8 +40,6 @@ const CONFIG = {
   entitySize: 4,
   pathMarkerSize: 2,  // Smaller than player for hierarchy
   
-  // Camera smoothing
-  cameraSmoothing: 0.35, // Lerp factor (0-1, higher = snappier)
   
   // Performance
   renderThrottle: 16, // ~60fps for smooth camera
@@ -61,14 +59,9 @@ let renderScheduled = false;
 let resizeObserver = null;
 let animationFrameId = null;
 
-// Camera state for smooth interpolation
+// Camera and player dot position (tracks player directly)
 let cameraX = 0;
 let cameraY = 0;
-let targetCameraX = 0;
-let targetCameraY = 0;
-let cameraInitialized = false;
-
-// Player dot state for smooth interpolation
 let playerDotX = 0;
 let playerDotY = 0;
 
@@ -125,11 +118,8 @@ export function initMinimap(state) {
   if (gameState?.player) {
     cameraX = gameState.player.x;
     cameraY = gameState.player.y;
-    targetCameraX = cameraX;
-    targetCameraY = cameraY;
     playerDotX = gameState.player.x;
     playerDotY = gameState.player.y;
-    cameraInitialized = true;
   }
   
   // Start render loop
@@ -164,47 +154,11 @@ function stopRenderLoop() {
 function updateCamera() {
   if (!gameState?.player) return;
   
-  const targetX = gameState.player.x;
-  const targetY = gameState.player.y;
-  
-  // Initialize on first update
-  if (!cameraInitialized) {
-    cameraX = targetX;
-    cameraY = targetY;
-    targetCameraX = targetX;
-    targetCameraY = targetY;
-    playerDotX = targetX;
-    playerDotY = targetY;
-    cameraInitialized = true;
-    return;
-  }
-  
-  // Set targets
-  targetCameraX = targetX;
-  targetCameraY = targetY;
-  
-  // Calculate delta to target
-  const dx = targetCameraX - cameraX;
-  const dy = targetCameraY - cameraY;
-  const dist = Math.abs(dx) + Math.abs(dy);
-  
-  // Snap immediately when very close, otherwise smooth interpolation
-  if (dist < 0.05) {
-    // Snap to target
-    cameraX = targetCameraX;
-    cameraY = targetCameraY;
-    playerDotX = targetX;
-    playerDotY = targetY;
-  } else {
-    // Both camera and player dot use identical interpolation
-    const smoothX = dx * CONFIG.cameraSmoothing;
-    const smoothY = dy * CONFIG.cameraSmoothing;
-    
-    cameraX += smoothX;
-    cameraY += smoothY;
-    playerDotX += smoothX;
-    playerDotY += smoothY;
-  }
+  // Direct tracking - no interpolation, just follow player exactly
+  cameraX = gameState.player.x;
+  cameraY = gameState.player.y;
+  playerDotX = gameState.player.x;
+  playerDotY = gameState.player.y;
 }
 
 // ============================================
