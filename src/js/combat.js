@@ -2032,6 +2032,13 @@ function updateEnemyVisuals() {
       el.classList.remove('retreating');
     }
     
+    // Engaged/in-combat visual (red tint for testing)
+    if (enemy.isEngaged || enemy.state === 'ENGAGED') {
+      el.classList.add('engaged');
+    } else {
+      el.classList.remove('engaged');
+    }
+    
     // Spawn immunity visual
     const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
     if (immuneRemaining > 0) {
@@ -6105,6 +6112,13 @@ function tickAllEnemyEffects() {
         el.classList.add('retreating');
       } else {
         el.classList.remove('retreating');
+      }
+      
+      // Sync engaged visual (red tint for testing)
+      if (enemy.isEngaged || enemy.state === 'ENGAGED') {
+        el.classList.add('engaged');
+      } else {
+        el.classList.remove('engaged');
       }
     }
   }
