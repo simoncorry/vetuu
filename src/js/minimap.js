@@ -156,18 +156,21 @@ function updateCamera() {
   const targetX = gameState.player.x;
   const targetY = gameState.player.y;
   
-  // Smooth interpolation toward player position
+  // Calculate distance to target
   const dx = targetX - cameraX;
   const dy = targetY - cameraY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
   
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+  if (dist < 0.005) {
     // Snap when very close
     cameraX = targetX;
     cameraY = targetY;
   } else {
-    // Smooth lerp
-    cameraX += dx * CAMERA_SMOOTHING;
-    cameraY += dy * CAMERA_SMOOTHING;
+    // Ease-out interpolation (faster when far, slower when close)
+    // This creates smoother deceleration
+    const t = Math.min(1, CAMERA_SMOOTHING + (dist * 0.1));
+    cameraX += dx * t;
+    cameraY += dy * t;
   }
 }
 
