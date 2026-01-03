@@ -64,6 +64,11 @@ let targetCameraX = 0;
 let targetCameraY = 0;
 let cameraInitialized = false;
 
+// Player dot state for smooth interpolation
+let playerDotX = 0;
+let playerDotY = 0;
+let playerDotInitialized = false;
+
 // Cached references
 let gameState = null;
 let terrainImageData = null;
@@ -113,13 +118,17 @@ export function initMinimap(state) {
   // Pre-render terrain to an offscreen buffer for performance
   prerenderTerrain();
   
-  // Initialize camera position to player
+  // Initialize camera and player dot positions
   if (gameState?.player) {
     cameraX = gameState.player.x;
     cameraY = gameState.player.y;
     targetCameraX = cameraX;
     targetCameraY = cameraY;
     cameraInitialized = true;
+    
+    playerDotX = gameState.player.x;
+    playerDotY = gameState.player.y;
+    playerDotInitialized = true;
   }
   
   // Start render loop
@@ -154,29 +163,51 @@ function stopRenderLoop() {
 function updateCamera() {
   if (!gameState?.player) return;
   
-  // Set target to player position
-  targetCameraX = gameState.player.x;
-  targetCameraY = gameState.player.y;
+  const targetX = gameState.player.x;
+  const targetY = gameState.player.y;
   
-  // Initialize camera on first update
+  // Initialize on first update
   if (!cameraInitialized) {
-    cameraX = targetCameraX;
-    cameraY = targetCameraY;
+    cameraX = targetX;
+    cameraY = targetY;
+    targetCameraX = targetX;
+    targetCameraY = targetY;
     cameraInitialized = true;
-    return;
   }
   
-  // Smooth interpolation (lerp)
-  const dx = targetCameraX - cameraX;
-  const dy = targetCameraY - cameraY;
+  if (!playerDotInitialized) {
+    playerDotX = targetX;
+    playerDotY = targetY;
+    playerDotInitialized = true;
+  }
   
-  // Only interpolate if there's meaningful distance
-  if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-    cameraX += dx * CONFIG.cameraSmoothing;
-    cameraY += dy * CONFIG.cameraSmoothing;
+  // Set targets
+  targetCameraX = targetX;
+  targetCameraY = targetY;
+  
+  // Smooth camera interpolation (lerp)
+  const camDx = targetCameraX - cameraX;
+  const camDy = targetCameraY - cameraY;
+  
+  if (Math.abs(camDx) > 0.001 || Math.abs(camDy) > 0.001) {
+    cameraX += camDx * CONFIG.cameraSmoothing;
+    cameraY += camDy * CONFIG.cameraSmoothing;
   } else {
     cameraX = targetCameraX;
     cameraY = targetCameraY;
+  }
+  
+  // Smooth player dot interpolation (slightly faster than camera for responsive feel)
+  const dotSmoothing = CONFIG.cameraSmoothing * 1.5;
+  const dotDx = targetX - playerDotX;
+  const dotDy = targetY - playerDotY;
+  
+  if (Math.abs(dotDx) > 0.001 || Math.abs(dotDy) > 0.001) {
+    playerDotX += dotDx * dotSmoothing;
+    playerDotY += dotDy * dotSmoothing;
+  } else {
+    playerDotX = targetX;
+    playerDotY = targetY;
   }
 }
 
@@ -668,8 +699,8 @@ function renderEntities(vp) {
 }
 
 function renderPlayer(_vp) {
-  // Player is always at center
-  const pos = worldToScreen(gameState.player.x + 0.5, gameState.player.y + 0.5);
+  // Player dot uses interpolated position for smooth movement
+  const pos = worldToScreen(playerDotX + 0.5, playerDotY + 0.5);
   if (!pos) return;
   
   // Glow effect
