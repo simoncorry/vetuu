@@ -81,19 +81,20 @@
   image-rendering: pixelated;
   /* Facing offset - overridden by .facing-left/.facing-right */
   --shadow-facing-offset: 0deg;
-  /* Transform to create projected shadow effect - values from :root (set by time.js) */
+  /* Transform to create projected shadow effect - values from :root (set by time.js)
+     Order MUST match shadow-bounce animation: scale3d → skewX → translate3d */
   transform-origin: center bottom;
   transform: 
-    scaleY(var(--shadow-scale-y, 0.4)) 
-    scaleX(var(--shadow-scale-x, 1.1)) 
+    scale3d(var(--shadow-scale-x, 1.1), var(--shadow-scale-y, 0.4), 1)
     skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset)))
-    translateY(2px);
+    translate3d(0, 2px, 0);
   /* Make it a shadow: black, dynamic opacity/blur from sun position */
   filter: brightness(0) blur(var(--shadow-blur, 1px));
   opacity: var(--shadow-opacity, 0.35);
   pointer-events: none;
   /* Smooth transitions for state changes (facing, sun position, movement exit) */
   transition: transform 0.15s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out;
+  will-change: transform;
 }
 
 /* Directional offsets for character facing (adds to sun-based skew) */
