@@ -416,14 +416,16 @@ export function updateCamera(state, duration = null) {
 
   // Sync camera transition duration with player movement (for ghost mode, sprint, etc)
   if (duration !== null) {
+    // Safari fix: set duration BEFORE transform change, with a forced reflow
     world.style.transitionDuration = `${duration}ms`;
+    // Force style recalculation so Safari applies the new duration
+    void world.offsetHeight;
   }
 
   // Apply Scale AND Translate
   // translate3d moves the layer in logical pixels
   // scale magnifies the result
   world.style.transform = `scale(${ZOOM_FACTOR}) translate3d(${-x}px, ${-y}px, 0)`;
-  world.style.transformOrigin = 'top left'; // Important!
 }
 
 // ============================================
