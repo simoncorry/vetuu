@@ -59,11 +59,12 @@ let renderScheduled = false;
 let resizeObserver = null;
 let animationFrameId = null;
 
-// Camera and player dot position (tracks player directly)
+// Camera position (smoothly interpolated toward player)
 let cameraX = 0;
 let cameraY = 0;
-let playerDotX = 0;
-let playerDotY = 0;
+
+// Smoothing factor (higher = snappier, 1 = instant)
+const CAMERA_SMOOTHING = 0.25;
 
 // Cached references
 let gameState = null;
@@ -118,8 +119,6 @@ export function initMinimap(state) {
   if (gameState?.player) {
     cameraX = gameState.player.x;
     cameraY = gameState.player.y;
-    playerDotX = gameState.player.x;
-    playerDotY = gameState.player.y;
   }
   
   // Start render loop
@@ -154,11 +153,22 @@ function stopRenderLoop() {
 function updateCamera() {
   if (!gameState?.player) return;
   
-  // Direct tracking - no interpolation, just follow player exactly
-  cameraX = gameState.player.x;
-  cameraY = gameState.player.y;
-  playerDotX = gameState.player.x;
-  playerDotY = gameState.player.y;
+  const targetX = gameState.player.x;
+  const targetY = gameState.player.y;
+  
+  // Smooth interpolation toward player position
+  const dx = targetX - cameraX;
+  const dy = targetY - cameraY;
+  
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+    // Snap when very close
+    cameraX = targetX;
+    cameraY = targetY;
+  } else {
+    // Smooth lerp
+    cameraX += dx * CAMERA_SMOOTHING;
+    cameraY += dy * CAMERA_SMOOTHING;
+  }
 }
 
 // ============================================
@@ -705,8 +715,8 @@ function renderPath(vp) {
 }
 
 function renderPlayer(_vp) {
-  // Player dot uses interpolated position for smooth movement
-  const pos = worldToScreen(playerDotX + 0.5, playerDotY + 0.5);
+  // Player dot rendered at camera position (always centered, world moves around it)
+  const pos = worldToScreen(cameraX + 0.5, cameraY + 0.5);
   if (!pos) return;
   
   // Subtle glow effect
