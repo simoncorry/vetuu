@@ -357,10 +357,18 @@ function initDraggablePanel(elementId, panelKey) {
     el.insertBefore(header, el.firstChild);
   }
   
-  // Create resize handle
-  const resizeHandle = document.createElement('div');
-  resizeHandle.className = 'resize-handle';
-  el.appendChild(resizeHandle);
+  // Create resize handles for all four corners
+  const corners = ['se', 'sw', 'ne', 'nw'];
+  corners.forEach(corner => {
+    const handle = document.createElement('div');
+    handle.className = `resize-handle resize-handle-${corner}`;
+    handle.dataset.corner = corner;
+    el.appendChild(handle);
+    
+    // Resize handling
+    handle.addEventListener('mousedown', (e) => startResize(e, el, panelKey, corner));
+    handle.addEventListener('touchstart', (e) => startResize(e, el, panelKey, corner), { passive: false });
+  });
   
   // Create redock indicator
   const redockIndicator = document.createElement('div');
@@ -374,10 +382,6 @@ function initDraggablePanel(elementId, panelKey) {
     header.addEventListener('mousedown', (e) => startDrag(e, el, panelKey));
     header.addEventListener('touchstart', (e) => startDrag(e, el, panelKey), { passive: false });
   }
-  
-  // Resize handling
-  resizeHandle.addEventListener('mousedown', (e) => startResize(e, el, panelKey));
-  resizeHandle.addEventListener('touchstart', (e) => startResize(e, el, panelKey), { passive: false });
 }
 
 function startDrag(e, el, panelKey) {
@@ -470,7 +474,7 @@ function endDrag() {
   savePanelState();
 }
 
-function startResize(e, el, panelKey) {
+function startResize(e, el, panelKey, corner = 'se') {
   e.preventDefault();
   e.stopPropagation();
   
@@ -483,10 +487,13 @@ function startResize(e, el, panelKey) {
   activeResize = {
     el,
     panelKey,
+    corner,
     startX: clientX,
     startY: clientY,
     startWidth: rect.width,
-    startHeight: rect.height
+    startHeight: rect.height,
+    startLeft: rect.left,
+    startTop: rect.top
   };
   
   el.classList.add('resizing');
@@ -505,7 +512,7 @@ function onResize(e) {
   const clientX = touch ? touch.clientX : e.clientX;
   const clientY = touch ? touch.clientY : e.clientY;
   
-  const { el, panelKey, startX, startY, startWidth, startHeight } = activeResize;
+  const { el, panelKey, corner, startX, startY, startWidth, startHeight, startLeft, startTop } = activeResize;
   
   const deltaX = clientX - startX;
   const deltaY = clientY - startY;
@@ -516,11 +523,64 @@ function onResize(e) {
   const maxWidth = 500;
   const maxHeight = 400;
   
-  const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + deltaX));
-  const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
+  let newWidth, newHeight, newLeft, newTop;
   
+  // Handle different corners
+  switch (corner) {
+    case 'se': // Bottom-right: expand right and down
+      newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + deltaX));
+      newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
+      newLeft = startLeft;
+      newTop = startTop;
+      break;
+      
+    case 'sw': // Bottom-left: expand left and down
+      newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth - deltaX));
+      newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
+      // Adjust left position as width changes
+      newLeft = startLeft + (startWidth - newWidth);
+      newTop = startTop;
+      break;
+      
+    case 'ne': // Top-right: expand right and up
+      newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + deltaX));
+      newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight - deltaY));
+      newLeft = startLeft;
+      // Adjust top position as height changes
+      newTop = startTop + (startHeight - newHeight);
+      break;
+      
+    case 'nw': // Top-left: expand left and up
+      newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth - deltaX));
+      newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight - deltaY));
+      // Adjust both positions as size changes
+      newLeft = startLeft + (startWidth - newWidth);
+      newTop = startTop + (startHeight - newHeight);
+      break;
+      
+    default:
+      newWidth = startWidth;
+      newHeight = startHeight;
+      newLeft = startLeft;
+      newTop = startTop;
+  }
+  
+  // Apply size
   el.style.width = `${newWidth}px`;
   el.style.height = `${newHeight}px`;
+  
+  // Apply position if it changed (for sw, ne, nw corners)
+  if (corner !== 'se') {
+    el.style.left = `${newLeft}px`;
+    el.style.top = `${newTop}px`;
+    el.style.right = 'auto';
+    
+    // Mark as undocked since position changed
+    panelState[panelKey].docked = false;
+    panelState[panelKey].x = newLeft;
+    panelState[panelKey].y = newTop;
+    el.classList.add('undocked');
+  }
   
   // Update state
   panelState[panelKey].width = newWidth;
