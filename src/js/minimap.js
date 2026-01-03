@@ -62,9 +62,10 @@ let animationFrameId = null;
 // Camera position (smoothly interpolated toward player)
 let cameraX = 0;
 let cameraY = 0;
+let lastFrameTime = 0;
 
-// Smoothing factor (lower = smoother/slower, higher = snappier)
-const CAMERA_SMOOTHING = 0.12;
+// Smoothing - pixels per second approach for frame-rate independence
+const CAMERA_SPEED = 8; // tiles per second base speed
 
 // Cached references
 let gameState = null;
@@ -133,8 +134,8 @@ export function initMinimap(state) {
 function startRenderLoop() {
   if (animationFrameId) return;
   
-  function loop() {
-    updateCamera();
+  function loop(timestamp) {
+    updateCamera(timestamp);
     render();
     animationFrameId = requestAnimationFrame(loop);
   }
@@ -150,8 +151,12 @@ function stopRenderLoop() {
   }
 }
 
-function updateCamera() {
+function updateCamera(timestamp) {
   if (!gameState?.player) return;
+  
+  // Calculate delta time for frame-rate independent movement
+  const deltaTime = lastFrameTime ? (timestamp - lastFrameTime) / 1000 : 0.016;
+  lastFrameTime = timestamp;
   
   const targetX = gameState.player.x;
   const targetY = gameState.player.y;
@@ -161,16 +166,16 @@ function updateCamera() {
   const dy = targetY - cameraY;
   const dist = Math.sqrt(dx * dx + dy * dy);
   
-  if (dist < 0.005) {
+  if (dist < 0.001) {
     // Snap when very close
     cameraX = targetX;
     cameraY = targetY;
   } else {
-    // Ease-out interpolation (faster when far, slower when close)
-    // This creates smoother deceleration
-    const t = Math.min(1, CAMERA_SMOOTHING + (dist * 0.1));
-    cameraX += dx * t;
-    cameraY += dy * t;
+    // Smooth exponential decay with frame-rate independence
+    // Using 1 - e^(-speed * dt) for smooth asymptotic approach
+    const smoothing = 1 - Math.exp(-CAMERA_SPEED * deltaTime);
+    cameraX += dx * smoothing;
+    cameraY += dy * smoothing;
   }
 }
 
