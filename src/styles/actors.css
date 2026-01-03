@@ -57,28 +57,67 @@
   pointer-events: none;
 }
 
-/* Dynamic ground shadow - smooth ellipse behind character */
+/* Dynamic silhouette shadow - projects the sprite shape as a shadow
+   Uses CSS custom properties for future directional support:
+   --shadow-skew: skewX angle (0 for straight down, negative for left, positive for right)
+   --shadow-scale-y: vertical flatten amount (0.35 default)
+   --shadow-scale-x: horizontal stretch (1.1 default)
+*/
 .actor > .shadow {
   position: absolute;
   z-index: 0; /* Behind sprite (1) */
-  bottom: -2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 24px;
-  height: 6px;
-  background: rgba(36, 23, 6, 0.1);
-  border-radius: 50%;
+  /* Match sprite dimensions */
+  width: 100%;
+  height: 100%;
+  bottom: 0;
+  left: 0;
+  /* Use same sprite as the character */
+  background-image: var(--sprite-idle);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  /* Transform to create projected shadow effect */
+  --shadow-skew: 0deg;
+  --shadow-scale-y: 0.35;
+  --shadow-scale-x: 1.1;
+  transform-origin: center bottom;
+  transform: 
+    scaleY(var(--shadow-scale-y)) 
+    scaleX(var(--shadow-scale-x)) 
+    skewX(var(--shadow-skew))
+    translateY(2px);
+  /* Make it a shadow: black, semi-transparent, slightly blurred */
+  filter: brightness(0) blur(1px);
+  opacity: 0.15;
   pointer-events: none;
 }
 
-/* Walk bob for all moving actors */
+/* Directional shadow variants (for future use with directional sprites) */
+.actor.facing-left > .shadow { --shadow-skew: 15deg; }
+.actor.facing-right > .shadow { --shadow-skew: -15deg; }
+
+/* Walk bob for all moving actors - sprite bobs, shadow stays planted */
 .actor.moving > .sprite {
   animation: walk-bob 0.2s ease-in-out infinite;
+}
+
+/* Shadow has subtle "bounce" effect when moving (slight scale pulse) */
+.actor.moving > .shadow {
+  animation: shadow-pulse 0.2s ease-in-out infinite;
 }
 
 @keyframes walk-bob {
   0%, 100% { transform: scaleY(1); }
   50% { transform: scaleY(0.969); } /* ~1px head movement on 32px sprite */
+}
+
+@keyframes shadow-pulse {
+  0%, 100% { 
+    transform: scaleY(0.35) scaleX(1.1) skewX(var(--shadow-skew, 0deg)) translateY(2px); 
+  }
+  50% { 
+    transform: scaleY(0.32) scaleX(1.15) skewX(var(--shadow-skew, 0deg)) translateY(2px); /* Slight squash on footfall */
+  }
 }
 
 /* ---------- Player ---------- */
