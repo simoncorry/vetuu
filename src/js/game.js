@@ -1308,6 +1308,7 @@ async function init() {
     clampHP(state.player);
 
     window.__vetuuState = state;
+    window.__vetuuFlags = state.flags; // Expose flags for combat ability unlocks
     window.__vetuuGame = { showToast, grantXP, addItem, updateHUD, equipItem, updateQuestProgress };
 
     // Load collision module first (needed by movement)
@@ -1434,6 +1435,77 @@ if (typeof window !== 'undefined') {
   window.VETUU_POS = () => {
     if (!state?.player) return 'No player state';
     return { x: state.player.x, y: state.player.y };
+  };
+  
+  // ============================================
+  // COMBAT ABILITY DEBUG COMMANDS
+  // ============================================
+  
+  /**
+   * Set player level (for testing ability unlocks)
+   * Usage: VETUU_LEVEL(16)
+   */
+  window.VETUU_LEVEL = (level) => {
+    if (!state?.player) return 'No player state';
+    state.player.level = level;
+    console.log(`Player level set to ${level}`);
+    updateHUD();
+    return `Level: ${level}`;
+  };
+  
+  /**
+   * Unlock the rifle (enables ranged attacks and Burst/Charged abilities)
+   * Usage: VETUU_UNLOCK_RIFLE()
+   */
+  window.VETUU_UNLOCK_RIFLE = () => {
+    setFlag('rifle_unlocked');
+    console.log('Rifle unlocked! Ranged attacks and abilities (Burst, Charged Shot) now available.');
+    return 'rifle_unlocked = true';
+  };
+  
+  /**
+   * Unlock sense abilities (Pull, Push)
+   * Usage: VETUU_UNLOCK_SENSE()
+   */
+  window.VETUU_UNLOCK_SENSE = () => {
+    setFlag('sense_revealed');
+    console.log('Sense abilities unlocked! Pull and Push now available.');
+    return 'sense_revealed = true';
+  };
+  
+  /**
+   * Unlock all combat abilities (sets level 20 + all flags)
+   * Usage: VETUU_UNLOCK_ALL()
+   */
+  window.VETUU_UNLOCK_ALL = () => {
+    state.player.level = 20;
+    setFlag('rifle_unlocked');
+    setFlag('sense_revealed');
+    console.log('All abilities unlocked! Level 20, rifle, and sense.');
+    updateHUD();
+    return 'All unlocked';
+  };
+  
+  /**
+   * Show current ability unlock status
+   * Usage: VETUU_ABILITY_STATUS()
+   */
+  window.VETUU_ABILITY_STATUS = () => {
+    const level = state?.player?.level || 1;
+    const flags = state?.flags || {};
+    return {
+      level,
+      rifle_unlocked: !!flags.rifle_unlocked,
+      sense_revealed: !!flags.sense_revealed,
+      abilities: {
+        'Slot 2 - Leap': level >= 4 ? '✅ Unlocked' : `❌ Need Level 4 (current: ${level})`,
+        'Slot 3 - Blade Flurry': level >= 8 ? '✅ Unlocked' : `❌ Need Level 8 (current: ${level})`,
+        'Slot 4 - Burst': level >= 12 && flags.rifle_unlocked ? '✅ Unlocked' : `❌ Need Level 12 + Rifle`,
+        'Slot 5 - Charged Shot': level >= 16 && flags.rifle_unlocked ? '✅ Unlocked' : `❌ Need Level 16 + Rifle`,
+        'Slot 6 - Pull': flags.sense_revealed ? '✅ Unlocked' : '❌ Need Sense MSQ',
+        'Slot 7 - Push': flags.sense_revealed ? '✅ Unlocked' : '❌ Need Sense MSQ'
+      }
+    };
   };
 }
 
