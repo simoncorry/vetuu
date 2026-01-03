@@ -392,6 +392,33 @@ function findQuestForNpc(state, npcId) {
 // ============================================
 // CAMERA CONTROL
 // ============================================
+
+// Camera animation state
+let cameraAnim = null;
+let currentCamX = 0;
+let currentCamY = 0;
+
+function animateCamera(timestamp) {
+  if (!cameraAnim) return;
+  
+  const { startX, startY, targetX, targetY, startTime, duration } = cameraAnim;
+  const elapsed = timestamp - startTime;
+  const progress = Math.min(elapsed / duration, 1);
+  
+  // Linear interpolation (matches CSS linear timing)
+  currentCamX = startX + (targetX - startX) * progress;
+  currentCamY = startY + (targetY - startY) * progress;
+  
+  // Apply transform directly (no CSS transition)
+  world.style.transform = `scale3d(${ZOOM_FACTOR}, ${ZOOM_FACTOR}, 1) translate3d(${-currentCamX}px, ${-currentCamY}px, 0)`;
+  
+  if (progress < 1) {
+    requestAnimationFrame(animateCamera);
+  } else {
+    cameraAnim = null;
+  }
+}
+
 export function updateCamera(state, duration = null) {
   if (!viewport || !world) return;
   
@@ -410,15 +437,32 @@ export function updateCamera(state, duration = null) {
   const x = Math.max(0, Math.min(targetX, worldW - (vw / ZOOM_FACTOR)));
   const y = Math.max(0, Math.min(targetY, worldH - (vh / ZOOM_FACTOR)));
 
-  // Sync camera transition duration with player movement
-  // This ensures camera follows player at the exact same speed
-  // duration=0 means instant (teleport/respawn), duration=null uses CSS default
-  if (duration !== null) {
-    world.style.transitionDuration = duration === 0 ? '0ms' : `${duration}ms`;
+  // Instant update (teleport/respawn/initial load)
+  if (duration === 0 || duration === null) {
+    // Cancel any ongoing animation
+    cameraAnim = null;
+    currentCamX = x;
+    currentCamY = y;
+    // Disable transition and set directly
+    world.style.transition = 'none';
+    world.style.transform = `scale3d(${ZOOM_FACTOR}, ${ZOOM_FACTOR}, 1) translate3d(${-x}px, ${-y}px, 0)`;
+    return;
   }
 
-  // Use scale3d + translate3d for consistent 3D transform handling in Safari
-  world.style.transform = `scale3d(${ZOOM_FACTOR}, ${ZOOM_FACTOR}, 1) translate3d(${-x}px, ${-y}px, 0)`;
+  // Animated update - use requestAnimationFrame for Safari smoothness
+  // Disable CSS transition, we'll animate manually
+  world.style.transition = 'none';
+  
+  cameraAnim = {
+    startX: currentCamX,
+    startY: currentCamY,
+    targetX: x,
+    targetY: y,
+    startTime: performance.now(),
+    duration: duration
+  };
+  
+  requestAnimationFrame(animateCamera);
 }
 
 // ============================================

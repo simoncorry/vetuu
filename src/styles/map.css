@@ -11,32 +11,34 @@
   cursor: crosshair;
 }
 
-/* World container - camera controlled via JS transform */
+/* World container - camera controlled via JS requestAnimationFrame */
 #world {
   position: absolute;
   width: calc(var(--map-width) * var(--tile-size));
   height: calc(var(--map-height) * var(--tile-size));
   background-color: var(--sand);
   transform-origin: top left;
-  /* Smooth camera following - fixed duration for Safari stability */
-  transition: transform var(--move-duration) linear;
-  /* Safari GPU compositing hints */
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  -webkit-perspective: 1000px;
-  perspective: 1000px;
+  /* No CSS transition - camera animated via JS for Safari smoothness */
+  /* Force GPU compositing layer */
   will-change: transform;
+  /* Isolate stacking context to prevent layer recalculation */
+  isolation: isolate;
+  contain: layout style;
 }
 
 .layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Each layer on its own compositing layer for Safari */
+  transform: translateZ(0);
+  will-change: contents;
 }
 
 #actor-layer { pointer-events: auto; z-index: 10; }
 #fog-layer { z-index: 20; }
 #object-layer { z-index: 5; }
+#ground-layer { z-index: 1; }
 
 /* ---------- Tiles ---------- */
 .tile {
