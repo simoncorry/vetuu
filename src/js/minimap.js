@@ -63,8 +63,8 @@ let animationFrameId = null;
 let cameraX = 0;
 let cameraY = 0;
 
-// Smoothing factor (higher = snappier, 1 = instant)
-const CAMERA_SMOOTHING = 0.25;
+// Smoothing factor (lower = smoother/slower, higher = snappier)
+const CAMERA_SMOOTHING = 0.12;
 
 // Cached references
 let gameState = null;
