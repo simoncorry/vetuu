@@ -1821,8 +1821,9 @@ function executeSpawnRequests(requests) {
       const position = request.positions[i];
       
       // Reserve the block tiles BEFORE creating the enemy
+      // Note: This function is currently unused but kept for potential future use
       if (position.blockTiles) {
-        reserveBlock(position.blockTiles);
+        // reserveBlockForSlot would need spawner/slot context here
       }
       
       const enemy = createEnemy(rosterEntry, position, request);
