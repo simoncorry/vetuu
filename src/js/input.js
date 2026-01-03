@@ -33,6 +33,28 @@ export function initInput(onInteract, onTarget, _onSecondary) {
   interactCallback = onInteract || (() => {});
   targetCallback = onTarget || (() => {});
 
+  // DEBUG: Catch ALL clicks in capture phase to see what's being clicked
+  document.addEventListener('click', (e) => {
+    const isEnemy = e.target.closest('.enemy');
+    const isNpc = e.target.closest('.npc, .guard');
+    const isActor = e.target.closest('.actor');
+    const inViewport = e.target.closest('#viewport');
+    
+    // Log ALL viewport clicks for debugging
+    if (inViewport) {
+      console.log('[Input DEBUG] Viewport click:', {
+        tagName: e.target.tagName,
+        className: e.target.className?.substring?.(0, 50) || e.target.className,
+        isEnemy: !!isEnemy,
+        isNpc: !!isNpc,
+        isActor: !!isActor,
+        enemyId: isEnemy?.dataset?.enemyId,
+        x: e.clientX,
+        y: e.clientY
+      });
+    }
+  }, true); // capture phase
+
   // Non-movement keyboard
   document.addEventListener('keydown', onKeyDown);
 

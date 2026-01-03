@@ -92,8 +92,8 @@
   filter: brightness(0) blur(var(--shadow-blur, 1px));
   opacity: var(--shadow-opacity, 0.35);
   pointer-events: none;
-  /* Smooth transition as sun moves (subtle, not jarring) */
-  transition: transform 30s linear, opacity 30s linear, filter 30s linear;
+  /* Smooth transitions for state changes (facing, sun position, movement exit) */
+  transition: transform 0.15s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out;
 }
 
 /* Directional offsets for character facing (adds to sun-based skew) */
@@ -104,17 +104,15 @@
   --shadow-facing-offset: -15deg;
 }
 
-/* Walk bob for all moving actors - sprite bobs, shadow stays planted */
+/* Walk bob for all moving actors - sprite bobs, shadow bounces in sync */
 .actor.moving > .sprite {
   animation: walk-bob 0.2s ease-in-out infinite;
 }
 
-/* Shadow has subtle "bounce" effect when moving (slight scale pulse) 
-   Uses the same --shadow-facing-offset variable so facing direction is preserved.
-   Note: CSS animations override transitions automatically, so no need to disable transition.
-   Keeping the transition allows smooth facing-direction changes while walking. */
+/* Shadow bounce synced with sprite bob - matches footfall rhythm.
+   Animation 0%/100% matches base state, so transition smooths exit. */
 .actor.moving > .shadow {
-  animation: shadow-pulse 0.2s ease-in-out infinite;
+  animation: shadow-bounce 0.2s ease-in-out infinite;
 }
 
 @keyframes walk-bob {
@@ -122,9 +120,9 @@
   50% { transform: scaleY(0.969); } /* ~1px head movement on 32px sprite */
 }
 
-/* Shadow pulse uses dynamic values from sun position 
-   Note: --shadow-facing-offset is inherited from the element, so facing direction works */
-@keyframes shadow-pulse {
+/* Shadow bounce: subtle squash on footfall (50%), return to normal (0%/100%)
+   Uses CSS variables so sun position and facing direction are respected */
+@keyframes shadow-bounce {
   0%, 100% { 
     transform: 
       scaleY(var(--shadow-scale-y, 0.4)) 
@@ -133,10 +131,9 @@
       translateY(2px); 
   }
   50% { 
-    /* Slight squash on footfall - 10% reduction from current scale */
     transform: 
-      scaleY(calc(var(--shadow-scale-y, 0.4) * 0.9)) 
-      scaleX(calc(var(--shadow-scale-x, 1.1) * 1.05)) 
+      scaleY(calc(var(--shadow-scale-y, 0.4) * 0.94)) 
+      scaleX(calc(var(--shadow-scale-x, 1.1) * 1.03)) 
       skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset, 0deg))) 
       translateY(2px);
   }
