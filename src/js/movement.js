@@ -8,9 +8,7 @@
  */
 
 import { tryExecuteCombatIntent, cancelCombatPursuit } from './combat.js';
-import { actorTransform } from './render.js';
-
-const TILE_SIZE = 24;
+import { actorTransform, TILE_SIZE } from './render.js';
 
 // ============================================
 // CONSTANTS

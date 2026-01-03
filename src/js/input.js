@@ -7,8 +7,7 @@
 import { createPathTo, cancelPath } from './movement.js';
 import { cancelCombatPursuit } from './combat.js';
 import { toggleTorch } from './game.js';
-
-const TILE_SIZE = 24;
+import { TILE_SIZE } from './render.js';
 
 // ============================================
 // STATE

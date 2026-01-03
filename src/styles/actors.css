@@ -1,6 +1,18 @@
 /* ============================================
    VETUU — Actor Styles
    Player, NPCs, enemies, and overhead elements
+   
+   STACKING CONTEXT:
+   Each .actor creates its own stacking context via isolation: isolate.
+   This means z-index values inside .actor are LOCAL to that actor,
+   preventing global z-index escalation. Child stacking order:
+   
+     0: .shadow (ground shadow)
+     1: .sprite (character image)
+     2: .enemy-hp-bar (health bar)
+     3: .enemy-level-badge (level indicator)
+   
+   Actor-to-actor ordering uses the parent's z-index (15 for most, 100 for player).
    ============================================ */
 
 /* ---------- Actors ---------- */
@@ -14,11 +26,15 @@
   width: var(--tile-size);
   height: calc(var(--tile-size) * 4 / 3); /* 32px for 24px tiles */
   z-index: 15;
+  /* Create local stacking context - child z-indexes don't leak globally */
+  isolation: isolate;
 }
 
+/* Sprite element - holds character image */
 .actor > .sprite {
   position: absolute;
   inset: 0;
+  z-index: 1; /* Above shadow (0) */
   /* Sprite rendering */
   background-image: var(--sprite-idle);
   background-size: 100% 100%;
@@ -44,6 +60,7 @@
 /* Dynamic ground shadow - smooth ellipse behind character */
 .actor > .shadow {
   position: absolute;
+  z-index: 0; /* Behind sprite (1) */
   /* Position below feet (actor is 32px tall, tile is 24px) */
   bottom: -2px;
   left: 50%;
@@ -53,14 +70,8 @@
   height: 6px;
   background: rgba(36, 23, 6, 0.1);
   border-radius: 50%;
-  /* Behind sprite */
-  z-index: 0;
   /* Allow clicks to pass through to parent .actor element */
   pointer-events: none;
-}
-
-.actor > .sprite {
-  z-index: 1;
 }
 
 /* ---------- Player ---------- */
@@ -455,7 +466,7 @@
   line-height: 12px;
   text-align: center;
   color: var(--level-normal);
-  z-index: 6; /* Above hp bar (z-index: 5) */
+  z-index: 3; /* Local to .actor stacking context - above hp bar (2) */
   z-index: 5;
 }
 
@@ -494,7 +505,7 @@
   background: rgba(0, 0, 0, 0.6);
   border-radius: 2px;
   overflow: hidden;
-  z-index: 5; /* Above sprite (z-index: 1) */
+  z-index: 2; /* Local to .actor stacking context - above sprite (1) */
 }
 
 .enemy-hp-fill {

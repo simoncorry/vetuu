@@ -10,11 +10,14 @@
 import { hasFlag } from './save.js';
 import { getNpcQuestMarker } from './quests.js';
 import { SPRITES } from './sprites.js';
+import { isRevealed } from './fog.js';
 
-// Rendering constants
-const TILE_SIZE = 24;          // Logical tile size (matches sprite/map data)
-const ZOOM_FACTOR = 1.5;       // Uniform scale for world + actors
-const SPRITE_HEIGHT = 32;      // Character sprites are taller than tiles
+// ============================================
+// RENDERING CONSTANTS (exported for use across modules)
+// ============================================
+export const TILE_SIZE = 24;          // Logical tile size (matches sprite/map data)
+export const ZOOM_FACTOR = 1.5;       // Uniform scale for world + actors
+const SPRITE_HEIGHT = 32;             // Character sprites are taller than tiles
 
 /**
  * Generate transform string for actor positioning
@@ -25,6 +28,104 @@ export function actorTransform(x, y) {
   const py = y * TILE_SIZE - (SPRITE_HEIGHT - TILE_SIZE); // -8px offset
   return `translate3d(${px}px, ${py}px, 0)`;
 }
+
+// ============================================
+// VIEWPORT & VISIBILITY HELPERS
+// ============================================
+
+/**
+ * Get current viewport info including zoom and camera position.
+ * Used for visibility calculations across modules.
+ * 
+ * @returns {{ vw: number, vh: number, camX: number, camY: number, zoom: number } | null}
+ */
+export function getViewportInfo() {
+  const viewportEl = document.getElementById('viewport');
+  const worldEl = document.getElementById('world');
+  if (!viewportEl || !worldEl) return null;
+  
+  const style = window.getComputedStyle(worldEl);
+  const matrix = new DOMMatrix(style.transform);
+  const zoom = matrix.a || ZOOM_FACTOR; // Scale factor from matrix, fallback to constant
+  
+  // transform: scale(Z) translate3d(-x, -y, 0) results in:
+  // m41 = -x * scale, m42 = -y * scale
+  return {
+    vw: viewportEl.clientWidth,
+    vh: viewportEl.clientHeight,
+    camX: -matrix.m41 / zoom, // Camera offset in logical pixels
+    camY: -matrix.m42 / zoom,
+    zoom
+  };
+}
+
+/**
+ * Check if an actor (enemy, NPC, etc.) is visible to the player.
+ * Checks both fog reveal status and viewport bounds.
+ * 
+ * @param {object} actor - Any entity with x, y coordinates
+ * @returns {boolean} True if actor is visible
+ */
+export function isActorVisible(actor) {
+  // Must not be in fog
+  if (!isRevealed(actor.x, actor.y)) {
+    return false;
+  }
+  
+  // Get viewport info
+  const vp = getViewportInfo();
+  if (!vp) return true; // Fallback to visible if no viewport
+  
+  const { vw, vh, camX, camY, zoom } = vp;
+  
+  // Calculate actor position in screen pixels
+  const screenX = (actor.x * TILE_SIZE - camX) * zoom;
+  const screenY = (actor.y * TILE_SIZE - camY) * zoom;
+  
+  // Buffer accounts for tile size (in screen pixels)
+  const buffer = TILE_SIZE * zoom;
+  
+  return screenX >= -buffer && 
+         screenX <= vw + buffer && 
+         screenY >= -buffer && 
+         screenY <= vh + buffer;
+}
+
+// ============================================
+// DEBUG HELPER
+// ============================================
+
+/**
+ * Debug helper for UI/visibility issues.
+ * Call from console: VETUU_UI_DEBUG()
+ */
+window.VETUU_UI_DEBUG = function() {
+  const vp = getViewportInfo();
+  if (!vp) {
+    console.log('[UI Debug] Viewport not available');
+    return;
+  }
+  
+  console.log('[UI Debug] Constants:', { TILE_SIZE, ZOOM_FACTOR });
+  console.log('[UI Debug] Viewport:', vp);
+  
+  // Sample actor rect (player)
+  const playerEl = document.getElementById('player');
+  if (playerEl) {
+    const rect = playerEl.getBoundingClientRect();
+    console.log('[UI Debug] Player screen rect:', rect);
+    console.log('[UI Debug] Player computed style:', {
+      transform: getComputedStyle(playerEl).transform,
+      zIndex: getComputedStyle(playerEl).zIndex
+    });
+  }
+  
+  // Check stacking context
+  const actors = document.querySelectorAll('.actor');
+  console.log(`[UI Debug] ${actors.length} actors in DOM`);
+  
+  return { TILE_SIZE, ZOOM_FACTOR, viewport: vp };
+};
 
 let viewport = null;
 let world = null;

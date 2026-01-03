@@ -33,8 +33,7 @@ import {
   ensureEffects,
   retreatPack
 } from './aiUtils.js';
-import { isRevealed } from './fog.js';
-import { actorTransform } from './render.js';
+import { actorTransform, isActorVisible, TILE_SIZE } from './render.js';
 import { SPRITES } from './sprites.js';
 
 // Enemy type configurations (Simplified - no weakness/resistance)
@@ -52,9 +51,7 @@ const ENEMY_CONFIGS = {
   ironcross_guard: { weapon: 'guard_rifle', aiType: 'guard', hp: 2.0 }
 };
 
-
-// Shared constants
-const TILE_SIZE = 24;           // Logical tile size (matches render.js)
+// Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;
 
 // ============================================
@@ -5364,52 +5361,10 @@ export function handleTargeting(action, data) {
   }
 }
 
-/**
- * Check if an enemy is visible to the player (in viewport and not fogged).
- */
-function isEnemyVisible(enemy) {
-  // Must not be in fog
-  if (!isRevealed(enemy.x, enemy.y)) {
-    return false;
-  }
-  
-  // Must be within viewport bounds
-  const viewport = document.getElementById('viewport');
-  const world = document.getElementById('world');
-  if (!viewport || !world) return true; // Fallback to visible if no viewport
-  
-  const vw = viewport.clientWidth;
-  const vh = viewport.clientHeight;
-  
-  // Get zoom factor from world transform (scale is first in transform: scale(Z) translate3d(...))
-  const style = window.getComputedStyle(world);
-  const matrix = new DOMMatrix(style.transform);
-  const zoom = matrix.a || 1.5; // Scale factor is in m11/a, default to 1.5 if not set
-  
-  // The translate is in logical (unscaled) pixels, but matrix gives us scaled values
-  // transform: scale(1.5) translate3d(-x, -y, 0) results in:
-  // m41 = -x * scale, m42 = -y * scale
-  const camX = -matrix.m41 / zoom; // Camera offset in logical pixels
-  const camY = -matrix.m42 / zoom;
-  
-  // Calculate enemy position in screen pixels
-  // Enemy logical position * tileSize gives logical pixel pos
-  // Subtract camera to get relative pos, then multiply by zoom for screen pos
-  const enemyScreenX = (enemy.x * TILE_SIZE - camX) * zoom;
-  const enemyScreenY = (enemy.y * TILE_SIZE - camY) * zoom;
-  
-  // Add buffer to account for tile size (in screen pixels)
-  const buffer = TILE_SIZE * zoom;
-  return enemyScreenX >= -buffer && 
-         enemyScreenX <= vw + buffer && 
-         enemyScreenY >= -buffer && 
-         enemyScreenY <= vh + buffer;
-}
-
 function cycleTarget() {
-  // Filter to enemies that are alive, visible, and not fogged
+  // Filter to enemies that are alive and visible (fog + viewport)
   const enemies = currentState.runtime.activeEnemies.filter(e => 
-    e.hp > 0 && isEnemyVisible(e)
+    e.hp > 0 && isActorVisible(e)
   );
   
   if (enemies.length === 0) {
@@ -5437,8 +5392,8 @@ function cycleFriendlyTarget() {
     if (npc.flags?.hidden) return false;
     // Skip NPCs with unmet flag requirements
     if (npc.requires?.flag && !currentState.flags?.[npc.requires.flag]) return false;
-    // Must be visible in viewport
-    return isNpcVisible(npc);
+    // Must be visible (fog + viewport check via render.js)
+    return isActorVisible(npc);
   });
   
   if (npcs.length === 0) {
@@ -5457,41 +5412,6 @@ function cycleFriendlyTarget() {
   const nextIndex = (currentIndex + 1) % npcs.length;
 
   selectNpcTarget(npcs[nextIndex]);
-}
-
-/**
- * Check if an NPC is visible to the player (in viewport and not fogged).
- */
-function isNpcVisible(npc) {
-  // Must not be in fog
-  if (!isRevealed(npc.x, npc.y)) {
-    return false;
-  }
-  
-  // Must be within viewport bounds
-  const viewport = document.getElementById('viewport');
-  const world = document.getElementById('world');
-  if (!viewport || !world) return true; // Fallback to visible if no viewport
-  
-  const vw = viewport.clientWidth;
-  const vh = viewport.clientHeight;
-  
-  // Get zoom factor from world transform
-  const style = window.getComputedStyle(world);
-  const matrix = new DOMMatrix(style.transform);
-  const zoom = matrix.a || 1.5;
-  
-  const camX = -matrix.m41 / zoom;
-  const camY = -matrix.m42 / zoom;
-  
-  const npcScreenX = (npc.x * TILE_SIZE - camX) * zoom;
-  const npcScreenY = (npc.y * TILE_SIZE - camY) * zoom;
-  
-  const buffer = TILE_SIZE * zoom;
-  return npcScreenX >= -buffer && 
-         npcScreenX <= vw + buffer && 
-         npcScreenY >= -buffer && 
-         npcScreenY <= vh + buffer;
 }
 
 function selectTarget(enemy) {

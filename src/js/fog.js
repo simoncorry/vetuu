@@ -3,6 +3,8 @@
  * Canvas-based fog rendering for performance on large maps
  */
 
+// Note: TILE_SIZE kept local to avoid circular import with render.js
+// (render.js imports isRevealed from this module)
 const TILE_SIZE = 24;
 const REVEAL_RADIUS = 8;
 const FOG_STORAGE_KEY = 'vetuu_fog_v2';
