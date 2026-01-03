@@ -121,21 +121,20 @@
 }
 
 /* Shadow bounce: subtle squash on footfall (50%), return to normal (0%/100%)
-   Uses CSS variables so sun position and facing direction are respected */
+   Uses CSS variables so sun position and facing direction are respected
+   Note: skewX has no 3D equivalent but is still GPU-composited in the transform chain */
 @keyframes shadow-bounce {
   0%, 100% { 
     transform: 
-      scaleY(var(--shadow-scale-y, 0.4)) 
-      scaleX(var(--shadow-scale-x, 1.1)) 
+      scale3d(var(--shadow-scale-x, 1.1), var(--shadow-scale-y, 0.4), 1) 
       skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset, 0deg))) 
-      translateY(2px); 
+      translate3d(0, 2px, 0); 
   }
   50% { 
     transform: 
-      scaleY(calc(var(--shadow-scale-y, 0.4) * 0.94)) 
-      scaleX(calc(var(--shadow-scale-x, 1.1) * 1.03)) 
+      scale3d(calc(var(--shadow-scale-x, 1.1) * 1.03), calc(var(--shadow-scale-y, 0.4) * 0.94), 1) 
       skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset, 0deg))) 
-      translateY(2px);
+      translate3d(0, 2px, 0);
   }
 }
 
@@ -242,8 +241,10 @@
   cursor: pointer;
   background: radial-gradient(circle, rgba(232, 93, 117, 0.3) 0%, transparent 70%);
   border: 2px dashed var(--danger);
-  box-shadow: 0 0 12px rgba(232, 93, 117, 0.5);
+  box-shadow: 0 0 16px rgba(232, 93, 117, 0.65);
+  /* GPU-friendly: use scale pulse instead of box-shadow animation */
   animation: corpse-beacon 1.5s ease-in-out infinite;
+  will-change: transform;
 }
 
 .corpse-marker::before {
@@ -268,9 +269,10 @@
   animation: corpse-arrow 1s ease-in-out infinite;
 }
 
+/* GPU-friendly: scale pulse instead of box-shadow animation */
 @keyframes corpse-beacon {
-  0%, 100% { box-shadow: 0 0 12px rgba(232, 93, 117, 0.5); }
-  50% { box-shadow: 0 0 20px rgba(232, 93, 117, 0.8); }
+  0%, 100% { transform: scale3d(1, 1, 1); }
+  50% { transform: scale3d(1.08, 1.08, 1); }
 }
 
 @keyframes corpse-arrow {
@@ -407,9 +409,9 @@
 }
 
 @keyframes enemy-death {
-  0% { opacity: 1; scale: 1; }
-  50% { opacity: 0.5; scale: 1.2; }
-  100% { opacity: 0; scale: 0; }
+  0% { opacity: 1; transform: scale3d(1, 1, 1); }
+  50% { opacity: 0.5; transform: scale3d(1.2, 1.2, 1); }
+  100% { opacity: 0; transform: scale3d(0, 0, 1); }
 }
 
 /* Enemy states */

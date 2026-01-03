@@ -33,8 +33,9 @@
 }
 
 @keyframes vuln-pulse {
-  0%, 100% { outline-width: 2px; }
-  50% { outline-width: 4px; }
+  /* Use transform scale instead of outline-width for GPU acceleration */
+  0%, 100% { transform: scale3d(1, 1, 1); }
+  50% { transform: scale3d(1.05, 1.05, 1); }
 }
 
 .is-immune {
@@ -117,12 +118,13 @@
 }
 
 @keyframes sense-flash {
+  /* Use transform scale and filter for GPU acceleration */
   0% {
-    outline-width: 5px;
+    transform: scale3d(1.1, 1.1, 1);
     filter: brightness(1.5) saturate(1.5);
   }
   100% {
-    outline-width: 3px;
+    transform: scale3d(1, 1, 1);
     filter: brightness(1) saturate(1);
   }
 }
