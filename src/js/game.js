@@ -1167,6 +1167,12 @@ function updatePlayerTorch(nightIntensity) {
   }
 }
 
+// Throttle lighting when player is stationary
+let lastLightingPlayerX = -1;
+let lastLightingPlayerY = -1;
+let lastLightingUpdate = 0;
+const LIGHTING_IDLE_INTERVAL = 100; // Update every 100ms when stationary (for flicker effects)
+
 function updateLighting() {
   if (!lightCtx || !lightCanvas) return;
   
@@ -1181,6 +1187,18 @@ function updateLighting() {
     lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
     return;
   }
+  
+  // Throttle updates when player is stationary (flicker effects still need updates, just less frequent)
+  const playerMoved = state.player.x !== lastLightingPlayerX || state.player.y !== lastLightingPlayerY;
+  const now = performance.now();
+  
+  if (!playerMoved && now - lastLightingUpdate < LIGHTING_IDLE_INTERVAL) {
+    return; // Skip this frame
+  }
+  
+  lastLightingPlayerX = state.player.x;
+  lastLightingPlayerY = state.player.y;
+  lastLightingUpdate = now;
   
   // Get viewport info for culling (use cached element)
   const viewWidth = cachedViewport?.clientWidth || 800;
@@ -1314,6 +1332,7 @@ function gameLoop(timestamp) {
 // ============================================
 const GUARD_PATROL_INTERVAL = 4000; // Move every 4 seconds (slower patrol)
 const guardLastMove = new Map();
+const guardEls = new Map(); // Cached guard element refs
 
 function tickGuardPatrol() {
   const now = Date.now();
@@ -1362,8 +1381,12 @@ function tickGuardPatrol() {
     // Update spatial index
     updateNpcPosition(npc, oldX, oldY, newX, newY);
     
-    // Update visual position (CSS handles the smooth transition)
-    const npcEl = document.querySelector(`[data-npc-id="${npc.id}"]`);
+    // Update visual position (use cached element ref)
+    let npcEl = guardEls.get(npc.id);
+    if (!npcEl) {
+      npcEl = document.querySelector(`[data-npc-id="${npc.id}"]`);
+      if (npcEl) guardEls.set(npc.id, npcEl);
+    }
     if (npcEl) {
       // Use idle speed for patrol (~2.5x normal = 700ms)
       npcEl.classList.add('idle');

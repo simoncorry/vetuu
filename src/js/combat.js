@@ -137,6 +137,23 @@ function getEnemyEl(enemyId) {
   return el;
 }
 
+// Map of npcId -> DOM element (for guards, medics, quest givers)
+const npcEls = new Map();
+
+/**
+ * Get cached NPC element, with fallback to querySelector
+ * @param {string|number} npcId - NPC ID
+ * @returns {HTMLElement|null}
+ */
+function getNpcEl(npcId) {
+  let el = npcEls.get(npcId);
+  if (!el) {
+    el = document.querySelector(`[data-npc-id="${npcId}"]`);
+    if (el) npcEls.set(npcId, el);
+  }
+  return el;
+}
+
 // Previous visual state cache for dirty-flag optimization
 // Map of enemyId -> { retreating, engaged, spawnImmune, passive }
 const enemyVisualState = new Map();
@@ -925,7 +942,7 @@ function handleGuardDeath(guard) {
   logCombat(`Ironcross Guard has fallen!`);
   
   // Visual feedback - mark guard as downed
-  const guardEl = document.querySelector(`[data-npc-id="${guard.id}"]`);
+  const guardEl = getNpcEl(guard.id);
   if (guardEl) {
     guardEl.classList.add('dying');
     guardEl.addEventListener('animationend', function handler() {
@@ -2060,16 +2077,26 @@ function executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config) {
  * This is the authoritative visual update function.
  * 
  * OPTIMIZATION: Uses cached DOM refs and dirty-flags to avoid redundant DOM writes.
+ * OPTIMIZATION: Skips enemies far from player (off-screen, no visual changes needed).
  */
+const VISUAL_UPDATE_RANGE = 25; // Only update visuals for enemies within this tile range
+
 function updateEnemyVisuals() {
   if (!currentState?.runtime?.activeEnemies) return;
   
   perfStart('enemy:updateVisuals');
   
   const t = nowMs();
+  const px = currentState.player.x;
+  const py = currentState.player.y;
   
   for (const enemy of currentState.runtime.activeEnemies) {
     if (enemy.hp <= 0) continue;
+    
+    // Skip distant enemies (they're off-screen, visual updates don't matter)
+    const dx = Math.abs(enemy.x - px);
+    const dy = Math.abs(enemy.y - py);
+    if (dx > VISUAL_UPDATE_RANGE || dy > VISUAL_UPDATE_RANGE) continue;
     
     // Use cached DOM reference
     const el = getEnemyEl(enemy.id);
@@ -5610,13 +5637,13 @@ export function selectNpcTarget(npc) {
   clearTarget();
   
   if (currentNpcTarget) {
-    const prevEl = document.querySelector(`[data-npc-id="${currentNpcTarget.id}"]`);
+    const prevEl = getNpcEl(currentNpcTarget.id);
     if (prevEl) prevEl.classList.remove('targeted');
   }
-
+  
   currentNpcTarget = npc;
 
-  const el = document.querySelector(`[data-npc-id="${npc.id}"]`);
+  const el = getNpcEl(npc.id);
   if (el) el.classList.add('targeted');
 
   updateTargetFrame();
@@ -5625,7 +5652,7 @@ export function selectNpcTarget(npc) {
 
 function clearNpcTarget() {
   if (currentNpcTarget) {
-    const el = document.querySelector(`[data-npc-id="${currentNpcTarget.id}"]`);
+    const el = getNpcEl(currentNpcTarget.id);
     if (el) el.classList.remove('targeted');
   }
   currentNpcTarget = null;
@@ -6357,15 +6384,24 @@ function tickAllEnemyEffects() {
   const enemies = currentState.runtime.activeEnemies;
   if (!enemies || enemies.length === 0) return;
   
+  const px = currentState.player.x;
+  const py = currentState.player.y;
+  
   for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
     if (enemy.hp <= 0) continue;
     
-    // Tick status effects
+    // Tick status effects (must happen for all enemies regardless of distance)
     tickEffects(enemy);
+    
+    // Skip visual updates for distant enemies (off-screen)
+    const dx = Math.abs(enemy.x - px);
+    const dy = Math.abs(enemy.y - py);
+    if (dx > VISUAL_UPDATE_RANGE || dy > VISUAL_UPDATE_RANGE) continue;
+    
     updateEnemyStatusEffects(enemy);
     
-    // Use cached DOM reference instead of querySelector
+    // Use cached DOM reference
     const el = enemyEls.get(enemy.id);
     if (!el) continue;
     
