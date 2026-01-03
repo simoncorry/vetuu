@@ -116,8 +116,8 @@
 }
 
 @keyframes walk-bob {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(0.969); } /* ~1px head movement on 32px sprite */
+  0%, 100% { transform: scale3d(1, 1, 1); }
+  50% { transform: scale3d(1, 0.969, 1); } /* ~1px head movement on 32px sprite */
 }
 
 /* Shadow bounce: subtle squash on footfall (50%), return to normal (0%/100%)
@@ -169,7 +169,7 @@
   height: 4px;
   background: var(--hp-color);
   border-radius: 2px;
-  transform: scaleX(calc(var(--player-hp-pct, 100) / 100));
+  transform: scale3d(calc(var(--player-hp-pct, 100) / 100), 1, 1);
   transform-origin: left center;
   transition: transform 0.3s ease;
   will-change: transform;
@@ -503,7 +503,7 @@
   height: 100%;
   width: 100%;
   background: var(--danger);
-  transform: scaleX(calc(var(--hp-pct, 100) / 100));
+  transform: scale3d(calc(var(--hp-pct, 100) / 100), 1, 1);
   transform-origin: left center;
   transition: transform 0.2s ease;
   will-change: transform;

@@ -55,15 +55,15 @@
   position: absolute;
   top: -18px;
   left: 50%;
-  transform: translate3d(-50%, 0, 0) scaleX(-1); /* Running away */
+  transform: translate3d(-50%, 0, 0) scale3d(-1, 1, 1); /* Running away */
   font-size: 14px;
   animation: retreat-bounce 0.4s ease-in-out infinite;
   will-change: transform;
 }
 
 @keyframes retreat-bounce {
-  0%, 100% { transform: translate3d(-50%, 0, 0) scaleX(-1); }
-  50% { transform: translate3d(-50%, -3px, 0) scaleX(-1); }
+  0%, 100% { transform: translate3d(-50%, 0, 0) scale3d(-1, 1, 1); }
+  50% { transform: translate3d(-50%, -3px, 0) scale3d(-1, 1, 1); }
 }
 
 /* Spawn immunity visual - brief invulnerability */
