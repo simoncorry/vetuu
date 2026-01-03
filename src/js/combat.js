@@ -6420,27 +6420,39 @@ function tickAllEnemyEffects() {
 // ============================================
 // UI UPDATES
 // ============================================
+// Cached player health bar elements
+let playerHealthEls = null;
+
+function getPlayerHealthEls() {
+  if (!playerHealthEls) {
+    playerHealthEls = {
+      fill: document.getElementById('player-hp-fill'),
+      text: document.getElementById('player-hp-text'),
+      mainFill: document.getElementById('hp-fill'),
+      mainText: document.getElementById('hp-text'),
+      playerEl: document.getElementById('player'),
+    };
+  }
+  return playerHealthEls;
+}
+
 function updatePlayerHealthBar() {
   const player = currentState.player;
   const max = getMaxHP(player);
   const pct = getHPPercent(player);
+  const els = getPlayerHealthEls();
   
   // Update player frame (portrait)
-  const fill = document.getElementById('player-hp-fill');
-  const text = document.getElementById('player-hp-text');
-  if (fill) fill.style.setProperty('--hp-pct', pct);
-  if (text) text.textContent = `${player.hp}/${max}`;
+  if (els.fill) els.fill.style.setProperty('--hp-pct', pct);
+  if (els.text) els.text.textContent = `${player.hp}/${max}`;
 
   // Update main HUD bar
-  const mainFill = document.getElementById('hp-fill');
-  const mainText = document.getElementById('hp-text');
-  if (mainFill) mainFill.style.setProperty('--pct', pct);
-  if (mainText) mainText.textContent = `${player.hp}/${max}`;
+  if (els.mainFill) els.mainFill.style.setProperty('--pct', pct);
+  if (els.mainText) els.mainText.textContent = `${player.hp}/${max}`;
   
   // Update player sprite health bar (above character)
-  const playerEl = document.getElementById('player');
-  if (playerEl) {
-    playerEl.style.setProperty('--player-hp-pct', pct);
+  if (els.playerEl) {
+    els.playerEl.style.setProperty('--player-hp-pct', pct);
   }
 }
 
@@ -6459,20 +6471,33 @@ function updatePlayerSenseBar() {
   if (mainText) mainText.textContent = `${player.sense}/${player.maxSense}`;
 }
 
+// Cached target frame elements
+let targetFrameEls = null;
+
+function getTargetFrameEls() {
+  if (!targetFrameEls) {
+    const frame = document.getElementById('target-frame');
+    if (!frame) return null;
+    targetFrameEls = {
+      frame,
+      name: frame.querySelector('.frame-name'),
+      level: frame.querySelector('.frame-level'),
+      hpFill: frame.querySelector('.frame-hp-fill'),
+      hpText: frame.querySelector('.frame-hp-text'),
+    };
+  }
+  return targetFrameEls;
+}
+
 function updateTargetFrame() {
-  const frame = document.getElementById('target-frame');
-  if (!frame) return;
+  const els = getTargetFrameEls();
+  if (!els) return;
+  const { frame, name: nameEl, level: levelEl, hpFill, hpText } = els;
 
   // Check for enemy target
   if (currentTarget) {
-    frame.classList.remove('hidden');
-    frame.classList.remove('friendly', 'object');
+    frame.classList.remove('hidden', 'friendly', 'object');
     frame.classList.add('hostile');
-
-    const nameEl = frame.querySelector('.frame-name');
-    const levelEl = frame.querySelector('.frame-level');
-    const hpFill = frame.querySelector('.frame-hp-fill');
-    const hpText = frame.querySelector('.frame-hp-text');
 
     const targetMax = getMaxHP(currentTarget);
     if (nameEl) nameEl.textContent = currentTarget.name;
@@ -6484,14 +6509,8 @@ function updateTargetFrame() {
 
   // Check for NPC target
   if (currentNpcTarget) {
-    frame.classList.remove('hidden');
-    frame.classList.remove('hostile', 'object');
+    frame.classList.remove('hidden', 'hostile', 'object');
     frame.classList.add('friendly');
-
-    const nameEl = frame.querySelector('.frame-name');
-    const levelEl = frame.querySelector('.frame-level');
-    const hpFill = frame.querySelector('.frame-hp-fill');
-    const hpText = frame.querySelector('.frame-hp-text');
 
     if (nameEl) nameEl.textContent = currentNpcTarget.name;
     
@@ -6520,14 +6539,8 @@ function updateTargetFrame() {
 
   // Check for object target
   if (currentObjectTarget) {
-    frame.classList.remove('hidden');
-    frame.classList.remove('hostile', 'friendly');
+    frame.classList.remove('hidden', 'hostile', 'friendly');
     frame.classList.add('object');
-
-    const nameEl = frame.querySelector('.frame-name');
-    const levelEl = frame.querySelector('.frame-level');
-    const hpFill = frame.querySelector('.frame-hp-fill');
-    const hpText = frame.querySelector('.frame-hp-text');
 
     // Object name from interact label or type
     const objName = currentObjectTarget.interact?.label || 

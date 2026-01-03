@@ -315,60 +315,81 @@ export function showToast(message, type = '') {
 // ============================================
 // HUD UPDATE
 // ============================================
+// Cached HUD element references (populated on first updateHUD call)
+let hudEls = null;
+
+function getHudEls() {
+  if (!hudEls) {
+    hudEls = {
+      hpFill: document.getElementById('hp-fill'),
+      hpText: document.getElementById('hp-text'),
+      senseFill: document.getElementById('sense-fill'),
+      senseText: document.getElementById('sense-text'),
+      atkVal: document.getElementById('atk-val'),
+      defVal: document.getElementById('def-val'),
+      luckVal: document.getElementById('luck-val'),
+      levelVal: document.getElementById('level-val'),
+      xpFill: document.getElementById('xp-fill'),
+      xpText: document.getElementById('xp-text'),
+      xpBarFill: document.getElementById('xp-bar-fill'),
+      xpBarLevel: document.getElementById('xp-bar-level'),
+      xpBarProgress: document.getElementById('xp-bar-progress'),
+      playerHpFill: document.getElementById('player-hp-fill'),
+      playerHpText: document.getElementById('player-hp-text'),
+      playerSenseFill: document.getElementById('player-sense-fill'),
+      playerSenseText: document.getElementById('player-sense-text'),
+      playerFrameLevel: document.getElementById('player-frame-level'),
+      playerEl: document.getElementById('player'),
+    };
+  }
+  return hudEls;
+}
+
 export function updateHUD() {
   const p = state.player;
   const maxHP = getMaxHP(p);
   const hpPct = getHPPercent(p);
   const sensePct = p.maxSense > 0 ? (p.sense / p.maxSense) * 100 : 0;
+  const els = getHudEls();
 
   // Main HUD
-  document.getElementById('hp-fill')?.style.setProperty('--pct', hpPct);
-  document.getElementById('hp-text').textContent = `${p.hp}/${maxHP}`;
-  document.getElementById('sense-fill')?.style.setProperty('--pct', sensePct);
-  document.getElementById('sense-text').textContent = `${p.sense}/${p.maxSense}`;
-  document.getElementById('atk-val').textContent = p.atk;
-  document.getElementById('def-val').textContent = p.def;
-  document.getElementById('luck-val').textContent = p.luck;
-  document.getElementById('level-val').textContent = p.level;
+  els.hpFill?.style.setProperty('--pct', hpPct);
+  if (els.hpText) els.hpText.textContent = `${p.hp}/${maxHP}`;
+  els.senseFill?.style.setProperty('--pct', sensePct);
+  if (els.senseText) els.senseText.textContent = `${p.sense}/${p.maxSense}`;
+  if (els.atkVal) els.atkVal.textContent = p.atk;
+  if (els.defVal) els.defVal.textContent = p.def;
+  if (els.luckVal) els.luckVal.textContent = p.luck;
+  if (els.levelVal) els.levelVal.textContent = p.level;
 
   // XP progress calculation - works with generated XP table
   const isMaxLevel = p.level >= LEVEL_CAP;
-  const currentLevelXP = XP_TABLE[p.level] || 0;       // XP needed to reach current level
-  const nextLevelXP = XP_TABLE[p.level + 1] || currentLevelXP; // XP needed to reach next level
-  const xpIntoLevel = p.xp - currentLevelXP;          // XP earned since reaching this level
-  const xpNeededForLevel = nextLevelXP - currentLevelXP; // XP needed for this level
+  const currentLevelXP = XP_TABLE[p.level] || 0;
+  const nextLevelXP = XP_TABLE[p.level + 1] || currentLevelXP;
+  const xpIntoLevel = p.xp - currentLevelXP;
+  const xpNeededForLevel = nextLevelXP - currentLevelXP;
   const xpProgress = isMaxLevel ? 100 : (xpNeededForLevel > 0 ? (xpIntoLevel / xpNeededForLevel) * 100 : 100);
   
-  document.getElementById('xp-fill')?.style.setProperty('--pct', Math.max(0, Math.min(100, xpProgress)));
-  document.getElementById('xp-text').textContent = isMaxLevel ? 'MAX' : `${p.xp}/${nextLevelXP}`;
+  els.xpFill?.style.setProperty('--pct', Math.max(0, Math.min(100, xpProgress)));
+  if (els.xpText) els.xpText.textContent = isMaxLevel ? 'MAX' : `${p.xp}/${nextLevelXP}`;
 
   // WoW-style XP bar (bottom bar)
-  const xpBarFill = document.getElementById('xp-bar-fill');
-  const xpBarLevel = document.getElementById('xp-bar-level');
-  const xpBarProgress = document.getElementById('xp-bar-progress');
-  if (xpBarFill) xpBarFill.style.setProperty('--xp-pct', Math.max(0, Math.min(100, xpProgress)));
-  if (xpBarLevel) xpBarLevel.textContent = `Lv.${p.level}`;
-  if (xpBarProgress) {
-    xpBarProgress.textContent = isMaxLevel ? 'MAX LEVEL' : `${xpIntoLevel} / ${xpNeededForLevel} XP`;
+  if (els.xpBarFill) els.xpBarFill.style.setProperty('--xp-pct', Math.max(0, Math.min(100, xpProgress)));
+  if (els.xpBarLevel) els.xpBarLevel.textContent = `Lv.${p.level}`;
+  if (els.xpBarProgress) {
+    els.xpBarProgress.textContent = isMaxLevel ? 'MAX LEVEL' : `${xpIntoLevel} / ${xpNeededForLevel} XP`;
   }
 
   // Player frame
-  const playerHpFill = document.getElementById('player-hp-fill');
-  const playerHpText = document.getElementById('player-hp-text');
-  const playerSenseFill = document.getElementById('player-sense-fill');
-  const playerSenseText = document.getElementById('player-sense-text');
-  const playerFrameLevel = document.getElementById('player-frame-level');
-
-  if (playerHpFill) playerHpFill.style.setProperty('--hp-pct', hpPct);
-  if (playerHpText) playerHpText.textContent = `${p.hp}/${maxHP}`;
-  if (playerSenseFill) playerSenseFill.style.setProperty('--sense-pct', sensePct);
-  if (playerSenseText) playerSenseText.textContent = `${p.sense}/${p.maxSense}`;
-  if (playerFrameLevel) playerFrameLevel.textContent = p.level;
+  if (els.playerHpFill) els.playerHpFill.style.setProperty('--hp-pct', hpPct);
+  if (els.playerHpText) els.playerHpText.textContent = `${p.hp}/${maxHP}`;
+  if (els.playerSenseFill) els.playerSenseFill.style.setProperty('--sense-pct', sensePct);
+  if (els.playerSenseText) els.playerSenseText.textContent = `${p.sense}/${p.maxSense}`;
+  if (els.playerFrameLevel) els.playerFrameLevel.textContent = p.level;
 
   // Player sprite health bar
-  const playerEl = document.getElementById('player');
-  if (playerEl) {
-    playerEl.style.setProperty('--player-hp-pct', hpPct);
+  if (els.playerEl) {
+    els.playerEl.style.setProperty('--player-hp-pct', hpPct);
   }
 
   updateLocation();
