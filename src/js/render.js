@@ -410,11 +410,8 @@ export function updateCamera(state, duration = null) {
   const x = Math.max(0, Math.min(targetX, worldW - (vw / ZOOM_FACTOR)));
   const y = Math.max(0, Math.min(targetY, worldH - (vh / ZOOM_FACTOR)));
 
-  // Use matrix3d for better Safari compatibility
-  // matrix3d(scaleX, 0, 0, 0, 0, scaleY, 0, 0, 0, 0, 1, 0, translateX, translateY, 0, 1)
-  const tx = -x * ZOOM_FACTOR;
-  const ty = -y * ZOOM_FACTOR;
-  world.style.transform = `matrix3d(${ZOOM_FACTOR},0,0,0,0,${ZOOM_FACTOR},0,0,0,0,1,0,${tx},${ty},0,1)`;
+  // Use scale3d + translate3d for consistent 3D transform handling in Safari
+  world.style.transform = `scale3d(${ZOOM_FACTOR}, ${ZOOM_FACTOR}, 1) translate3d(${-x}px, ${-y}px, 0)`;
 }
 
 // ============================================
