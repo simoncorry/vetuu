@@ -433,12 +433,14 @@
 
 .enemy.dying {
   animation: enemy-death 0.5s ease forwards;
+  pointer-events: none; /* Prevent interaction during death */
 }
 
+/* Use 'scale' property instead of 'transform: scale' to avoid overriding position */
 @keyframes enemy-death {
-  0% { opacity: 1; transform: scale3d(1, 1, 1); }
-  50% { opacity: 0.5; transform: scale3d(1.2, 1.2, 1); }
-  100% { opacity: 0; transform: scale3d(0, 0, 1); }
+  0% { opacity: 1; scale: 1; }
+  50% { opacity: 0.5; scale: 1.2; }
+  100% { opacity: 0; scale: 0; }
 }
 
 /* Teleport snap - disable transitions for instant position change */

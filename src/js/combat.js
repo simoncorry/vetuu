@@ -5612,7 +5612,16 @@ async function handleEnemyDeath(enemy) {
   const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (el) {
     el.classList.add('dying');
-    el.addEventListener('animationend', () => el.remove(), { once: true });
+    
+    // Remove on animation end, with fallback timeout in case animation doesn't fire
+    const removeEl = () => {
+      if (el.parentNode) el.remove();
+    };
+    el.addEventListener('animationend', removeEl, { once: true });
+    
+    // Fallback: force remove after 600ms if animationend didn't fire
+    // (animation is 500ms, so 600ms gives some buffer)
+    setTimeout(removeEl, 600);
   }
 
   if (currentTarget?.id === enemy.id) {
