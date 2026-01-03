@@ -68,11 +68,9 @@ export function initMovement(gameState, callbacks = {}) {
   
   // Initial position (no animation)
   if (playerEl && state?.player) {
+    visualX = state.player.x;
+    visualY = state.player.y;
     setPlayerPosition(state.player.x, state.player.y, false);
-    // Restore CSS transition after initial placement
-    requestAnimationFrame(() => {
-      if (playerEl) playerEl.style.transition = '';
-    });
   }
   
   // Start the movement tick
@@ -195,6 +193,10 @@ function attemptMove(dx, dy) {
   return true;
 }
 
+// Visual position for smooth animation (separate from logical position)
+let visualX = 0;
+let visualY = 0;
+
 function startMove(targetX, targetY) {
   isMoving = true;
   
@@ -219,24 +221,29 @@ function startMove(targetX, targetY) {
     duration *= DIAGONAL_MULTIPLIER;
   }
   
+  // Store start position for animation
+  const startX = state.player.x;
+  const startY = state.player.y;
+  
   // Update logical position immediately
   state.player.x = targetX;
   state.player.y = targetY;
   
-  // Update CSS transition duration and add moving class for walk animation
+  // Setup animation - disable CSS transition, we'll animate manually
   if (playerEl) {
     playerEl.classList.add('moving');
-    playerEl.style.transitionDuration = `${duration}ms`;
-    // Set final position - CSS transition handles the animation
-    playerEl.style.transform = actorTransform(targetX, targetY);
+    playerEl.style.transition = 'none';
   }
   
-  // Notify game to update camera simultaneously (both transitions start together)
-  // Pass duration so camera can match player speed
+  // Notify game to update camera simultaneously
   onMoveStart(targetX, targetY, duration);
   
-  // Track move completion via timer (matches CSS transition)
+  // Track move with animation data
   currentTween = {
+    startX: startX,
+    startY: startY,
+    targetX: targetX,
+    targetY: targetY,
     duration: duration,
     elapsed: 0
   };
@@ -245,11 +252,22 @@ function startMove(targetX, targetY) {
 function updateTween(deltaTime) {
   if (!currentTween) return;
   
-  // Just track elapsed time - CSS handles the actual animation
   currentTween.elapsed += deltaTime;
   
+  // Calculate progress (0 to 1)
+  const progress = Math.min(currentTween.elapsed / currentTween.duration, 1);
+  
+  // Linear interpolation for visual position
+  visualX = currentTween.startX + (currentTween.targetX - currentTween.startX) * progress;
+  visualY = currentTween.startY + (currentTween.targetY - currentTween.startY) * progress;
+  
+  // Update player visual position directly (no CSS transition)
+  if (playerEl) {
+    playerEl.style.transform = actorTransform(visualX, visualY);
+  }
+  
   // Movement complete when duration elapsed
-  if (currentTween.elapsed >= currentTween.duration) {
+  if (progress >= 1) {
     completeMove();
   }
 }
@@ -621,12 +639,12 @@ export function setPlayerPosition(x, y, animate = true) {
       state.player.x = x;
       state.player.y = y;
     }
-    // Disable transition for instant position set
+    // Update visual position for instant placement
+    visualX = x;
+    visualY = y;
+    // No CSS transition needed - we animate manually
     playerEl.style.transition = 'none';
     playerEl.style.transform = actorTransform(x, y);
-    // Force reflow then restore transition
-    playerEl.offsetHeight;
-    playerEl.style.transition = '';
   }
 }
 
