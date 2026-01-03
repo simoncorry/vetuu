@@ -94,6 +94,10 @@
   width: 220px;
   min-width: 150px;
   min-height: 160px;
+  /* GPU layer hints for smooth drag/resize */
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
 }
 
 #minimap-container.hidden {

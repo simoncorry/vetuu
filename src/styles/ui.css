@@ -13,9 +13,10 @@
   border-radius: 6px;
   font-family: var(--font-display);
   z-index: 1000;
-  /* GPU-accelerated for smooth drag */
+  /* GPU layer hints */
   will-change: transform;
   backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
 }
 
 .ui-panel.hidden {
@@ -373,6 +374,10 @@
   border-radius: 6px;
   /* Match minimap width */
   width: 220px;
+  /* GPU layer hints for smooth drag/resize */
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
   min-width: 150px;
   max-width: 400px;
   font-family: var(--font-display);
@@ -466,6 +471,10 @@
   border: 2px solid var(--frame-border);
   border-radius: 8px;
   padding: 0.5rem;
+  /* GPU layer hints */
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
   min-width: 200px;
   z-index: 1100;
   /* GPU-accelerated for smooth drag */
