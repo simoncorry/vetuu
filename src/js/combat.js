@@ -5619,9 +5619,8 @@ async function handleEnemyDeath(enemy) {
     };
     el.addEventListener('animationend', removeEl, { once: true });
     
-    // Fallback: force remove after 600ms if animationend didn't fire
-    // (animation is 500ms, so 600ms gives some buffer)
-    setTimeout(removeEl, 600);
+    // Fallback: force remove after 100ms if animationend didn't fire
+    setTimeout(removeEl, 100);
   }
 
   if (currentTarget?.id === enemy.id) {

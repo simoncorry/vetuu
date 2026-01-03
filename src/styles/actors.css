@@ -432,7 +432,7 @@
 }
 
 .enemy.dying {
-  animation: enemy-death 0.5s ease forwards;
+  animation: enemy-death 0.1s ease forwards;
   pointer-events: none; /* Prevent interaction during death */
 }
 
