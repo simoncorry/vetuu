@@ -111,7 +111,7 @@ export function loadFlags() {
 }
 
 export function hasFlag(state, flag) {
-  return state.flags[flag] === true;
+  return state?.flags?.[flag] === true;
 }
 
 // ============================================

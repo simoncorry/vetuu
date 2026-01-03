@@ -555,7 +555,7 @@ function bootstrapSpawns() {
   
   for (const spawner of loadedSpawners) {
     // Check requirements (e.g., Act 3)
-    if (spawner.requires?.flag && !hasFlag(spawner.requires.flag)) {
+    if (spawner.requires?.flag && !hasFlag(currentState, spawner.requires.flag)) {
       skippedFlag++;
       continue;
     }
@@ -1334,7 +1334,7 @@ function spawnDirectorTick() {
   // Check each spawner's slots for respawn
   for (const spawner of loadedSpawners) {
     // Check requirements (e.g., Act 3)
-    if (spawner.requires?.flag && !hasFlag(spawner.requires.flag)) continue;
+    if (spawner.requires?.flag && !hasFlag(currentState, spawner.requires.flag)) continue;
     
     // For packs: check if pack can respawn (all members dead + timer)
     if (spawner.kind === 'pack') {
