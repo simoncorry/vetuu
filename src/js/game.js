@@ -747,20 +747,29 @@ function onMoveComplete(x, y) {
   // Check for pending interaction (from double-click or E key on target)
   if (state.runtime.pendingInteraction) {
     const { type, target } = state.runtime.pendingInteraction;
+    console.log('[Game] Processing pendingInteraction:', type, target?.name || target?.type, 'at', target?.x, target?.y);
+    console.log('[Game] Player at:', x, y);
     state.runtime.pendingInteraction = null;
     
     // Check if we're adjacent to the target
     const dx = Math.abs(x - target.x);
     const dy = Math.abs(y - target.y);
+    console.log('[Game] Distance to target - dx:', dx, 'dy:', dy, '| adjacent:', dx <= 1 && dy <= 1);
     if (dx <= 1 && dy <= 1) {
       // Trigger the interaction
       if (type === 'npc' && target.dialogueRoot) {
+        console.log('[Game] Showing dialogue for NPC:', target.name, 'root:', target.dialogueRoot);
         showDialogue(state, target.dialogueRoot, target);
         updateQuestProgress(state, 'talk', { entityId: target.id });
         updateQuestProgress(state, 'return', { entityId: target.id });
+      } else if (type === 'npc' && !target.dialogueRoot) {
+        console.log('[Game] NPC has no dialogueRoot:', target.name);
       } else if (type === 'object' && target.interact) {
+        console.log('[Game] Handling object interaction:', target.type);
         handleObjectInteractInternal(target);
       }
+    } else {
+      console.log('[Game] NOT adjacent to target, skipping interaction');
     }
   }
   

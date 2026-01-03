@@ -270,12 +270,15 @@ function isDoubleClick(x, y) {
   const timeDiff = now - lastClickTime;
   const dist = Math.abs(x - lastClickX) + Math.abs(y - lastClickY);
   
+  const isDouble = timeDiff < DOUBLE_CLICK_MS && dist <= DOUBLE_CLICK_DIST;
+  console.log('[Input] isDoubleClick check - timeDiff:', timeDiff, 'ms, dist:', dist, 'tiles, result:', isDouble);
+  
   // Update for next check
   lastClickTime = now;
   lastClickX = x;
   lastClickY = y;
   
-  return timeDiff < DOUBLE_CLICK_MS && dist <= DOUBLE_CLICK_DIST;
+  return isDouble;
 }
 
 function onLeftClick(e, forceDoubleClick = false) {
@@ -293,10 +296,13 @@ function onLeftClick(e, forceDoubleClick = false) {
   
   // Use forced double-click (from double-tap) or check timing-based double-click
   const doubleClick = forceDoubleClick || isDoubleClick(x, y);
+  
+  console.log('[Input] Click at tile', x, y, '| doubleClick:', doubleClick, '| forced:', forceDoubleClick);
 
   // Check for enemy at click location
   const enemy = findEnemyAt(state, x, y);
   if (enemy) {
+    console.log('[Input] Found enemy:', enemy.name, 'at', enemy.x, enemy.y, '| action:', doubleClick ? 'ATTACK' : 'select');
     if (doubleClick) {
       // Double-click: move to and auto-attack
       targetCallback('attack', enemy);
@@ -310,6 +316,7 @@ function onLeftClick(e, forceDoubleClick = false) {
   // Check for NPC at click location
   const npc = findNpcAt(state, x, y);
   if (npc) {
+    console.log('[Input] Found NPC:', npc.name, 'at', npc.x, npc.y, '| action:', doubleClick ? 'INTERACT' : 'select');
     if (doubleClick) {
       // Double-click: move to and interact (use NPC's actual coords, not click coords)
       targetCallback('selectNpc', npc);
@@ -324,6 +331,7 @@ function onLeftClick(e, forceDoubleClick = false) {
   // Check for interactable object
   const obj = findObjectAt(state, x, y);
   if (obj?.interact) {
+    console.log('[Input] Found object:', obj.type, 'at', obj.x, obj.y, '| action:', doubleClick ? 'INTERACT' : 'select');
     if (doubleClick) {
       // Double-click: move to and interact (use object's actual coords, not click coords)
       targetCallback('selectObject', obj);
@@ -334,6 +342,8 @@ function onLeftClick(e, forceDoubleClick = false) {
     }
     return;
   }
+  
+  console.log('[Input] No entity found at', x, y, '- pathing to empty tile');
 
   // Path to empty tile - cancel move-to-range pursuit, but keep auto-attack for kiting
   cancelCombatPursuit();

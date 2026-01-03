@@ -5405,13 +5405,16 @@ export function handleTargeting(action, data) {
     case 'selectObject': selectObjectTarget(data); break;
     case 'clear': clearTarget(); break;
     case 'attack': 
+      console.log('[Combat] handleTargeting attack - data:', data?.name, 'hp:', data?.hp);
       // If enemy data provided, select it first then start auto-attack
       if (data && data.hp > 0) {
         selectTarget(data);
+        console.log('[Combat] Selected target:', currentTarget?.name);
       }
       if (currentTarget) {
         // Set persistent combat intent and try to execute
         const result = setAutoAttackIntent(currentTarget);
+        console.log('[Combat] setAutoAttackIntent result:', result);
         if (result.success) {
           autoAttackEnabled = true;
           inCombat = true;
@@ -5421,6 +5424,8 @@ export function handleTargeting(action, data) {
           logCombat(result.reason === 'retreating' ? 'Target is retreating.' : 'Invalid target.');
           clearTarget();
         }
+      } else {
+        console.log('[Combat] No currentTarget after selection attempt');
       }
       break;
     case 'special': playerSpecial(); break;
@@ -5607,29 +5612,38 @@ function clearObjectTarget() {
  */
 async function handleInteractWith(data) {
   const { type, target, x, y } = data;
+  console.log('[Combat] handleInteractWith:', type, target?.name || target?.type, 'at', x, y);
   
   // Import movement function
   const { createPathTo } = await import('./movement.js');
   
   // Path to the target
-  createPathTo(x, y, true);
+  const pathResult = createPathTo(x, y, true);
+  console.log('[Combat] createPathTo result:', pathResult);
   
   // Store pending interaction
   currentState.runtime.pendingInteraction = { type, target };
+  console.log('[Combat] Set pendingInteraction:', type, target?.name || target?.type);
 }
 
 /**
  * Handle E key - move to and interact with current friendly target.
  */
 async function handleInteractWithCurrentTarget() {
+  console.log('[Combat] handleInteractWithCurrentTarget - NPC:', currentNpcTarget?.name, 'Object:', currentObjectTarget?.type);
+  
   if (currentNpcTarget) {
     const { createPathTo } = await import('./movement.js');
     createPathTo(currentNpcTarget.x, currentNpcTarget.y, true);
     currentState.runtime.pendingInteraction = { type: 'npc', target: currentNpcTarget };
+    console.log('[Combat] E key: pathing to NPC', currentNpcTarget.name, 'at', currentNpcTarget.x, currentNpcTarget.y);
   } else if (currentObjectTarget) {
     const { createPathTo } = await import('./movement.js');
     createPathTo(currentObjectTarget.x, currentObjectTarget.y, true);
     currentState.runtime.pendingInteraction = { type: 'object', target: currentObjectTarget };
+    console.log('[Combat] E key: pathing to object', currentObjectTarget.type, 'at', currentObjectTarget.x, currentObjectTarget.y);
+  } else {
+    console.log('[Combat] E key: No target selected');
   }
 }
 

@@ -376,13 +376,18 @@ function handleKeyUp(e) {
 export function createPathTo(targetX, targetY, shouldInteract = false) {
   cancelPath();
   
-  if (!state) return false;
+  if (!state) {
+    console.log('[Movement] createPathTo: No state!');
+    return false;
+  }
   
   const startX = state.player.x;
   const startY = state.player.y;
+  console.log('[Movement] createPathTo:', startX, startY, '->', targetX, targetY, '| interact:', shouldInteract);
   
   // Already at destination
   if (startX === targetX && startY === targetY) {
+    console.log('[Movement] Already at destination');
     if (shouldInteract) {
       onInteract();
       // Also trigger onMoveComplete to process pendingInteraction
@@ -398,12 +403,19 @@ export function createPathTo(targetX, targetY, shouldInteract = false) {
   if (shouldInteract) {
     // Path to adjacent tile for interaction
     const adj = findAdjacentWalkable(targetX, targetY, startX, startY);
-    if (!adj) return false;
+    console.log('[Movement] Adjacent walkable tile:', adj);
+    if (!adj) {
+      console.log('[Movement] No adjacent walkable tile found!');
+      return false;
+    }
     destX = adj.x;
     destY = adj.y;
     
     // Already adjacent?
-    if (Math.abs(targetX - startX) + Math.abs(targetY - startY) <= 1) {
+    const manhattanDist = Math.abs(targetX - startX) + Math.abs(targetY - startY);
+    console.log('[Movement] Manhattan distance to target:', manhattanDist);
+    if (manhattanDist <= 1) {
+      console.log('[Movement] Already adjacent - triggering interaction');
       onInteract();
       // Also trigger onMoveComplete to process pendingInteraction
       onMoveComplete(startX, startY);
