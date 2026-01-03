@@ -958,6 +958,8 @@ function guardAttack(guard, enemy) {
 // ============================================
 // COMBAT TICK (100ms intervals)
 // ============================================
+let lastUIUpdateTick = 0; // Throttle UI updates to every 2nd tick
+
 function startCombatTick() {
   if (combatTickInterval) return;
 
@@ -968,12 +970,18 @@ function startCombatTick() {
 
     // Use performance.now() for all simulation timing
     const now = nowMs();
+    lastUIUpdateTick++;
 
     // Update player cooldowns (weapon abilities)
     for (const key of Object.keys(actionCooldowns)) {
       if (actionCooldowns[key] > 0) actionCooldowns[key] -= 100;
     }
-    updateCooldownUI();
+    
+    // Throttle UI updates to every 200ms (every 2nd tick)
+    if (lastUIUpdateTick >= 2) {
+      updateCooldownUI();
+      lastUIUpdateTick = 0;
+    }
     
     // Update utility cooldowns (sprint, heal)
     tickUtilityCooldowns(100);
@@ -990,19 +998,24 @@ function startCombatTick() {
     // Process regeneration
     processRegeneration(now);
 
-    // Process each active enemy
-    perfStart('combat:enemyAI');
-    for (const enemy of currentState.runtime.activeEnemies) {
-      if (enemy.hp <= 0) continue;
-      processEnemyAI(enemy, now);
+    // Process each active enemy (only if there are enemies to process)
+    const enemies = currentState.runtime.activeEnemies;
+    if (enemies.length > 0) {
+      perfStart('combat:enemyAI');
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        if (enemy.hp > 0) {
+          processEnemyAI(enemy, now);
+        }
+      }
+      perfEnd('combat:enemyAI');
+
+      // Check guard intercepts (only relevant when enemies exist)
+      checkGuardIntercept();
+
+      // Tick status effects and update visuals
+      tickAllEnemyEffects();
     }
-    perfEnd('combat:enemyAI');
-
-    // Check guard intercepts
-    checkGuardIntercept();
-
-    // Tick status effects and update visuals
-    tickAllEnemyEffects();
 
     // Respawning is handled by spawnDirector.js
     
@@ -6539,42 +6552,57 @@ function updateActionBarState() {
   }
 }
 
+// Cached slot elements for cooldown UI (avoids querySelector every tick)
+const cachedSlots = new Map(); // slotNum -> { slot, overlay, timer }
+
+function getCachedSlot(slotNum) {
+  if (!cachedSlots.has(slotNum)) {
+    const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
+    if (slot) {
+      cachedSlots.set(slotNum, { slot, overlay: null, timer: null });
+    }
+  }
+  return cachedSlots.get(slotNum);
+}
+
 function updateCooldownUI() {
   const weapon = WEAPONS[currentWeapon];
   if (!weapon) return;
 
-  // Update weapon ability cooldowns (slots 1-3)
+  // Update weapon ability cooldowns (slots 1-3) using cached elements
   for (const slotNum of [1, 2, 3]) {
-    const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
-    if (!slot) continue;
-
+    const cached = getCachedSlot(slotNum);
+    if (!cached) continue;
+    
+    const { slot } = cached;
     const cooldown = actionCooldowns[slotNum];
     const maxCooldown = actionMaxCooldowns[slotNum] || 1500;
     const isOnCooldown = cooldown > 0;
 
     slot.classList.toggle('on-cooldown', isOnCooldown);
 
-    let overlay = slot.querySelector('.cooldown-overlay');
-    let timer = slot.querySelector('.cooldown-timer');
-
     if (isOnCooldown) {
-      if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.className = 'cooldown-overlay';
-        slot.appendChild(overlay);
+      // Create overlay/timer if needed
+      if (!cached.overlay) {
+        cached.overlay = document.createElement('div');
+        cached.overlay.className = 'cooldown-overlay';
+        slot.appendChild(cached.overlay);
       }
-      if (!timer) {
-        timer = document.createElement('div');
-        timer.className = 'cooldown-timer';
-        slot.appendChild(timer);
+      if (!cached.timer) {
+        cached.timer = document.createElement('div');
+        cached.timer.className = 'cooldown-timer';
+        slot.appendChild(cached.timer);
       }
 
       const pct = (cooldown / maxCooldown) * 100;
-      overlay.style.setProperty('--cooldown-pct', pct);
-      timer.textContent = (cooldown / 1000).toFixed(1);
-    } else {
-      overlay?.remove();
-      timer?.remove();
+      cached.overlay.style.setProperty('--cooldown-pct', pct);
+      cached.timer.textContent = (cooldown / 1000).toFixed(1);
+    } else if (cached.overlay) {
+      // Remove overlay/timer when cooldown ends
+      cached.overlay.remove();
+      cached.timer?.remove();
+      cached.overlay = null;
+      cached.timer = null;
     }
   }
   

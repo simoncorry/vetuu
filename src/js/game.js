@@ -849,6 +849,11 @@ let cameraX = 0;
 let cameraY = 0;
 let cachedViewport = null; // Cached viewport element for lighting
 
+// Pre-rendered light stamps (offscreen canvases) for performance
+// Key = radius, Value = { canvas, size }
+const lightStamps = new Map();
+let torchStamp = null;
+
 // Torch position interpolation for smooth movement
 let torchAnim = {
   startX: 0,
@@ -863,6 +868,71 @@ let torchAnim = {
 
 // Torch on/off state (T key to toggle)
 let torchEnabled = true;
+
+/**
+ * Create a pre-rendered light stamp (offscreen canvas with gradient)
+ * @param {number} radius - Base radius of the light
+ * @returns {{ canvas: HTMLCanvasElement, size: number }}
+ */
+function createLightStamp(radius) {
+  const size = Math.ceil(radius * 3.2); // Outer layer is 1.5x, plus margin
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  
+  const centerX = size / 2;
+  const centerY = size / 2;
+  
+  // Layer 1: Outer ambient (largest, softest)
+  const outerRadius = radius * 1.5;
+  const outerGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, outerRadius);
+  outerGrad.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+  outerGrad.addColorStop(0.4, 'rgba(255, 255, 255, 0.15)');
+  outerGrad.addColorStop(0.7, 'rgba(255, 255, 255, 0.05)');
+  outerGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Layer 2: Mid diffusion
+  const midRadius = radius * 1.15;
+  const midGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, midRadius);
+  midGrad.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+  midGrad.addColorStop(0.3, 'rgba(255, 255, 255, 0.3)');
+  midGrad.addColorStop(0.6, 'rgba(255, 255, 255, 0.1)');
+  midGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = midGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, midRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Layer 3: Core
+  const coreRadius = radius * 0.8;
+  const coreGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreRadius);
+  coreGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+  coreGrad.addColorStop(0.2, 'rgba(255, 255, 255, 0.7)');
+  coreGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+  coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  return { canvas, size };
+}
+
+/**
+ * Get or create a light stamp for a given radius
+ */
+function getLightStamp(radius) {
+  const key = Math.round(radius);
+  if (!lightStamps.has(key)) {
+    lightStamps.set(key, createLightStamp(radius));
+  }
+  return lightStamps.get(key);
+}
 
 /**
  * Toggle player torch on/off
@@ -995,10 +1065,19 @@ function initLightingCanvas(gameState) {
   torchAnim.targetX = torchAnim.currentX;
   torchAnim.targetY = torchAnim.currentY;
   
+  // Pre-create light stamps for all unique radii (performance optimization)
+  const torchBaseRadius = 7.2 * lightingTileSize;
+  torchStamp = createLightStamp(torchBaseRadius);
+  
+  // Pre-create stamps for static lights
+  for (const light of staticLights) {
+    getLightStamp(light.radius);
+  }
+  
   // Create DOM-based player torch (follows player with CSS transitions)
   createPlayerTorch();
   
-  console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights`);
+  console.log(`[Lighting] Canvas initialized, ${staticLights.length} static lights, ${lightStamps.size} unique stamps`);
 }
 
 // DOM torch provides subtle warm color tint (canvas does actual darkness-cutting)
@@ -1119,153 +1198,56 @@ function updateLighting() {
   // Cut out light circles using destination-out
   lightCtx.globalCompositeOperation = 'destination-out';
   
-  // Draw static lights with 3-layer natural diffusion (like torch)
+  // Draw static lights using pre-rendered stamps (much faster than creating gradients)
   for (const light of staticLights) {
-    // Cull lights outside visible area (use largest layer radius)
-    const maxRadius = light.radius * 1.3;
-    if (light.x < visibleLeft - maxRadius || 
-        light.x > visibleRight + maxRadius ||
-        light.y < visibleTop - maxRadius || 
-        light.y > visibleBottom + maxRadius) {
+    // Cull lights outside visible area
+    const stamp = getLightStamp(light.radius);
+    const halfSize = stamp.size / 2;
+    
+    if (light.x < visibleLeft - halfSize || 
+        light.x > visibleRight + halfSize ||
+        light.y < visibleTop - halfSize || 
+        light.y > visibleBottom + halfSize) {
       continue;
     }
     
-    // Lamp posts: slightly dimmer than torch, cooler color temp
+    // Calculate intensity with flicker effects
     const baseIntensity = Math.min(1, nightIntensity * light.intensity * 0.9);
-    
-    // Sci-fi LED behavior: electronic hum + occasional energy surges
     const seed = (light.x * 7 + light.y * 13) % 100;
     const now = Date.now();
     
-    // Steady electronic hum (different frequency per lamp for variety)
-    const humFreq = 0.003 + (seed % 20) * 0.0001; // Slight freq variation
-    const humPhase = seed * 0.5;
-    const hum = Math.sin(now * humFreq + humPhase) * 0.08; // ±8% brightness variation
-    
-    // Energy surge: brief brightness spike every ~10-20 seconds per lamp
-    const surgeInterval = 10000 + (seed * 100); // 10-20s based on seed
+    // Electronic hum + surge effects
+    const humFreq = 0.003 + (seed % 20) * 0.0001;
+    const hum = Math.sin(now * humFreq + seed * 0.5) * 0.08;
+    const surgeInterval = 10000 + (seed * 100);
     const surgeCycle = (now + seed * 1000) % surgeInterval;
-    const surgeWindow = 150; // 150ms surge duration
-    const isSurging = surgeCycle < surgeWindow;
-    const surge = isSurging ? Math.sin((surgeCycle / surgeWindow) * Math.PI) * 0.25 : 0; // Up to +25% brightness
+    const surge = surgeCycle < 150 ? Math.sin((surgeCycle / 150) * Math.PI) * 0.25 : 0;
     
-    // Combine effects
     const intensity = Math.min(1, baseIntensity * (1 + hum + surge));
-    const flicker = 1 + hum * 0.1; // Slight size variation with hum
     
-    // Seeded offsets for consistent asymmetry
-    const offsetX1 = (seed % 10 - 5) * 0.02 * light.radius;
-    const offsetY1 = ((seed * 3) % 10 - 5) * 0.02 * light.radius;
-    const offsetX2 = ((seed * 7) % 10 - 5) * 0.03 * light.radius;
-    const offsetY2 = ((seed * 11) % 10 - 5) * 0.03 * light.radius;
-    
-    // Layer 1: Outer ambient glow (largest, softest) - matches torch
-    const outerRadius = light.radius * 1.5 * flicker;
-    const outerGradient = lightCtx.createRadialGradient(
-      light.x + offsetX2, light.y + offsetY2, 0,
-      light.x + offsetX2, light.y + offsetY2, outerRadius
-    );
-    outerGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.3})`);
-    outerGradient.addColorStop(0.4, `rgba(255, 255, 255, ${intensity * 0.15})`);
-    outerGradient.addColorStop(0.7, `rgba(255, 255, 255, ${intensity * 0.05})`);
-    outerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    lightCtx.fillStyle = outerGradient;
-    lightCtx.beginPath();
-    lightCtx.arc(light.x + offsetX2, light.y + offsetY2, outerRadius, 0, Math.PI * 2);
-    lightCtx.fill();
-    
-    // Layer 2: Mid diffusion - matches torch
-    const midRadius = light.radius * 1.15 * flicker;
-    const midGradient = lightCtx.createRadialGradient(
-      light.x + offsetX1, light.y + offsetY1, 0,
-      light.x + offsetX1, light.y + offsetY1, midRadius
-    );
-    midGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.5})`);
-    midGradient.addColorStop(0.3, `rgba(255, 255, 255, ${intensity * 0.3})`);
-    midGradient.addColorStop(0.6, `rgba(255, 255, 255, ${intensity * 0.1})`);
-    midGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    lightCtx.fillStyle = midGradient;
-    lightCtx.beginPath();
-    lightCtx.arc(light.x + offsetX1, light.y + offsetY1, midRadius, 0, Math.PI * 2);
-    lightCtx.fill();
-    
-    // Layer 3: Core - dimmer than torch, wider spread for infrastructure feel
-    const coreRadius = light.radius * 0.8; // Slightly wider core
-    const coreGradient = lightCtx.createRadialGradient(
-      light.x, light.y, 0,
-      light.x, light.y, coreRadius
-    );
-    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.75})`);
-    coreGradient.addColorStop(0.25, `rgba(255, 255, 255, ${intensity * 0.5})`);
-    coreGradient.addColorStop(0.55, `rgba(255, 255, 255, ${intensity * 0.2})`);
-    coreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    lightCtx.fillStyle = coreGradient;
-    lightCtx.beginPath();
-    lightCtx.arc(light.x, light.y, coreRadius, 0, Math.PI * 2);
-    lightCtx.fill();
+    // Draw stamp with globalAlpha for intensity control
+    lightCtx.globalAlpha = intensity;
+    lightCtx.drawImage(stamp.canvas, light.x - halfSize, light.y - halfSize);
   }
   
-  // Draw player torch on canvas (only if enabled)
-  if (torchEnabled) {
-    // Use interpolated position for smooth movement
+  // Draw player torch using pre-rendered stamp
+  if (torchEnabled && torchStamp) {
     updateTorchPosition();
     const playerX = torchAnim.currentX;
     const playerY = torchAnim.currentY;
-    const torchBaseRadius = 7.2 * lightingTileSize;
     const now = Date.now();
     
-    // Player torch: steady electronic hum (well-maintained equipment)
+    // Torch intensity with subtle hum
     const hum = Math.sin(now * 0.004) * 0.05;
     const torchIntensity = Math.min(1, nightIntensity * 1.2 * (1 + hum));
     
-    // Slight size variation synced with hum
-    const flicker = 1 + Math.sin(now * 0.004) * 0.015;
-    
-    // Layer 1: Outer ambient (largest, softest)
-    const torchOuterRadius = torchBaseRadius * 1.5 * flicker;
-    const torchOuterGradient = lightCtx.createRadialGradient(
-      playerX - 3, playerY + 2, 0,
-      playerX - 3, playerY + 2, torchOuterRadius
-    );
-    torchOuterGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
-    torchOuterGradient.addColorStop(0.4, `rgba(255, 255, 255, ${torchIntensity * 0.15})`);
-    torchOuterGradient.addColorStop(0.7, `rgba(255, 255, 255, ${torchIntensity * 0.05})`);
-    torchOuterGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    lightCtx.fillStyle = torchOuterGradient;
-    lightCtx.beginPath();
-    lightCtx.arc(playerX - 2, playerY + 1, torchOuterRadius, 0, Math.PI * 2);
-    lightCtx.fill();
-    
-    // Layer 2: Mid diffusion
-    const torchMidRadius = torchBaseRadius * 1.15 * flicker;
-    const torchMidGradient = lightCtx.createRadialGradient(
-      playerX + 2, playerY - 2, 0,
-      playerX + 2, playerY - 2, torchMidRadius
-    );
-    torchMidGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.5})`);
-    torchMidGradient.addColorStop(0.3, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
-    torchMidGradient.addColorStop(0.6, `rgba(255, 255, 255, ${torchIntensity * 0.1})`);
-    torchMidGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    lightCtx.fillStyle = torchMidGradient;
-    lightCtx.beginPath();
-    lightCtx.arc(playerX + 2, playerY - 2, torchMidRadius, 0, Math.PI * 2);
-    lightCtx.fill();
-    
-    // Layer 3: Core bright center - this is the main illumination
-    const torchCoreRadius = torchBaseRadius * 0.7;
-    const torchCoreGradient = lightCtx.createRadialGradient(
-      playerX, playerY, 0,
-      playerX, playerY, torchCoreRadius
-    );
-    torchCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${torchIntensity * 0.95})`);
-    torchCoreGradient.addColorStop(0.2, `rgba(255, 255, 255, ${torchIntensity * 0.7})`);
-    torchCoreGradient.addColorStop(0.5, `rgba(255, 255, 255, ${torchIntensity * 0.3})`);
-    torchCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    lightCtx.fillStyle = torchCoreGradient;
-    lightCtx.beginPath();
-    lightCtx.arc(playerX, playerY, torchCoreRadius, 0, Math.PI * 2);
-    lightCtx.fill();
+    const halfSize = torchStamp.size / 2;
+    lightCtx.globalAlpha = torchIntensity;
+    lightCtx.drawImage(torchStamp.canvas, playerX - halfSize, playerY - halfSize);
   }
+  
+  // Reset alpha
+  lightCtx.globalAlpha = 1;
   
   // Reset composite operation
   lightCtx.globalCompositeOperation = 'source-over';
