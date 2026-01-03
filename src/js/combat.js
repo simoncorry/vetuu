@@ -71,8 +71,22 @@ function isGcdActive() {
   return performance.now() < gcdUntil;
 }
 
-function triggerGcd() {
-  gcdUntil = performance.now() + GCD_MS;
+/**
+ * Trigger GCD with variable duration
+ * @param {number} ms - GCD duration in ms (default: 1500ms)
+ */
+function triggerGcd(ms = GCD_MS) {
+  const now = performance.now();
+  // Use Math.max to prevent shortening an existing longer GCD
+  gcdUntil = Math.max(gcdUntil, now + ms);
+  updateGcdUI();
+}
+
+/**
+ * Clear GCD immediately (used when cast/channel is cancelled)
+ */
+function clearGcd() {
+  gcdUntil = performance.now();
   updateGcdUI();
 }
 
@@ -3546,6 +3560,12 @@ function useAbility(slot) {
     return;
   }
   
+  // Block if already casting or channeling (prevents weird overlaps)
+  if (currentState?.player?.casting || currentState?.player?.channeling) {
+    logCombat('You are busy.');
+    return;
+  }
+  
   // Get ability definition
   const ability = getAbility(slot);
   if (!ability) {
@@ -3661,12 +3681,17 @@ function executeAbilityDirect(slot) {
   const ability = getAbility(slot);
   if (!ability) return;
   
-  // Trigger GCD for all abilities
-  triggerGcd();
+  // Trigger GCD - use ability's custom gcdMs if defined, otherwise default 1.5s
+  // Cast abilities like Charged Shot use castTime as GCD (3s = "double GCD")
+  const gcdMs = ability.gcdMs || GCD_MS;
+  triggerGcd(gcdMs);
   
-  // Start cooldown
-  actionCooldowns[slot] = ability.cooldownMs;
-  actionMaxCooldowns[slot] = ability.cooldownMs;
+  // Start cooldown - unless ability uses cooldownOnSuccess (cast abilities)
+  // Cast abilities start cooldown when cast completes, not when it starts
+  if (!ability.cooldownOnSuccess) {
+    actionCooldowns[slot] = ability.cooldownMs;
+    actionMaxCooldowns[slot] = ability.cooldownMs;
+  }
   
   // Dispatch to specific ability implementation
   switch (ability.id) {
@@ -3896,6 +3921,7 @@ function cancelBladeFlurry(refund = true) {
   // Refund cooldown if cancelled by movement
   if (refund && ability) {
     actionCooldowns[ability.slot] = 0;
+    actionMaxCooldowns[ability.slot] = 0; // Reset max so UI doesn't get stuck
     logCombat('Blade Flurry cancelled - cooldown refunded.');
   }
   
@@ -4032,6 +4058,10 @@ function executeChargedShot(ability) {
       handleEnemyDeath(castTarget);
     }
     
+    // Apply cooldown on SUCCESS (not on cast start)
+    actionCooldowns[ability.slot] = ability.cooldownMs;
+    actionMaxCooldowns[ability.slot] = ability.cooldownMs;
+    
     endChargedShot();
   }, ability.castTimeMs);
 }
@@ -4052,9 +4082,17 @@ function cancelChargedShot(refund = true) {
   }
   
   // Refund cooldown if cancelled by movement
+  // Since we use cooldownOnSuccess, cooldown was never applied, but clear it anyway for safety
   if (refund && ability) {
     actionCooldowns[ability.slot] = 0;
-    logCombat('Charged Shot cancelled - cooldown refunded.');
+    actionMaxCooldowns[ability.slot] = 0; // Reset max so UI doesn't get stuck
+    
+    // Clear the extended GCD - don't punish repositioning
+    if (ability.clearGcdOnCancel) {
+      clearGcd();
+    }
+    
+    logCombat('Charged Shot cancelled.');
   }
   
   chargedShotState = null;

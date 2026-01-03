@@ -184,9 +184,14 @@ export const PLAYER_ABILITIES = {
     castTimeMs: 3000,       // 3 second charge
     locksMovement: true,
     
+    // GCD behavior: cast abilities lock for full cast time
+    gcdMs: 3000,            // GCD = cast time (double GCD)
+    cooldownOnSuccess: true, // Cooldown only starts when cast completes
+    
     // Cancel rules
     cancelOnMove: true,
-    refundOnCancel: true
+    refundOnCancel: true,
+    clearGcdOnCancel: true  // Don't punish repositioning
   },
 
   // ==========================================
