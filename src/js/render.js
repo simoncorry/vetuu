@@ -398,7 +398,11 @@ let cameraAnim = null;
 let currentCamX = 0;
 let currentCamY = 0;
 
-function animateCamera(timestamp) {
+/**
+ * Tick camera animation - called from main game loop
+ * @param {number} timestamp - Current timestamp from performance.now()
+ */
+export function tickCamera(timestamp) {
   if (!cameraAnim) return;
   
   const { startX, startY, targetX, targetY, startTime, duration } = cameraAnim;
@@ -412,9 +416,7 @@ function animateCamera(timestamp) {
   // Apply transform directly (no CSS transition)
   world.style.transform = `scale3d(${ZOOM_FACTOR}, ${ZOOM_FACTOR}, 1) translate3d(${-currentCamX}px, ${-currentCamY}px, 0)`;
   
-  if (progress < 1) {
-    requestAnimationFrame(animateCamera);
-  } else {
+  if (progress >= 1) {
     cameraAnim = null;
   }
 }
@@ -449,8 +451,7 @@ export function updateCamera(state, duration = null) {
     return;
   }
 
-  // Animated update - use requestAnimationFrame for Safari smoothness
-  // Disable CSS transition, we'll animate manually
+  // Animated update - animation ticked from main game loop
   world.style.transition = 'none';
   
   cameraAnim = {
@@ -461,8 +462,6 @@ export function updateCamera(state, duration = null) {
     startTime: performance.now(),
     duration: duration
   };
-  
-  requestAnimationFrame(animateCamera);
 }
 
 // ============================================

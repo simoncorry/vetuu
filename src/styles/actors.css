@@ -28,6 +28,8 @@
   z-index: 15;
   /* Create local stacking context - child z-indexes don't leak globally */
   isolation: isolate;
+  /* Containment for performance - isolate layout/paint calculations */
+  contain: layout style;
 }
 
 /* Sprite element - holds character image */

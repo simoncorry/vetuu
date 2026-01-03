@@ -73,29 +73,19 @@ export function initMovement(gameState, callbacks = {}) {
     setPlayerPosition(state.player.x, state.player.y, false);
   }
   
-  // Start the movement tick
-  lastTickTime = null;
-  requestAnimationFrame(movementTick);
-  
+  // Movement tick is now called from main game loop (game.js)
   console.log('Movement system initialized');
 }
 
 // ============================================
-// MAIN MOVEMENT TICK
+// MAIN MOVEMENT TICK (called from game.js main loop)
 // ============================================
-let lastTickTime = null;
 
-function movementTick(timestamp) {
-  // Initialize lastTickTime on first frame
-  if (lastTickTime === null) {
-    lastTickTime = timestamp;
-    requestAnimationFrame(movementTick);
-    return;
-  }
-  
-  const deltaTime = Math.min(timestamp - lastTickTime, 50); // Cap at 50ms to prevent huge jumps
-  lastTickTime = timestamp;
-  
+/**
+ * Tick movement system - called from main game loop
+ * @param {number} deltaTime - Time since last frame in ms
+ */
+export function tickMovement(deltaTime) {
   // Process active tween
   if (currentTween) {
     updateTween(deltaTime);
@@ -105,17 +95,19 @@ function movementTick(timestamp) {
   if (!isMoving) {
     processMovementInput();
   }
-  
-  requestAnimationFrame(movementTick);
 }
 
 // ============================================
 // INPUT PROCESSING
 // ============================================
+let cachedDialoguePanel = null;
+
 function processMovementInput() {
-  // Block movement if dialogue is open
-  const dialoguePanel = document.getElementById('dialogue-panel');
-  if (dialoguePanel?.open) return;
+  // Block movement if dialogue is open (cache element on first access)
+  if (!cachedDialoguePanel) {
+    cachedDialoguePanel = document.getElementById('dialogue-panel');
+  }
+  if (cachedDialoguePanel?.open) return;
   
   // Priority 1: Keyboard input (always takes precedence)
   if (lastKeyDirection) {

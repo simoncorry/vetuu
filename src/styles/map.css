@@ -33,9 +33,11 @@
   /* Each layer on its own compositing layer for Safari */
   transform: translateZ(0);
   will-change: contents;
+  /* Containment for performance */
+  contain: strict;
 }
 
-#actor-layer { pointer-events: auto; z-index: 10; }
+#actor-layer { pointer-events: auto; z-index: 10; contain: layout style; }
 #fog-layer { z-index: 20; }
 #object-layer { z-index: 5; }
 #ground-layer { z-index: 1; }

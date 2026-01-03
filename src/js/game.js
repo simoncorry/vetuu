@@ -3,9 +3,9 @@
  * Main game module: state management, initialization, game loop
  */
 
-import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects, actorTransform } from './render.js';
+import { initRenderer, renderWorld, updateCamera, tickCamera, renderActors, renderObjects, actorTransform } from './render.js';
 import { initInput } from './input.js';
-import { initMovement, createPathTo } from './movement.js';
+import { initMovement, createPathTo, tickMovement } from './movement.js';
 import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo, updateNpcPosition } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue } from './dialogue.js';
@@ -847,6 +847,7 @@ let staticLights = [];
 let lightingTileSize = 24;
 let cameraX = 0;
 let cameraY = 0;
+let cachedViewport = null; // Cached viewport element for lighting
 
 // Torch position interpolation for smooth movement
 let torchAnim = {
@@ -869,9 +870,8 @@ let torchEnabled = true;
  */
 export function toggleTorch() {
   torchEnabled = !torchEnabled;
-  const torch = document.getElementById('player-torch');
-  if (torch) {
-    torch.style.display = torchEnabled ? 'block' : 'none';
+  if (cachedTorch) {
+    cachedTorch.style.display = torchEnabled ? 'block' : 'none';
   }
   console.log(`[Torch] ${torchEnabled ? 'ON' : 'OFF'}`);
   return torchEnabled;
@@ -941,6 +941,9 @@ function updateTorchPosition() {
 function initLightingCanvas(gameState) {
   const world = document.getElementById('world');
   if (!world) return;
+  
+  // Cache viewport element for lighting updates
+  cachedViewport = document.getElementById('viewport');
   
   // Use global TILE_SIZE (24) to match renderer
   lightingTileSize = 24; 
@@ -1031,13 +1034,13 @@ function createPlayerTorch() {
   `;
   
   world.appendChild(torch);
+  cachedTorch = torch; // Cache reference
   syncTorchPosition();
 }
 
 // Sync torch position with player
 function syncTorchPosition() {
-  const torch = document.getElementById('player-torch');
-  if (!torch || !state.player) return;
+  if (!cachedTorch || !state.player) return;
   
   const torchSize = 5 * lightingTileSize;
   const halfTorch = torchSize / 2;
@@ -1046,19 +1049,20 @@ function syncTorchPosition() {
   const x = state.player.x * lightingTileSize + halfTile - halfTorch;
   const y = state.player.y * lightingTileSize + halfTile - halfTorch;
   
-  torch.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  cachedTorch.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 }
 
 // Update torch visibility (throttled - intensity changes slowly)
 let lastTorchOpacity = -1;
+let cachedTorch = null; // Cached torch element
 function updatePlayerTorch(nightIntensity) {
-  const torch = document.getElementById('player-torch');
-  if (!torch) return;
+  // Use cached element (set in createPlayerTorch)
+  if (!cachedTorch) return;
   
   // Only update if opacity actually changed (avoid style recalc)
   const newOpacity = nightIntensity > 0.1 ? (nightIntensity * 0.8).toFixed(2) : '0';
   if (newOpacity !== lastTorchOpacity) {
-    torch.style.opacity = newOpacity;
+    cachedTorch.style.opacity = newOpacity;
     lastTorchOpacity = newOpacity;
   }
 }
@@ -1078,10 +1082,9 @@ function updateLighting() {
     return;
   }
   
-  // Get viewport info for culling
-  const viewport = document.getElementById('viewport');
-  const viewWidth = viewport?.clientWidth || 800;
-  const viewHeight = viewport?.clientHeight || 600;
+  // Get viewport info for culling (use cached element)
+  const viewWidth = cachedViewport?.clientWidth || 800;
+  const viewHeight = cachedViewport?.clientHeight || 600;
   
   // Calculate camera position (same logic as render.js)
   const playerCenterX = state.player.x * lightingTileSize + lightingTileSize / 2;
@@ -1268,8 +1271,26 @@ function updateLighting() {
   lightCtx.globalCompositeOperation = 'source-over';
 }
 
-function gameLoop() {
+// Main loop timing
+let lastFrameTime = null;
+
+function gameLoop(timestamp) {
+  // Calculate delta time
+  if (lastFrameTime === null) {
+    lastFrameTime = timestamp;
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+  const deltaTime = Math.min(timestamp - lastFrameTime, 50); // Cap at 50ms
+  lastFrameTime = timestamp;
+  
   state.tick++;
+  
+  // === MOVEMENT & CAMERA (every frame for smooth animation) ===
+  tickMovement(deltaTime);
+  tickCamera(timestamp);
+  
+  // === GAME LOGIC ===
   checkPendingAttack(); // Check if player reached attack range
   
   // Guard patrol tick (every ~60 frames = ~1 second)
@@ -1277,11 +1298,9 @@ function gameLoop() {
     tickGuardPatrol();
   }
   
-  // Update day/night cycle
+  // === TIME & LIGHTING ===
   updateDayCycle();
-  updateShadowCSS(); // Update shadow direction based on sun position
-  
-  // Update canvas lighting every frame for smooth torch movement
+  updateShadowCSS(); // Throttled internally
   updateLighting();
   
   requestAnimationFrame(gameLoop);
@@ -1472,7 +1491,8 @@ async function init() {
     renderQuestTracker(state);
     checkInteraction();
 
-    gameLoop();
+    // Start main game loop (single consolidated rAF)
+    requestAnimationFrame(gameLoop);
 
     // Sync XP bar width with action bar
     syncXpBarWidth();
