@@ -685,10 +685,9 @@ function handleSecondaryAction() {
 // ACTION BAR SETUP
 // ============================================
 function initActionBar() {
-  // Weapon toggle slot is handled by input.js via initActionBarClicks()
-  // cycleWeapon() in combat.js already calls updateWeaponToggleSlot() for UI updates
-
-  // Note: Other action slots (weapon/sense/utility abilities) are handled by input.js
+  // Combat Overhaul: Weapon toggle removed. Slot 1 is now Auto Attack toggle.
+  // Attack type (melee/ranged) is determined automatically by unlock status.
+  // Action slots (abilities/sense/utility) are handled by input.js via initActionBarClicks()
   // via initActionBarClicks() which reads data-slot and data-action-type attributes
 
   // Inventory button

@@ -609,7 +609,8 @@ function getActiveWeaponType() {
   return flags.rifle_unlocked ? 'ranged' : 'melee';
 }
 
-function getActiveWeapon() {
+// Helper to get the active weapon object (for future use)
+function _getActiveWeapon() {
   const type = getActiveWeaponType();
   return type === 'ranged' ? WEAPONS.laser_rifle : WEAPONS.vibro_sword;
 }
@@ -3206,8 +3207,7 @@ export function checkPendingAttack() {
       }
     }
   } else {
-    // Legacy numbered action keys (1, 2, 3) - route through useAction
-    // TODO: Migrate useAction callers to useWeaponAbility for full intent system coverage
+    // Legacy numbered action keys - route through useAction (deprecated path)
     const keyNum = parseInt(actionType, 10);
     if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 3 && actionCooldowns[keyNum] <= 0) {
       useAction(keyNum);
@@ -3218,8 +3218,8 @@ export function checkPendingAttack() {
 /**
  * Legacy action handler for weapon abilities (slots 1-3).
  * 
- * TECH DEBT: This predates the intent system and handles its own move-to-range.
- * New code should use useWeaponAbility() which creates proper intents.
+ * @deprecated Use useAbility() from the new unified ability system instead.
+ * This function is kept for backwards compatibility with old save data.
  * 
  * Still used by:
  * - playerSpecial() → calls useAction('3')
@@ -3419,8 +3419,8 @@ export function useAction(actionKey) {
 }
 
 // ============================================
-// NEW WEAPON ABILITY SYSTEM (slots 1-3)
-// No Sense cost - cooldowns only
+// LEGACY WEAPON ABILITY SYSTEM (slots 1-3)
+// @deprecated Use useAbility() for the new unified ability system (slots 2-5)
 // ============================================
 export function useWeaponAbility(slot) {
   if (isGhostMode) {
@@ -5582,71 +5582,30 @@ function showCleaveEffect(x, y) {
 }
 
 // ============================================
-// WEAPON CYCLING (Simplified - only 2 weapons)
+// LEGACY WEAPON SYSTEM (DEPRECATED)
 // ============================================
+// Combat Overhaul removed the weapon toggle. Attack type is now determined
+// by unlock status (rifle_unlocked MSQ flag) and distance to target.
+// These functions are kept for backwards compatibility but do nothing.
+
+/** @deprecated Weapon toggle removed in Combat Overhaul */
 export function cycleWeapon() {
-  // Toggle between rifle and sword only
-  if (currentWeapon === 'laser_rifle') {
-    currentWeapon = 'vibro_sword';
-  } else {
-    currentWeapon = 'laser_rifle';
-  }
-
-  const weapon = WEAPONS[currentWeapon];
-  
-  // Update ability cooldowns from new abilities structure
-  if (weapon && weapon.abilities) {
-    Object.entries(weapon.abilities).forEach(([slot, ability]) => {
-      actionMaxCooldowns[parseInt(slot, 10)] = ability.cooldownMs || 6000;
-    });
-  }
-
-  logCombat(`Switched to ${weapon?.name || currentWeapon}`);
-  updateActionBar();
-  updateWeaponToggleSlot();
+  console.warn('[Combat] cycleWeapon() is deprecated. Weapon type is now automatic.');
 }
 
-export function setWeapon(weaponKey) {
-  // Only allow rifle or sword
-  if (weaponKey !== 'laser_rifle' && weaponKey !== 'vibro_sword') {
-    console.warn(`[Combat] Invalid weapon key: ${weaponKey}. Using rifle.`);
-    weaponKey = 'laser_rifle';
-  }
-  
-  if (WEAPONS[weaponKey]) {
-    currentWeapon = weaponKey;
-    const weapon = WEAPONS[currentWeapon];
-    
-    // Update ability cooldowns from new abilities structure
-    if (weapon?.abilities) {
-      Object.entries(weapon.abilities).forEach(([slot, ability]) => {
-        actionMaxCooldowns[parseInt(slot, 10)] = ability.cooldownMs || 6000;
-      });
-    }
-    
-    updateActionBar();
-    updateWeaponToggleSlot();
-  }
+/** @deprecated Weapon toggle removed in Combat Overhaul */
+export function setWeapon(_weaponKey) {
+  console.warn('[Combat] setWeapon() is deprecated. Weapon type is now automatic.');
 }
 
-/**
- * Update the weapon toggle slot UI
- */
-function updateWeaponToggleSlot() {
-  const weapon = WEAPONS[currentWeapon];
-  if (!weapon) return;
-  
-  const iconEl = document.getElementById('weapon-slot-icon');
-  const labelEl = document.getElementById('weapon-slot-label');
-  
-  if (iconEl) iconEl.textContent = weapon.icon || '🔫';
-  if (labelEl) labelEl.textContent = weapon.name || 'Weapon';
-}
-
+/** @deprecated Weapon toggle removed in Combat Overhaul */
 export function getCurrentWeapon() {
-  return currentWeapon;
+  // Return based on unlock status for any legacy code that might check
+  const flags = window.__vetuuFlags || {};
+  return flags.rifle_unlocked ? 'laser_rifle' : 'vibro_sword';
 }
 
+/** @deprecated Weapon toggle removed in Combat Overhaul */
 export function getWeapons() {
   return WEAPONS;
 }
