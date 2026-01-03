@@ -596,13 +596,13 @@ function generateDefaultSpawners() {
   // ============================================
   // SAFE RING: NOMADS ONLY (Solo, Level 1-3)
   // ============================================
-  // NPE zone: passive wanderers, good density for early leveling
-  // 24 spawners spread across the safe ring
+  // NPE zone: passive wanderers, high density for early leveling
+  // 72 spawners spread across the safe ring (32 inner + 24 mid + 16 outer)
   
   // Inner nomads (level 1, closest to base but OUTSIDE base walls)
   // Base extends ~25 tiles from center, so start at 32+ to be safely outside
-  for (let i = 0; i < 10; i++) {
-    const angle = (i / 10) * Math.PI * 2;
+  for (let i = 0; i < 32; i++) {
+    const angle = (i / 32) * Math.PI * 2;
     const dist = 32 + Math.random() * 6; // 32-38 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
@@ -629,8 +629,8 @@ function generateDefaultSpawners() {
   }
   
   // Mid nomads (level 1-2, further from base)
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2 + Math.PI / 16; // Offset from inner ring
+  for (let i = 0; i < 24; i++) {
+    const angle = (i / 24) * Math.PI * 2 + Math.PI / 48; // Offset from inner ring
     const dist = 44 + Math.random() * 8; // 44-52 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
@@ -657,8 +657,8 @@ function generateDefaultSpawners() {
   }
   
   // Outer nomads (level 2-3, outer ring)
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2 + Math.PI / 12;
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2 + Math.PI / 32;
     const dist = 56 + Math.random() * 10; // 56-66 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
