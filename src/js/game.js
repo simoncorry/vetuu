@@ -1049,11 +1049,17 @@ function syncTorchPosition() {
   torch.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 }
 
-// Update torch visibility
+// Update torch visibility (throttled - intensity changes slowly)
+let lastTorchOpacity = -1;
 function updatePlayerTorch(nightIntensity) {
   const torch = document.getElementById('player-torch');
-  if (torch) {
-    torch.style.opacity = nightIntensity > 0.1 ? (nightIntensity * 0.8).toFixed(3) : '0';
+  if (!torch) return;
+  
+  // Only update if opacity actually changed (avoid style recalc)
+  const newOpacity = nightIntensity > 0.1 ? (nightIntensity * 0.8).toFixed(2) : '0';
+  if (newOpacity !== lastTorchOpacity) {
+    torch.style.opacity = newOpacity;
+    lastTorchOpacity = newOpacity;
   }
 }
 
