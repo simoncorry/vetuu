@@ -749,13 +749,15 @@ function onMoveComplete(x, y) {
     const { type, target } = state.runtime.pendingInteraction;
     console.log('[Game] Processing pendingInteraction:', type, target?.name || target?.type, 'at', target?.x, target?.y);
     console.log('[Game] Player at:', x, y);
-    state.runtime.pendingInteraction = null;
     
     // Check if we're adjacent to the target
     const dx = Math.abs(x - target.x);
     const dy = Math.abs(y - target.y);
     console.log('[Game] Distance to target - dx:', dx, 'dy:', dy, '| adjacent:', dx <= 1 && dy <= 1);
     if (dx <= 1 && dy <= 1) {
+      // Only clear pending interaction when we're actually adjacent
+      state.runtime.pendingInteraction = null;
+      
       // Trigger the interaction
       if (type === 'npc' && target.dialogueRoot) {
         console.log('[Game] Showing dialogue for NPC:', target.name, 'root:', target.dialogueRoot);
@@ -769,7 +771,7 @@ function onMoveComplete(x, y) {
         handleObjectInteractInternal(target);
       }
     } else {
-      console.log('[Game] NOT adjacent to target, skipping interaction');
+      console.log('[Game] NOT adjacent yet, keeping pendingInteraction for next move');
     }
   }
   

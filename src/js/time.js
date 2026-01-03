@@ -379,34 +379,39 @@ export function getSunAngle() {
  * Get shadow parameters based on current sun position.
  * Returns CSS-ready values for shadow transforms.
  * 
+ * Shadows are prominent and fairly uniform throughout the day:
+ * - Slightly stronger at midday (harsh sun)
+ * - Slightly softer at night (ambient light)
+ * - Dynamic direction/length based on sun position
+ * 
  * @returns {{
- *   skewX: number,      // Skew angle in degrees (-30 to +30)
- *   scaleY: number,     // Vertical scale (0.2 to 0.5)
+ *   skewX: number,      // Skew angle in degrees (-36 to +36)
+ *   scaleY: number,     // Vertical scale (0.25 to 0.7)
  *   scaleX: number,     // Horizontal scale (1.0 to 1.2)
- *   opacity: number,    // Shadow opacity (0 to 0.2)
- *   blur: number        // Blur amount in px (1 to 2)
+ *   opacity: number,    // Shadow opacity (0.30 to 0.45)
+ *   blur: number        // Blur amount in px (0.5 to 2)
  * }}
  */
 export function getShadowParams() {
   const sunAngle = getSunAngle();
   
   // Night: soft ambient shadows (moonlight/torchlight)
-  // More visible than before but still diffuse
+  // Still visible but diffuse - uniform direction (straight down)
   if (sunAngle === null) {
     return {
       skewX: 0,
       scaleY: 0.4,
       scaleX: 1.0,
-      opacity: 0.15,
-      blur: 3
+      opacity: 0.30,  // Prominent but softer than daytime
+      blur: 2
     };
   }
   
   // Day: dynamic shadows based on sun position
-  // skewX: sun at 0° (east) = shadow points west (+30°)
+  // skewX: sun at 0° (east) = shadow points west (+36°)
   //        sun at 90° (overhead) = straight down (0°)
-  //        sun at 180° (west) = shadow points east (-30°)
-  const skewX = (90 - sunAngle) * 0.4; // Range: +36° to -36° (more dramatic angle)
+  //        sun at 180° (west) = shadow points east (-36°)
+  const skewX = (90 - sunAngle) * 0.4; // Range: +36° to -36°
   
   // scaleY: shorter at noon (sun overhead), longer at dawn/dusk
   // At 90° (noon): scaleY = 0.25 (shortest)
@@ -417,11 +422,12 @@ export function getShadowParams() {
   // scaleX: slightly wider at low sun angles
   const scaleX = 1.0 + (angleFromNoon / 90) * 0.2; // Range: 1.0 to 1.2
   
-  // opacity: INVERTED - stronger at dawn/dusk for dramatic golden hour shadows
-  // Noon: 0.18, Dawn/Dusk: 0.3
-  const opacity = 0.18 + (angleFromNoon / 90) * 0.12; // Range: 0.18 to 0.3
+  // opacity: STRONGER at noon (harsh midday sun), slightly less at dawn/dusk
+  // This creates uniform but realistic shadows - midday sun casts harder shadows
+  // Noon: 0.45, Dawn/Dusk: 0.35
+  const opacity = 0.45 - (angleFromNoon / 90) * 0.10; // Range: 0.35 to 0.45
   
-  // blur: sharper at noon, slightly softer at dawn/dusk (but not too soft)
+  // blur: sharper at noon, slightly softer at dawn/dusk
   const blur = 0.5 + (angleFromNoon / 90) * 1; // Range: 0.5px to 1.5px
   
   return { skewX, scaleY, scaleX, opacity, blur };

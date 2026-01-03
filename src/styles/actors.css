@@ -62,8 +62,9 @@
    --shadow-skew: skewX angle (0 for overhead sun, +/- for east/west)
    --shadow-scale-y: vertical flatten (shorter at noon, longer at dawn/dusk)
    --shadow-scale-x: horizontal stretch (wider at low sun angles)
-   --shadow-opacity: intensity (stronger at noon, fainter at night)
+   --shadow-opacity: intensity (stronger at midday, slightly softer at night)
    --shadow-blur: sharpness (sharper at noon, softer at dawn/dusk/night)
+   --shadow-facing-offset: local offset for character facing direction
 */
 .actor > .shadow {
   position: absolute;
@@ -78,16 +79,18 @@
   background-size: 100% 100%;
   background-repeat: no-repeat;
   image-rendering: pixelated;
+  /* Facing offset - overridden by .facing-left/.facing-right */
+  --shadow-facing-offset: 0deg;
   /* Transform to create projected shadow effect - values from :root (set by time.js) */
   transform-origin: center bottom;
   transform: 
-    scaleY(var(--shadow-scale-y, 0.35)) 
+    scaleY(var(--shadow-scale-y, 0.4)) 
     scaleX(var(--shadow-scale-x, 1.1)) 
-    skewX(var(--shadow-skew, 0deg))
+    skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset)))
     translateY(2px);
   /* Make it a shadow: black, dynamic opacity/blur from sun position */
   filter: brightness(0) blur(var(--shadow-blur, 1px));
-  opacity: var(--shadow-opacity, 0.15);
+  opacity: var(--shadow-opacity, 0.35);
   pointer-events: none;
   /* Smooth transition as sun moves (subtle, not jarring) */
   transition: transform 30s linear, opacity 30s linear, filter 30s linear;
@@ -95,20 +98,10 @@
 
 /* Directional offsets for character facing (adds to sun-based skew) */
 .actor.facing-left > .shadow { 
-  --shadow-skew-offset: 15deg; 
-  transform: 
-    scaleY(var(--shadow-scale-y, 0.35)) 
-    scaleX(var(--shadow-scale-x, 1.1)) 
-    skewX(calc(var(--shadow-skew, 0deg) + 15deg))
-    translateY(2px);
+  --shadow-facing-offset: 15deg; 
 }
 .actor.facing-right > .shadow { 
-  --shadow-skew-offset: -15deg;
-  transform: 
-    scaleY(var(--shadow-scale-y, 0.35)) 
-    scaleX(var(--shadow-scale-x, 1.1)) 
-    skewX(calc(var(--shadow-skew, 0deg) - 15deg))
-    translateY(2px);
+  --shadow-facing-offset: -15deg;
 }
 
 /* Walk bob for all moving actors - sprite bobs, shadow stays planted */
@@ -116,7 +109,8 @@
   animation: walk-bob 0.2s ease-in-out infinite;
 }
 
-/* Shadow has subtle "bounce" effect when moving (slight scale pulse) */
+/* Shadow has subtle "bounce" effect when moving (slight scale pulse) 
+   Uses the same --shadow-facing-offset variable so facing direction is preserved */
 .actor.moving > .shadow {
   animation: shadow-pulse 0.2s ease-in-out infinite;
   /* Override smooth transition during walk animation */
@@ -128,21 +122,22 @@
   50% { transform: scaleY(0.969); } /* ~1px head movement on 32px sprite */
 }
 
-/* Shadow pulse uses dynamic values from sun position */
+/* Shadow pulse uses dynamic values from sun position 
+   Note: --shadow-facing-offset is inherited from the element, so facing direction works */
 @keyframes shadow-pulse {
   0%, 100% { 
     transform: 
-      scaleY(var(--shadow-scale-y, 0.35)) 
+      scaleY(var(--shadow-scale-y, 0.4)) 
       scaleX(var(--shadow-scale-x, 1.1)) 
-      skewX(var(--shadow-skew, 0deg)) 
+      skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset, 0deg))) 
       translateY(2px); 
   }
   50% { 
     /* Slight squash on footfall - 10% reduction from current scale */
     transform: 
-      scaleY(calc(var(--shadow-scale-y, 0.35) * 0.9)) 
+      scaleY(calc(var(--shadow-scale-y, 0.4) * 0.9)) 
       scaleX(calc(var(--shadow-scale-x, 1.1) * 1.05)) 
-      skewX(var(--shadow-skew, 0deg)) 
+      skewX(calc(var(--shadow-skew, 0deg) + var(--shadow-facing-offset, 0deg))) 
       translateY(2px);
   }
 }

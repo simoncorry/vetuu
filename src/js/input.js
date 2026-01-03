@@ -282,13 +282,19 @@ function isDoubleClick(x, y) {
 }
 
 function onLeftClick(e, forceDoubleClick = false) {
+  console.log('[Input] onLeftClick fired - target:', e.target?.tagName, e.target?.className, '| forceDouble:', forceDoubleClick);
+  
   // Ignore clicks on UI elements
   if (e.target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #controls-hint, #dialogue-panel, #inventory-panel')) {
+    console.log('[Input] Blocked by UI element filter');
     return;
   }
 
   const worldPos = screenToWorld(e.clientX, e.clientY);
-  if (!worldPos) return;
+  if (!worldPos) {
+    console.log('[Input] screenToWorld returned null');
+    return;
+  }
 
   const { x, y } = worldPos;
   const state = window.__vetuuState;
