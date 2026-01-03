@@ -1458,7 +1458,9 @@ if (typeof window !== 'undefined') {
    * Usage: VETUU_UNLOCK_RIFLE()
    */
   window.VETUU_UNLOCK_RIFLE = () => {
-    setFlag('rifle_unlocked');
+    // Set flag directly without triggering quest re-render (which clears enemies)
+    state.flags.rifle_unlocked = true;
+    saveFlag('rifle_unlocked', true);
     console.log('Rifle unlocked! Ranged attacks and abilities (Burst, Charged Shot) now available.');
     return 'rifle_unlocked = true';
   };
@@ -1468,7 +1470,9 @@ if (typeof window !== 'undefined') {
    * Usage: VETUU_UNLOCK_SENSE()
    */
   window.VETUU_UNLOCK_SENSE = () => {
-    setFlag('sense_revealed');
+    // Set flag directly without triggering quest re-render (which clears enemies)
+    state.flags.sense_revealed = true;
+    saveFlag('sense_revealed', true);
     console.log('Sense abilities unlocked! Pull and Push now available.');
     return 'sense_revealed = true';
   };
@@ -1479,8 +1483,11 @@ if (typeof window !== 'undefined') {
    */
   window.VETUU_UNLOCK_ALL = () => {
     state.player.level = 20;
-    setFlag('rifle_unlocked');
-    setFlag('sense_revealed');
+    // Set flags directly without triggering quest re-render (which clears enemies)
+    state.flags.rifle_unlocked = true;
+    state.flags.sense_revealed = true;
+    saveFlag('rifle_unlocked', true);
+    saveFlag('sense_revealed', true);
     console.log('All abilities unlocked! Level 20, rifle, and sense.');
     updateHUD();
     return 'All unlocked';

@@ -360,15 +360,18 @@ export function renderActors(state) {
     fragment.appendChild(el);
   }
 
-  // Clear NPCs but preserve existing player element
+  // Clear only NPCs and bosses, preserve player and enemies
   const existingPlayerEl = document.getElementById('player');
-  actorLayer.innerHTML = '';
   
-  // Re-add existing player if it was preserved
-  if (existingPlayerEl) {
-    actorLayer.appendChild(existingPlayerEl);
+  // Remove only NPCs and bosses (not enemies)
+  actorLayer.querySelectorAll('.npc, .boss').forEach(el => el.remove());
+  
+  // Re-add player at the start if it exists (preserve z-order)
+  if (existingPlayerEl && !existingPlayerEl.parentElement) {
+    actorLayer.insertBefore(existingPlayerEl, actorLayer.firstChild);
   }
   
+  // Add new NPCs/bosses from fragment
   actorLayer.appendChild(fragment);
 }
 
