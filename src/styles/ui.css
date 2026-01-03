@@ -96,87 +96,89 @@
 }
 
 /* Resize handles - all four corners */
-.resize-handle {
+.resize-handle-se,
+.resize-handle-sw,
+.resize-handle-ne,
+.resize-handle-nw {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   opacity: 0;
   transition: opacity 0.15s ease;
   z-index: 10;
 }
 
-.resize-handle::after {
+.resize-handle-se::after,
+.resize-handle-sw::after,
+.resize-handle-ne::after,
+.resize-handle-nw::after {
   content: '';
   position: absolute;
-  width: 8px;
-  height: 8px;
-  opacity: 0.4;
+  width: 6px;
+  height: 6px;
+  opacity: 0.5;
 }
 
-/* Bottom-right (default) */
-.resize-handle,
+/* Bottom-right */
 .resize-handle-se {
-  bottom: 0;
-  right: 0;
+  bottom: 2px;
+  right: 2px;
   cursor: se-resize;
 }
 
-.resize-handle::after,
 .resize-handle-se::after {
-  bottom: 3px;
-  right: 3px;
+  bottom: 0;
+  right: 0;
   border-right: 2px solid var(--text-muted);
   border-bottom: 2px solid var(--text-muted);
 }
 
 /* Bottom-left */
 .resize-handle-sw {
-  bottom: 0;
-  left: 0;
+  bottom: 2px;
+  left: 2px;
   cursor: sw-resize;
 }
 
 .resize-handle-sw::after {
-  bottom: 3px;
-  left: 3px;
+  bottom: 0;
+  left: 0;
   border-left: 2px solid var(--text-muted);
   border-bottom: 2px solid var(--text-muted);
 }
 
 /* Top-right */
 .resize-handle-ne {
-  top: 0;
-  right: 0;
+  top: 2px;
+  right: 2px;
   cursor: ne-resize;
 }
 
 .resize-handle-ne::after {
-  top: 3px;
-  right: 3px;
+  top: 0;
+  right: 0;
   border-right: 2px solid var(--text-muted);
   border-top: 2px solid var(--text-muted);
 }
 
 /* Top-left */
 .resize-handle-nw {
-  top: 0;
-  left: 0;
+  top: 2px;
+  left: 2px;
   cursor: nw-resize;
 }
 
 .resize-handle-nw::after {
-  top: 3px;
-  left: 3px;
+  top: 0;
+  left: 0;
   border-left: 2px solid var(--text-muted);
   border-top: 2px solid var(--text-muted);
 }
 
-.ui-panel:hover .resize-handle,
 .ui-panel:hover .resize-handle-se,
 .ui-panel:hover .resize-handle-sw,
 .ui-panel:hover .resize-handle-ne,
 .ui-panel:hover .resize-handle-nw,
-.ui-panel.undocked .resize-handle,
 .ui-panel.undocked .resize-handle-se,
 .ui-panel.undocked .resize-handle-sw,
 .ui-panel.undocked .resize-handle-ne,

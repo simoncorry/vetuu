@@ -361,7 +361,7 @@ function initDraggablePanel(elementId, panelKey) {
   const corners = ['se', 'sw', 'ne', 'nw'];
   corners.forEach(corner => {
     const handle = document.createElement('div');
-    handle.className = `resize-handle resize-handle-${corner}`;
+    handle.className = `resize-handle-${corner}`;
     handle.dataset.corner = corner;
     el.appendChild(handle);
     

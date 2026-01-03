@@ -21,19 +21,26 @@ const CONFIG = {
   maxViewRadius: 60,    // Zoomed out max (more tiles visible)
   zoomStep: 3,          // Tiles to add/remove per scroll
   
-  // Colors
-  playerColor: '#69d2d6',
+  // Colors - matching game actor colors
+  playerColor: '#69d2d6',      // Cyan (matches player sprite tint)
   playerGlow: 'rgba(105, 210, 214, 0.6)',
-  npcColor: '#4CAF50',
-  enemyColor: '#e74c3c',
+  npcColor: '#4CAF50',         // Green (friendly NPCs)
+  npcGuardColor: '#69d2d6',    // Cyan (guards)
+  npcMedicColor: '#E91E63',    // Pink (medics)
+  enemyPassiveColor: '#DAA520', // Yellow/gold (passive - hue-rotate 60deg)
+  enemyEngagedColor: '#e74c3c', // Red (hostile/engaged - hue-rotate -30deg)
+  enemyAlphaColor: '#FFD700',   // Gold (alpha enemies - hue-rotate 40deg)
   fogColor: 'rgba(13, 15, 17, 0.92)',
   
   // Sizes (in canvas pixels)
   playerSize: 6,
   entitySize: 4,
   
+  // Camera smoothing
+  cameraSmoothing: 0.15, // Lerp factor (0-1, lower = smoother/slower)
+  
   // Performance
-  renderThrottle: 50, // ms between renders
+  renderThrottle: 16, // ~60fps for smooth camera
 };
 
 // ============================================
@@ -46,9 +53,16 @@ let fogCtx = null;
 let container = null;
 
 let viewRadius = CONFIG.defaultViewRadius;
-let lastRenderTime = 0;
 let renderScheduled = false;
 let resizeObserver = null;
+let animationFrameId = null;
+
+// Camera state for smooth interpolation
+let cameraX = 0;
+let cameraY = 0;
+let targetCameraX = 0;
+let targetCameraY = 0;
+let cameraInitialized = false;
 
 // Cached references
 let gameState = null;
@@ -99,10 +113,71 @@ export function initMinimap(state) {
   // Pre-render terrain to an offscreen buffer for performance
   prerenderTerrain();
   
-  // Initial render
-  render();
+  // Initialize camera position to player
+  if (gameState?.player) {
+    cameraX = gameState.player.x;
+    cameraY = gameState.player.y;
+    targetCameraX = cameraX;
+    targetCameraY = cameraY;
+    cameraInitialized = true;
+  }
+  
+  // Start render loop
+  startRenderLoop();
   
   console.log('[Minimap] Initialized with view radius:', viewRadius);
+}
+
+// ============================================
+// RENDER LOOP (for smooth camera)
+// ============================================
+function startRenderLoop() {
+  if (animationFrameId) return;
+  
+  function loop() {
+    updateCamera();
+    render();
+    animationFrameId = requestAnimationFrame(loop);
+  }
+  
+  animationFrameId = requestAnimationFrame(loop);
+}
+
+// eslint-disable-next-line no-unused-vars -- exported for cleanup
+function stopRenderLoop() {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+}
+
+function updateCamera() {
+  if (!gameState?.player) return;
+  
+  // Set target to player position
+  targetCameraX = gameState.player.x;
+  targetCameraY = gameState.player.y;
+  
+  // Initialize camera on first update
+  if (!cameraInitialized) {
+    cameraX = targetCameraX;
+    cameraY = targetCameraY;
+    cameraInitialized = true;
+    return;
+  }
+  
+  // Smooth interpolation (lerp)
+  const dx = targetCameraX - cameraX;
+  const dy = targetCameraY - cameraY;
+  
+  // Only interpolate if there's meaningful distance
+  if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+    cameraX += dx * CONFIG.cameraSmoothing;
+    cameraY += dy * CONFIG.cameraSmoothing;
+  } else {
+    cameraX = targetCameraX;
+    cameraY = targetCameraY;
+  }
 }
 
 // ============================================
@@ -263,7 +338,6 @@ export function resetZoom() {
 function getViewport() {
   if (!gameState || !canvas) return null;
   
-  const player = gameState.player;
   const canvasW = canvas.width;
   const canvasH = canvas.height;
   
@@ -276,15 +350,16 @@ function getViewport() {
   const tilesX = canvasW / pixelsPerTile;
   const tilesY = canvasH / pixelsPerTile;
   
+  // Use interpolated camera position for smooth movement
   return {
-    // Center on player
-    centerX: player.x,
-    centerY: player.y,
+    // Center on camera (smoothly interpolated)
+    centerX: cameraX,
+    centerY: cameraY,
     // World tile bounds
-    left: player.x - tilesX / 2,
-    top: player.y - tilesY / 2,
-    right: player.x + tilesX / 2,
-    bottom: player.y + tilesY / 2,
+    left: cameraX - tilesX / 2,
+    top: cameraY - tilesY / 2,
+    right: cameraX + tilesX / 2,
+    bottom: cameraY + tilesY / 2,
     // Dimensions
     tilesX,
     tilesY,
@@ -428,14 +503,12 @@ function render() {
   
   // Draw player (always on top, always centered)
   renderPlayer(vp);
-  
-  lastRenderTime = performance.now();
 }
 
 function renderTerrain(vp) {
   if (!terrainImageData) return;
   
-  const { left, top, tilesX, tilesY, pixelsPerTile, canvasW, canvasH } = vp;
+  const { left, top, tilesX, tilesY, pixelsPerTile } = vp;
   
   // Calculate source rectangle (in terrain image pixels = tiles)
   const srcX = Math.max(0, Math.floor(left));
@@ -535,10 +608,8 @@ function renderRegions(vp) {
 }
 
 function renderEntities(vp) {
-  // Render NPCs
+  // Render NPCs with type-based colors
   if (gameState.entities.npcs) {
-    ctx.fillStyle = CONFIG.npcColor;
-    
     for (const npc of gameState.entities.npcs) {
       // Skip hidden NPCs
       if (npc.flags?.hidden) continue;
@@ -546,6 +617,16 @@ function renderEntities(vp) {
       // Check if in view and revealed
       if (!isInView(npc.x, npc.y, vp)) continue;
       if (!isRevealed(npc.x, npc.y)) continue;
+      
+      // Color based on NPC type (matching CSS hue-rotate values)
+      const npcType = npc.type || npc.npcType || '';
+      if (npcType === 'guard') {
+        ctx.fillStyle = CONFIG.npcGuardColor;  // Cyan
+      } else if (npcType === 'medic') {
+        ctx.fillStyle = CONFIG.npcMedicColor;  // Pink
+      } else {
+        ctx.fillStyle = CONFIG.npcColor;       // Green (default)
+      }
       
       const pos = worldToScreen(npc.x + 0.5, npc.y + 0.5);
       if (pos) {
@@ -556,16 +637,25 @@ function renderEntities(vp) {
     }
   }
   
-  // Render active enemies
+  // Render active enemies with state-based colors
   if (gameState.runtime.activeEnemies) {
-    ctx.fillStyle = CONFIG.enemyColor;
-    
     for (const enemy of gameState.runtime.activeEnemies) {
       if (enemy.hp <= 0) continue;
       
       // Check if in view and revealed
       if (!isInView(enemy.x, enemy.y, vp)) continue;
       if (!isRevealed(enemy.x, enemy.y)) continue;
+      
+      // Color based on enemy state (matching CSS classes/hue-rotate values)
+      if (enemy.isAlpha) {
+        ctx.fillStyle = CONFIG.enemyAlphaColor;    // Gold (alpha enemies)
+      } else if (enemy.engaged || enemy.combat) {
+        ctx.fillStyle = CONFIG.enemyEngagedColor;  // Red (hostile/in combat)
+      } else if (enemy.passive) {
+        ctx.fillStyle = CONFIG.enemyPassiveColor;  // Yellow (passive)
+      } else {
+        ctx.fillStyle = CONFIG.enemyPassiveColor;  // Default to passive yellow
+      }
       
       const pos = worldToScreen(enemy.x + 0.5, enemy.y + 0.5);
       if (pos) {
@@ -577,7 +667,7 @@ function renderEntities(vp) {
   }
 }
 
-function renderPlayer(vp) {
+function renderPlayer(_vp) {
   // Player is always at center
   const pos = worldToScreen(gameState.player.x + 0.5, gameState.player.y + 0.5);
   if (!pos) return;
