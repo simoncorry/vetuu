@@ -22,10 +22,11 @@ const CONFIG = {
   zoomStep: 3,          // Tiles to add/remove per scroll
   
   // Colors - matching game actor colors
-  playerColor: '#00E5E5',      // Cyan (matches --player CSS var)
-  playerGlow: 'rgba(0, 229, 229, 0.5)',
-  pathColor: '#00E5E5',        // Same as player
-  pathStroke: 'rgba(255, 255, 255, 0.7)',
+  playerColor: '#BAB9A7',      // Matches player sprite body color
+  playerGlow: 'rgba(186, 185, 167, 0.5)',
+  playerStroke: 'rgba(36, 23, 6, 0.6)',  // Matches player sprite outline
+  pathColor: '#BAB9A7',        // Same as player
+  pathStroke: 'rgba(36, 23, 6, 0.6)',    // Same dark outline
   npcColor: '#4CAF50',         // Green (friendly NPCs)
   npcGuardColor: '#69d2d6',    // Cyan (guards)
   npcMedicColor: '#E91E63',    // Pink (medics)
@@ -35,9 +36,9 @@ const CONFIG = {
   fogColor: 'rgba(13, 15, 17, 0.92)',
   
   // Sizes (in canvas pixels)
-  playerSize: 6,
+  playerSize: 5,
   entitySize: 4,
-  pathMarkerSize: 3,  // Slightly smaller than player for hierarchy
+  pathMarkerSize: 2,  // Smaller than player for hierarchy
   
   // Camera smoothing
   cameraSmoothing: 0.15, // Lerp factor (0-1, lower = smoother/slower)
@@ -762,10 +763,10 @@ function renderPlayer(_vp) {
   const pos = worldToScreen(playerDotX + 0.5, playerDotY + 0.5);
   if (!pos) return;
   
-  // Glow effect
+  // Subtle glow effect
   ctx.fillStyle = CONFIG.playerGlow;
   ctx.beginPath();
-  ctx.arc(pos.x, pos.y, CONFIG.playerSize + 2, 0, Math.PI * 2);
+  ctx.arc(pos.x, pos.y, CONFIG.playerSize + 1.5, 0, Math.PI * 2);
   ctx.fill();
   
   // Player dot - square to match path markers
@@ -773,9 +774,9 @@ function renderPlayer(_vp) {
   const playerHalf = CONFIG.playerSize / 2;
   ctx.fillRect(pos.x - playerHalf, pos.y - playerHalf, CONFIG.playerSize, CONFIG.playerSize);
   
-  // White border
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.lineWidth = 1;
+  // Dark border to match sprite outline
+  ctx.strokeStyle = CONFIG.playerStroke;
+  ctx.lineWidth = 0.5;
   ctx.strokeRect(pos.x - playerHalf, pos.y - playerHalf, CONFIG.playerSize, CONFIG.playerSize);
 }
 

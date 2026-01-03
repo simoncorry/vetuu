@@ -170,13 +170,12 @@
   position: absolute;
   left: 0;
   top: 0;
-  width: 6px;
-  height: 6px;
-  background: var(--player);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  width: 4px;
+  height: 4px;
+  background: #BAB9A7;  /* Matches player sprite body color */
+  outline: 0.25px solid rgba(36, 23, 6, 0.6);  /* Matches player sprite outline */
   pointer-events: none;
   z-index: 8;
-  box-shadow: 0 0 4px var(--player);
   opacity: var(--marker-opacity, 0.6);
   transform: translate3d(var(--pos-x, 0), var(--pos-y, 0), 0);
   animation: path-pulse 1s ease-in-out infinite;
