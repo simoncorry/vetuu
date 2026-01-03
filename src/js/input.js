@@ -33,28 +33,6 @@ export function initInput(onInteract, onTarget, _onSecondary) {
   interactCallback = onInteract || (() => {});
   targetCallback = onTarget || (() => {});
 
-  // DEBUG: Catch ALL clicks in capture phase to see what's being clicked
-  document.addEventListener('click', (e) => {
-    const isEnemy = e.target.closest('.enemy');
-    const isNpc = e.target.closest('.npc, .guard');
-    const isActor = e.target.closest('.actor');
-    const inViewport = e.target.closest('#viewport');
-    
-    // Log ALL viewport clicks for debugging
-    if (inViewport) {
-      console.log('[Input DEBUG] Viewport click:', {
-        tagName: e.target.tagName,
-        className: e.target.className?.substring?.(0, 50) || e.target.className,
-        isEnemy: !!isEnemy,
-        isNpc: !!isNpc,
-        isActor: !!isActor,
-        enemyId: isEnemy?.dataset?.enemyId,
-        x: e.clientX,
-        y: e.clientY
-      });
-    }
-  }, true); // capture phase
-
   // Non-movement keyboard
   document.addEventListener('keydown', onKeyDown);
 
@@ -292,31 +270,22 @@ function isDoubleClick(x, y) {
   const timeDiff = now - lastClickTime;
   const dist = Math.abs(x - lastClickX) + Math.abs(y - lastClickY);
   
-  const isDouble = timeDiff < DOUBLE_CLICK_MS && dist <= DOUBLE_CLICK_DIST;
-  console.log('[Input] isDoubleClick check - timeDiff:', timeDiff, 'ms, dist:', dist, 'tiles, result:', isDouble);
-  
   // Update for next check
   lastClickTime = now;
   lastClickX = x;
   lastClickY = y;
   
-  return isDouble;
+  return timeDiff < DOUBLE_CLICK_MS && dist <= DOUBLE_CLICK_DIST;
 }
 
 function onLeftClick(e, forceDoubleClick = false) {
-  console.log('[Input] onLeftClick fired - target:', e.target?.tagName, e.target?.className, '| forceDouble:', forceDoubleClick);
-  
   // Ignore clicks on UI elements
   if (e.target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #controls-hint, #dialogue-panel, #inventory-panel')) {
-    console.log('[Input] Blocked by UI element filter');
     return;
   }
 
   const worldPos = screenToWorld(e.clientX, e.clientY);
-  if (!worldPos) {
-    console.log('[Input] screenToWorld returned null');
-    return;
-  }
+  if (!worldPos) return;
 
   const { x, y } = worldPos;
   const state = window.__vetuuState;
@@ -324,13 +293,10 @@ function onLeftClick(e, forceDoubleClick = false) {
   
   // Use forced double-click (from double-tap) or check timing-based double-click
   const doubleClick = forceDoubleClick || isDoubleClick(x, y);
-  
-  console.log('[Input] Click at tile', x, y, '| doubleClick:', doubleClick, '| forced:', forceDoubleClick);
 
   // Check for enemy at click location
   const enemy = findEnemyAt(state, x, y);
   if (enemy) {
-    console.log('[Input] Found enemy:', enemy.name, 'at', enemy.x, enemy.y, '| action:', doubleClick ? 'ATTACK' : 'select');
     if (doubleClick) {
       // Double-click: move to and auto-attack
       targetCallback('attack', enemy);
@@ -344,7 +310,6 @@ function onLeftClick(e, forceDoubleClick = false) {
   // Check for NPC at click location
   const npc = findNpcAt(state, x, y);
   if (npc) {
-    console.log('[Input] Found NPC:', npc.name, 'at', npc.x, npc.y, '| action:', doubleClick ? 'INTERACT' : 'select');
     if (doubleClick) {
       // Double-click: move to and interact (use NPC's actual coords, not click coords)
       targetCallback('selectNpc', npc);
@@ -359,7 +324,6 @@ function onLeftClick(e, forceDoubleClick = false) {
   // Check for interactable object
   const obj = findObjectAt(state, x, y);
   if (obj?.interact) {
-    console.log('[Input] Found object:', obj.type, 'at', obj.x, obj.y, '| action:', doubleClick ? 'INTERACT' : 'select');
     if (doubleClick) {
       // Double-click: move to and interact (use object's actual coords, not click coords)
       targetCallback('selectObject', obj);
@@ -371,13 +335,6 @@ function onLeftClick(e, forceDoubleClick = false) {
     return;
   }
   
-  // Debug: Show nearby enemies to understand why lookup failed
-  const nearbyEnemies = (state.runtime.activeEnemies || [])
-    .filter(e => e.hp > 0 && Math.abs(e.x - x) <= 3 && Math.abs(e.y - y) <= 3)
-    .map(e => `${e.name}@(${e.x},${e.y})`);
-  console.log('[Input] No entity found at', x, y, '- nearby enemies:', nearbyEnemies.length ? nearbyEnemies.join(', ') : 'none');
-  console.log('[Input] Pathing to empty tile');
-
   // Path to empty tile - cancel move-to-range pursuit, but keep auto-attack for kiting
   cancelCombatPursuit();
   createPathTo(x, y, false);
