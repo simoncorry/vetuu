@@ -272,7 +272,7 @@
   cursor: pointer;
   /* GPU-accelerated movement - uses CSS var for speed control */
   --npc-move-speed: 280ms;
-  --npc-idle-speed: 560ms; /* Half speed for patrol/idle */
+  --npc-idle-speed: 700ms; /* ~2.5x normal speed for relaxed patrol */
   transition: transform var(--npc-move-speed) ease-out;
   will-change: transform;
 }
@@ -347,9 +347,9 @@
   will-change: transform;
 }
 
-/* Idle/patrol movement - slower, relaxed pace (2x duration) */
+/* Idle/patrol movement - slower, relaxed pace (2.5x duration) */
 .enemy.idle {
-  transition: transform calc(var(--enemy-move-speed, 400ms) * 2) ease-out, box-shadow 0.15s ease;
+  transition: transform calc(var(--enemy-move-speed, 400ms) * 2.5) ease-out, box-shadow 0.15s ease;
 }
 
 /* Passive enemies (yellow glow) - non-aggressive until provoked */
@@ -368,8 +368,11 @@
   color: var(--bg-dark);
 }
 
-/* Alpha enemies - elite variants with distinctive frame */
+/* Alpha enemies - elite variants with distinctive frame and 20% larger */
 .enemy.alpha {
+  /* Scale up alpha enemies while keeping feet position anchored */
+  scale: 1.2;
+  transform-origin: center bottom;
   border: 2px solid var(--rarity-gold);
   box-shadow: 
     0 0 8px rgba(214, 165, 90, 0.6),

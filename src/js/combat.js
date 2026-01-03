@@ -2702,9 +2702,9 @@ function updateEnemyPosition(enemy, x, y, forceMove = false, isIdle = false) {
     // Add moving class for walk animation
     el.classList.add('moving');
     
-    // Remove after transition (read from CSS var or use default, double for idle)
+    // Remove after transition (read from CSS var or use default, 2.5x for idle)
     const moveSpeed = parseInt(el.dataset.moveSpeed) || 400;
-    const duration = isIdle ? moveSpeed * 2 : moveSpeed;
+    const duration = isIdle ? moveSpeed * 2.5 : moveSpeed;
     clearTimeout(enemy._moveTimeout);
     enemy._moveTimeout = setTimeout(() => {
       el.classList.remove('moving');
@@ -5623,6 +5623,9 @@ async function handleEnemyDeath(enemy) {
       const nextTarget = findNextCombatTarget();
       if (nextTarget) {
         selectTarget(nextTarget);
+        // Continue auto-attack on the new target immediately
+        setAutoAttackIntent(nextTarget);
+        tryExecuteCombatIntent();
       }
     }
     

@@ -304,7 +304,8 @@ export function renderActors(state) {
 
     const el = document.createElement('div');
     // Add role-based classes
-    let npcClass = 'actor npc';
+    // All NPCs start with 'idle' for slower movement (guards remove it when fighting)
+    let npcClass = 'actor npc idle';
     if (npc.isGuard) npcClass += ' guard';
     if (npc.isMedic) npcClass += ' medic';
     el.className = npcClass;

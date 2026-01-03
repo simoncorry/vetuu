@@ -1297,7 +1297,7 @@ function tickGuardPatrol() {
     // Update visual position (CSS handles the smooth transition)
     const npcEl = document.querySelector(`[data-npc-id="${npc.id}"]`);
     if (npcEl) {
-      // Use idle speed for patrol (half normal speed = 560ms)
+      // Use idle speed for patrol (~2.5x normal = 700ms)
       npcEl.classList.add('idle');
       npcEl.style.transform = actorTransform(newX, newY);
       
@@ -1306,7 +1306,7 @@ function tickGuardPatrol() {
       clearTimeout(npc._moveTimeout);
       npc._moveTimeout = setTimeout(() => {
         npcEl.classList.remove('moving');
-      }, 560); // Match idle transition duration
+      }, 700); // Match idle transition duration
     }
   }
 }
