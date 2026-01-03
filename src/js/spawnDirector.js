@@ -47,9 +47,9 @@ const SPAWN_TICK_MS = 500;          // How often to check spawns
 
 // Density caps within active bubble
 // Lower density = longer travel between fights = quest XP matters more
-const MAX_STRAYS = 4;               // Reduced from 5
+const MAX_STRAYS = 6;               // Enough for early leveling
 const MAX_PACKS = 1;                // Only 1 pack at a time in active bubble
-const MAX_TOTAL_ENEMIES = 8;        // Reduced from 10 - less crowded
+const MAX_TOTAL_ENEMIES = 10;       // Room for strays + small pack
 
 // NPE (New Player Experience) critter guarantees
 const NPE_CRITTER_MIN = 2;
@@ -596,14 +596,14 @@ function generateDefaultSpawners() {
   // ============================================
   // SAFE RING: NOMADS ONLY (Solo, Level 1-3)
   // ============================================
-  // NPE zone: passive wanderers, high spacing, low density
-  // 16 spawners spread across the safe ring (reduced from 30)
+  // NPE zone: passive wanderers, good density for early leveling
+  // 24 spawners spread across the safe ring
   
   // Inner nomads (level 1, closest to base but OUTSIDE base walls)
   // Base extends ~25 tiles from center, so start at 32+ to be safely outside
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2;
-    const dist = 32 + Math.random() * 4; // 32-36 tiles from center
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2;
+    const dist = 32 + Math.random() * 6; // 32-38 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -629,9 +629,9 @@ function generateDefaultSpawners() {
   }
   
   // Mid nomads (level 1-2, further from base)
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2 + Math.PI / 12; // Offset from inner ring
-    const dist = 44 + Math.random() * 6; // 44-50 tiles from center
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 + Math.PI / 16; // Offset from inner ring
+    const dist = 44 + Math.random() * 8; // 44-52 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -657,9 +657,9 @@ function generateDefaultSpawners() {
   }
   
   // Outer nomads (level 2-3, outer ring)
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 58 + Math.random() * 8; // 58-66 tiles from center
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 + Math.PI / 12;
+    const dist = 56 + Math.random() * 10; // 56-66 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
