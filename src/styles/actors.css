@@ -270,9 +270,23 @@
   50% { transform: translate3d(-50%, -3px, 0); }
 }
 
-/* NPC role tints - simple hue rotation for visual differentiation */
-.npc.guard > .sprite { filter: hue-rotate(180deg); }   /* Cyan */
-.npc.medic > .sprite { filter: hue-rotate(320deg); }   /* Pink */
+/* NPC role tints - hue rotation combined with base drop-shadow outline */
+.npc.guard > .sprite { 
+  filter: 
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.6))
+    hue-rotate(180deg);   /* Cyan */
+}
+.npc.medic > .sprite { 
+  filter: 
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.6))
+    hue-rotate(320deg);   /* Pink */
+}
 
 /* NPC downed state */
 .npc.downed {
@@ -292,8 +306,15 @@
   transition: transform calc(var(--enemy-move-speed, 400ms) * 2.5) ease-out;
 }
 
-/* Enemy tints - simple hue rotation */
-.enemy.passive > .sprite { filter: hue-rotate(60deg); }  /* Yellow-ish */
+/* Enemy tints - hue rotation combined with base drop-shadow outline */
+.enemy.passive > .sprite { 
+  filter: 
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.6))
+    hue-rotate(60deg);  /* Yellow-ish */
+}
 
 /* Alpha enemies - 20% larger, gold tint */
 .enemy.alpha {
@@ -302,7 +323,12 @@
 }
 
 .enemy.alpha > .sprite {
-  filter: hue-rotate(40deg) saturate(1.3); /* Gold-ish */
+  filter: 
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.6))
+    hue-rotate(40deg) saturate(1.3); /* Gold-ish */
 }
 
 /* Enemy targeting */
@@ -329,8 +355,21 @@
 }
 
 .enemy.retreating {
-  opacity: 0.7;
-  filter: saturate(0.7);
+  opacity: 0.5;
+  pointer-events: none; /* Can't be clicked while retreating */
+}
+.enemy.retreating > .sprite {
+  filter: 
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.4))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.4))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.4))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.4))
+    saturate(0.3) brightness(0.8);
+  animation: retreat-fade 0.8s ease-in-out infinite;
+}
+@keyframes retreat-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 /* ---------- Enemy UI Elements ---------- */
@@ -409,5 +448,10 @@
 
 /* ---------- Boss ---------- */
 .boss > .sprite {
-  filter: hue-rotate(280deg) saturate(1.3); /* Purple */
+  filter: 
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.6))
+    hue-rotate(280deg) saturate(1.3); /* Purple */
 }

@@ -2835,9 +2835,21 @@ export function playerAttack() {
   }
 
   // Delegate to the new intent system for basic attacks
+  const result = setAutoAttackIntent(currentTarget);
+  if (!result.success) {
+    if (result.reason === 'retreating') {
+      logCombat('Target is retreating.');
+    } else if (result.reason === 'dead') {
+      logCombat('Target is dead.');
+    } else {
+      logCombat('Invalid target.');
+    }
+    clearTarget();
+    return;
+  }
+  
   autoAttackEnabled = true;
   inCombat = true;
-  setAutoAttackIntent(currentTarget);
   tryExecuteCombatIntent();
 }
 
@@ -3222,12 +3234,38 @@ export function useWeaponAbility(slot) {
     inCombat = true;
     
     // Set weapon ability intent - will handle move-then-cast
-    setWeaponAbilityIntent(slot, currentTarget);
+    const result = setWeaponAbilityIntent(slot, currentTarget);
+    if (!result.success) {
+      // Target is invalid - provide feedback
+      if (result.reason === 'retreating') {
+        logCombat('Target is retreating.');
+      } else if (result.reason === 'dead') {
+        logCombat('Target is dead.');
+      } else {
+        logCombat('Invalid target.');
+      }
+      clearTarget();
+      return;
+    }
     tryExecuteCombatIntent(); // Try immediately, will move if needed
     return;
   }
   
-  // In range and LOS - execute immediately
+  // In range and LOS - check target validity before executing
+  const check = isInvalidCombatTarget(currentTarget);
+  if (check.invalid) {
+    if (check.reason === 'retreating') {
+      logCombat('Target is retreating.');
+    } else if (check.reason === 'dead') {
+      logCombat('Target is dead.');
+    } else {
+      logCombat('Invalid target.');
+    }
+    clearTarget();
+    return;
+  }
+  
+  // Execute immediately
   autoAttackEnabled = true;
   inCombat = true;
   provokeEnemy(currentTarget);
@@ -4719,10 +4757,14 @@ function isInvalidCombatTarget(enemy, t = nowMs()) {
  * Intent persists until target dies, player cancels, or timeout.
  * Uses weapon.basic spec for damage/range/LOS (NOT slot 1 ability).
  * Timer-gated: attacks occur every BASIC_ATTACK_CD_MS (1.5s shared cadence).
+ * @returns {{ success: boolean, reason?: string }}
  */
 function setAutoAttackIntent(target) {
   // Use centralized validity check
-  if (isInvalidCombatTarget(target).invalid) return;
+  const check = isInvalidCombatTarget(target);
+  if (check.invalid) {
+    return { success: false, reason: check.reason };
+  }
   
   const weapon = WEAPONS[currentWeapon];
   const basic = weapon?.basic;
@@ -4749,15 +4791,21 @@ function setAutoAttackIntent(target) {
     // Preserve cooldown start time for accurate UI progress
     cooldownStartedAt: preserveTimer ? combatIntent.cooldownStartedAt : 0
   };
+  
+  return { success: true };
 }
 
 /**
  * Set weapon ability intent (slots 1-3).
  * One-shot: clears after successful execution.
+ * @returns {{ success: boolean, reason?: string }}
  */
 function setWeaponAbilityIntent(slot, target) {
   // Use centralized validity check
-  if (isInvalidCombatTarget(target).invalid) return;
+  const check = isInvalidCombatTarget(target);
+  if (check.invalid) {
+    return { success: false, reason: check.reason };
+  }
   
   const weapon = WEAPONS[currentWeapon];
   const ability = weapon?.abilities?.[slot];
@@ -4777,6 +4825,8 @@ function setWeaponAbilityIntent(slot, target) {
     requiresLOS,
     requiredRange: range
   };
+  
+  return { success: true };
 }
 
 // NOTE: Sense abilities (push/pull) don't use the intent system.
@@ -5323,11 +5373,17 @@ export function handleTargeting(action, data) {
         selectTarget(data);
       }
       if (currentTarget) {
-        autoAttackEnabled = true;
-        inCombat = true;
         // Set persistent combat intent and try to execute
-        setAutoAttackIntent(currentTarget);
-        tryExecuteCombatIntent();
+        const result = setAutoAttackIntent(currentTarget);
+        if (result.success) {
+          autoAttackEnabled = true;
+          inCombat = true;
+          tryExecuteCombatIntent();
+        } else {
+          // Target is invalid (retreating, dead, etc.)
+          logCombat(result.reason === 'retreating' ? 'Target is retreating.' : 'Invalid target.');
+          clearTarget();
+        }
       }
       break;
     case 'special': playerSpecial(); break;
