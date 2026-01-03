@@ -46,6 +46,13 @@ export function isVulnerable(e) {
 }
 
 /**
+ * Check if entity is burning (taking DoT damage)
+ */
+export function isBurning(e) {
+  return (e.effects?.burnUntil ?? 0) > nowMs();
+}
+
+/**
  * Apply a status effect to a target
  * @param {object} target - Entity to affect
  * @param {object} effect - Effect to apply { type, durationMs, mult? }
@@ -62,7 +69,11 @@ export function applyEffect(target, effect) {
       slowMult: 1,
       vulnUntil: 0,
       vulnMult: 1,
-      immuneUntil: 0
+      immuneUntil: 0,
+      burnUntil: 0,
+      burnDamagePercent: 0,
+      burnTickInterval: 500,
+      burnLastTick: 0
     };
   }
   
@@ -95,6 +106,12 @@ export function applyEffect(target, effect) {
       
     case 'immune':
       target.effects.immuneUntil = Math.max(target.effects.immuneUntil ?? 0, t + dur);
+      break;
+      
+    case 'burn':
+      target.effects.burnUntil = Math.max(target.effects.burnUntil ?? 0, t + dur);
+      target.effects.burnDamagePercent = effect.damagePercent ?? 10;
+      target.effects.burnLastTick = t; // Start fresh
       break;
   }
 }

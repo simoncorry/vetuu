@@ -54,10 +54,10 @@ export const AI = {
   DEFAULT_AGGRO_RADIUS: 7,
   
   /** Padding added to aggro radius for deaggro (hysteresis) */
-  DEFAULT_DEAGGRO_RADIUS_PAD: 4,
+  DEFAULT_DEAGGRO_RADIUS_PAD: 9,
   
   /** Default max distance from home while engaged */
-  DEFAULT_LEASH_RADIUS: 14,
+  DEFAULT_LEASH_RADIUS: 24,
 
   // ============================================
   // MOVEMENT & SNAPPING

@@ -31,9 +31,13 @@
     <!-- MMO UI LAYOUT -->
     <!-- ============================================ -->
 
-    <!-- Top Left: Player Stats HUD -->
-    <aside id="hud" aria-label="Player status">
-      <div id="hud-stats">
+    <!-- Character Sheet (hidden by default, toggle with C) -->
+    <aside id="character-sheet" aria-label="Character sheet">
+      <header class="sheet-header">
+        <h2>Character</h2>
+        <button class="sheet-close" aria-label="Close">&times;</button>
+      </header>
+      <div id="sheet-stats">
         <div class="stat">
           <span class="stat-label">HP</span>
           <span class="stat-bar">
@@ -54,31 +58,27 @@
           <span class="stat-mini">LCK <strong id="luck-val">1</strong></span>
         </div>
       </div>
-      <div id="hud-level">
+      <div id="sheet-level">
         <span id="level-badge">Lv. <strong id="level-val">1</strong></span>
         <span class="xp-bar">
           <span id="xp-fill" class="stat-fill" style="--pct: 0"></span>
         </span>
         <span id="xp-text" class="stat-value">0/100</span>
       </div>
-      <div id="hud-location">
-        <span id="location-name">Drycross</span>
-      </div>
     </aside>
 
-    <!-- Top Right: Minimap -->
+    <!-- Top Right: Minimap (draggable, resizable, zoomable) -->
     <aside id="minimap-container" aria-label="Minimap">
       <div id="minimap">
-        <canvas id="minimap-canvas" width="150" height="100"></canvas>
-        <canvas id="minimap-fog" width="150" height="100"></canvas>
+        <canvas id="minimap-canvas" width="200" height="140"></canvas>
+        <canvas id="minimap-fog" width="200" height="140"></canvas>
         <div id="minimap-player"></div>
       </div>
       <div id="minimap-label">Drycross Region</div>
     </aside>
 
-    <!-- Quest Tracker (below minimap) -->
+    <!-- Quest Tracker (below minimap, draggable, resizable) -->
     <aside id="quest-tracker" aria-label="Active quests">
-      <h3>Quests</h3>
       <ul id="quest-list"></ul>
     </aside>
 
@@ -160,16 +160,16 @@
       
       <!-- Sense Abilities (4-6, spends Sense) -->
       <div id="sense-abilities" class="action-group">
-        <button class="action-slot sense-slot" data-slot="4" data-action-type="sense" title="Push (spends Sense)">
-          <span class="slot-icon">💨</span>
-          <span class="slot-label">Push</span>
+        <button class="action-slot sense-slot" data-slot="4" data-action-type="sense" title="Pull (spends Sense)">
+          <span class="slot-icon">🧲</span>
+          <span class="slot-label">Pull</span>
           <span class="slot-key">4</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
-        <button class="action-slot sense-slot" data-slot="5" data-action-type="sense" title="Pull (spends Sense)">
-          <span class="slot-icon">🧲</span>
-          <span class="slot-label">Pull</span>
+        <button class="action-slot sense-slot" data-slot="5" data-action-type="sense" title="Push (spends Sense)">
+          <span class="slot-icon">💨</span>
+          <span class="slot-label">Push</span>
           <span class="slot-key">5</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
@@ -281,17 +281,41 @@
     <div id="toast-container" aria-live="polite"></div>
   </main>
 
-  <!-- Controls hint -->
-  <aside id="controls-hint">
-    <p><kbd>Click</kbd> Move / Interact</p>
-    <p><kbd>R-Click</kbd> Attack target</p>
-    <p><kbd>Tab</kbd> Cycle targets</p>
-    <p><kbd>~</kbd><kbd>Space</kbd> Toggle weapon</p>
-    <p><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapon abilities</p>
-    <p><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd> Sense abilities</p>
-    <p><kbd>9</kbd>/<kbd>E</kbd> Sprint</p>
-    <p><kbd>0</kbd>/<kbd>Q</kbd> Heal</p>
-    <button id="reset-btn" title="Reset all game data">🔄 Reset</button>
+  <!-- Settings Menu (hidden by default, toggle with Esc) -->
+  <aside id="settings-menu" aria-label="Settings">
+    <header class="settings-header">
+      <h2>Settings</h2>
+      <button class="settings-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="settings-content">
+      <section class="settings-section">
+        <h3>Controls</h3>
+        <div class="controls-list">
+          <p><kbd>Click</kbd> Move / Interact</p>
+          <p><kbd>R-Click</kbd> Attack target</p>
+          <p><kbd>Tab</kbd> Cycle targets</p>
+          <p><kbd>~</kbd><kbd>Space</kbd> Toggle weapon</p>
+          <p><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapon abilities</p>
+          <p><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd> Sense abilities</p>
+          <p><kbd>R</kbd> Sprint</p>
+          <p><kbd>Q</kbd> Heal</p>
+        </div>
+      </section>
+      <section class="settings-section">
+        <h3>UI Shortcuts</h3>
+        <div class="controls-list">
+          <p><kbd>C</kbd> Character Sheet</p>
+          <p><kbd>I</kbd> Inventory</p>
+          <p><kbd>Ctrl/⌘</kbd>+<kbd>M</kbd> Toggle Map</p>
+          <p><kbd>Ctrl/⌘</kbd>+<kbd>J</kbd> Toggle Quests</p>
+          <p><kbd>Esc</kbd> Settings / Close</p>
+        </div>
+      </section>
+      <section class="settings-section">
+        <h3>Game</h3>
+        <button id="reset-btn" title="Reset all game data">🔄 Reset Progress</button>
+      </section>
+    </div>
   </aside>
 
   <script type="module" src="js/game.js"></script>

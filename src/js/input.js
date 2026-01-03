@@ -8,6 +8,12 @@ import { createPathTo, cancelPath } from './movement.js';
 import { cancelCombatPursuit } from './combat.js';
 import { toggleTorch } from './game.js';
 import { TILE_SIZE } from './render.js';
+import { 
+  toggleCharacterSheet, 
+  toggleMinimap, 
+  toggleQuestTracker, 
+  handleEscape 
+} from './ui.js';
 
 // ============================================
 // STATE
@@ -238,7 +244,7 @@ function onKeyDown(e) {
   }
 
   // ============================================
-  // INVENTORY
+  // INVENTORY (I)
   // ============================================
   if (code === 'KeyI') {
     e.preventDefault();
@@ -248,13 +254,43 @@ function onKeyDown(e) {
   }
 
   // ============================================
-  // ESCAPE - Cancel / Close
+  // CHARACTER SHEET (C)
+  // ============================================
+  if (code === 'KeyC') {
+    e.preventDefault();
+    if (!dialogueOpen) {
+      toggleCharacterSheet();
+    }
+    return;
+  }
+
+  // ============================================
+  // MINIMAP TOGGLE (Ctrl/Cmd + M)
+  // ============================================
+  if (code === 'KeyM' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    toggleMinimap();
+    return;
+  }
+
+  // ============================================
+  // QUEST TRACKER TOGGLE (Ctrl/Cmd + J)
+  // ============================================
+  if (code === 'KeyJ' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    toggleQuestTracker();
+    return;
+  }
+
+  // ============================================
+  // ESCAPE - Close UI / Cancel / Settings
+  // Priority: dialogues → inventory → character sheet → settings toggle
   // ============================================
   if (code === 'Escape') {
+    e.preventDefault();
     cancelPath();
     targetCallback('clear');
-    document.getElementById('dialogue-panel')?.close?.();
-    document.getElementById('inventory-panel')?.close?.();
+    handleEscape();
   }
 }
 
@@ -280,7 +316,7 @@ function isDoubleClick(x, y) {
 
 function onLeftClick(e, forceDoubleClick = false) {
   // Ignore clicks on UI elements
-  if (e.target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #controls-hint, #dialogue-panel, #inventory-panel')) {
+  if (e.target.closest('#character-sheet, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #settings-menu, #dialogue-panel, #inventory-panel')) {
     return;
   }
 
@@ -343,7 +379,7 @@ function onLeftClick(e, forceDoubleClick = false) {
 function onRightClick(e) {
   e.preventDefault();
 
-  if (e.target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame')) {
+  if (e.target.closest('#character-sheet, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #settings-menu')) {
     return;
   }
 

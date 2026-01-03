@@ -122,6 +122,7 @@ const BLOCK_SIZE = 3;           // 3×3 tiles per spawn footprint
 const BLOCK_STRIDE = 6;         // Block spacing (6 = 3-tile buffer between footprints - prevents clipping)
 const MIN_PACK_SIZE = 2;        // Minimum enemies per pack
 const MAX_PACK_SIZE = 6;        // Maximum enemies per pack (reduced from 8)
+const MIN_ENEMY_SPACING = 3;    // Minimum tiles between any two enemy centers (enforces 3x3 non-overlap)
 
 // ============================================
 // STATE
@@ -175,10 +176,35 @@ function getBlockTiles(cx, cy) {
 }
 
 /**
+ * Check if a spawn position is too close to any existing enemy.
+ * Enforces MIN_ENEMY_SPACING tiles between enemy centers.
+ * @param {number} cx - Center X of proposed spawn
+ * @param {number} cy - Center Y of proposed spawn
+ * @returns {boolean} True if too close to an existing enemy
+ */
+function isTooCloseToExistingEnemies(cx, cy) {
+  const enemies = currentState?.runtime?.activeEnemies || [];
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue;
+    const dist = Math.max(Math.abs(enemy.x - cx), Math.abs(enemy.y - cy)); // Chebyshev distance
+    if (dist < MIN_ENEMY_SPACING) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Check if a 3×3 block centered at (cx, cy) is valid for spawning.
- * Valid means: all 9 tiles walkable, none reserved, none in base bounds.
+ * Valid means: all 9 tiles walkable, none reserved, none in base bounds,
+ * and not too close to existing enemies.
  */
 function isBlockValid(cx, cy) {
+  // First check minimum spacing from existing enemies
+  if (isTooCloseToExistingEnemies(cx, cy)) {
+    return false;
+  }
+  
   const tiles = getBlockTiles(cx, cy);
   
   for (const tile of tiles) {
@@ -1512,6 +1538,11 @@ function findFreeBlockForSlot(spawner) {
  * Doesn't check player distance (slots are permanent).
  */
 function isBlockValidForSlot(cx, cy) {
+  // Check minimum spacing from existing enemies
+  if (isTooCloseToExistingEnemies(cx, cy)) {
+    return false;
+  }
+  
   const tiles = getBlockTiles(cx, cy);
   
   for (const tile of tiles) {
@@ -1575,6 +1606,16 @@ function findSlotGridLayout(spawner, count) {
           pos.blockTiles.some(pt => tiles.some(t => t.x === pt.x && t.y === pt.y))
         );
         if (overlaps) {
+          allValid = false;
+          break;
+        }
+        
+        // Check minimum spacing from other pack members
+        const tooCloseToPackMember = positions.some(pos => {
+          const dist = Math.max(Math.abs(pos.x - cx), Math.abs(pos.y - cy));
+          return dist < MIN_ENEMY_SPACING;
+        });
+        if (tooCloseToPackMember) {
           allValid = false;
           break;
         }
@@ -1764,6 +1805,16 @@ function findPackBlockLayout(spawner, count) {
           other.tiles.some(ot => tiles.some(t => t.x === ot.x && t.y === ot.y))
         );
         if (overlapsOther) {
+          allValid = false;
+          break;
+        }
+        
+        // Check minimum spacing from other pack members (3x3 non-overlap)
+        const tooCloseToPackMember = blocks.some(other => {
+          const dist = Math.max(Math.abs(other.centerX - cx), Math.abs(other.centerY - cy));
+          return dist < MIN_ENEMY_SPACING;
+        });
+        if (tooCloseToPackMember) {
           allValid = false;
           break;
         }

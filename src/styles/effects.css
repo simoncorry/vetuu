@@ -7,12 +7,8 @@
 .is-stunned {
   filter: brightness(0.6) saturate(0.5);
   outline: 2px solid #fff;
-  animation: stun-shake 0.1s ease-in-out infinite;
-}
-
-@keyframes stun-shake {
-  0%, 100% { transform: translate3d(var(--tx, 0), var(--ty, 0), 0); }
-  50% { transform: translate3d(calc(var(--tx, 0) + 2px), var(--ty, 0), 0); }
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+  /* No animation - avoids potential conflicts with position transforms */
 }
 
 .is-rooted {
@@ -42,6 +38,17 @@
   filter: brightness(1.3) saturate(1.5);
   outline: 3px solid gold;
   box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+}
+
+.is-burning {
+  outline: 2px solid #FF4500;
+  box-shadow: 0 0 12px rgba(255, 69, 0, 0.8), 0 0 24px rgba(255, 140, 0, 0.4);
+  animation: burn-flicker 0.3s ease-in-out infinite;
+}
+
+@keyframes burn-flicker {
+  0%, 100% { filter: brightness(1) saturate(1.2); }
+  50% { filter: brightness(1.3) saturate(1.5); }
 }
 
 /* Retreating enemies - desaturated and running away */
@@ -110,23 +117,12 @@
   }
 }
 
-/* Enemy outline flash when affected by Push/Pull */
+/* Enemy outline flash when affected by Push/Pull
+   Uses transition (not animation) to avoid conflicts with position transitions */
 .sense-affected {
   outline: 3px solid var(--sense-color, #4B9CD6) !important;
   box-shadow: 0 0 16px var(--sense-color, #4B9CD6), inset 0 0 8px rgba(75, 156, 214, 0.3) !important;
-  animation: sense-flash 0.4s ease-out;
-}
-
-@keyframes sense-flash {
-  /* Use transform scale and filter for GPU acceleration */
-  0% {
-    transform: scale3d(1.1, 1.1, 1);
-    filter: brightness(1.5) saturate(1.5);
-  }
-  100% {
-    transform: scale3d(1, 1, 1);
-    filter: brightness(1) saturate(1);
-  }
+  filter: brightness(1.3) saturate(1.3);
 }
 
 /* Push/Pull animations moved to combat.css with GPU acceleration */

@@ -376,6 +376,24 @@ export function getSunAngle() {
 }
 
 /**
+ * Night shadow parameters (constant)
+ */
+const NIGHT_SHADOW = {
+  skewX: 0,
+  scaleY: 0.4,
+  scaleX: 1.0,
+  opacity: 0.30,
+  blur: 2
+};
+
+/**
+ * Lerp helper for smooth interpolation
+ */
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
  * Get shadow parameters based on current sun position.
  * Returns CSS-ready values for shadow transforms.
  * 
@@ -383,6 +401,7 @@ export function getSunAngle() {
  * - Slightly stronger at midday (harsh sun)
  * - Slightly softer at night (ambient light)
  * - Dynamic direction/length based on sun position
+ * - Smooth transitions at dawn (5:30-6:30) and dusk (17:30-18:30)
  * 
  * @returns {{
  *   skewX: number,      // Skew angle in degrees (-36 to +36)
@@ -393,21 +412,51 @@ export function getSunAngle() {
  * }}
  */
 export function getShadowParams() {
-  const sunAngle = getSunAngle();
+  const hour = timeOfDay * 24;
   
-  // Night: soft ambient shadows (moonlight/torchlight)
-  // Still visible but diffuse - uniform direction (straight down)
-  if (sunAngle === null) {
+  // Full night: no transition needed (0:00 - 5:30 and 18:30 - 24:00)
+  if (hour < 5.5 || hour >= 18.5) {
+    return { ...NIGHT_SHADOW };
+  }
+  
+  // Dawn transition (5:30 - 6:30): interpolate from night to day
+  if (hour < 6.5) {
+    const dayParams = getDayShadowParams(hour < 6 ? 0 : ((hour - 6) / 12) * 180);
+    // t goes from 0 (at 5:30) to 1 (at 6:30)
+    const t = (hour - 5.5);
     return {
-      skewX: 0,
-      scaleY: 0.4,
-      scaleX: 1.0,
-      opacity: 0.30,  // Prominent but softer than daytime
-      blur: 2
+      skewX: lerp(NIGHT_SHADOW.skewX, dayParams.skewX, t),
+      scaleY: lerp(NIGHT_SHADOW.scaleY, dayParams.scaleY, t),
+      scaleX: lerp(NIGHT_SHADOW.scaleX, dayParams.scaleX, t),
+      opacity: lerp(NIGHT_SHADOW.opacity, dayParams.opacity, t),
+      blur: lerp(NIGHT_SHADOW.blur, dayParams.blur, t)
     };
   }
   
-  // Day: dynamic shadows based on sun position
+  // Dusk transition (17:30 - 18:30): interpolate from day to night
+  if (hour >= 17.5) {
+    const dayParams = getDayShadowParams(hour < 18 ? ((hour - 6) / 12) * 180 : 180);
+    // t goes from 0 (at 17:30) to 1 (at 18:30)
+    const t = (hour - 17.5);
+    return {
+      skewX: lerp(dayParams.skewX, NIGHT_SHADOW.skewX, t),
+      scaleY: lerp(dayParams.scaleY, NIGHT_SHADOW.scaleY, t),
+      scaleX: lerp(dayParams.scaleX, NIGHT_SHADOW.scaleX, t),
+      opacity: lerp(dayParams.opacity, NIGHT_SHADOW.opacity, t),
+      blur: lerp(dayParams.blur, NIGHT_SHADOW.blur, t)
+    };
+  }
+  
+  // Full day (6:30 - 17:30): use sun-based shadows
+  const sunAngle = ((hour - 6) / 12) * 180;
+  return getDayShadowParams(sunAngle);
+}
+
+/**
+ * Calculate day shadow parameters from sun angle.
+ * @param {number} sunAngle - Sun angle in degrees (0-180)
+ */
+function getDayShadowParams(sunAngle) {
   // skewX: sun at 0° (east) = shadow points west (+36°)
   //        sun at 90° (overhead) = straight down (0°)
   //        sun at 180° (west) = shadow points east (-36°)
@@ -423,7 +472,6 @@ export function getShadowParams() {
   const scaleX = 1.0 + (angleFromNoon / 90) * 0.2; // Range: 1.0 to 1.2
   
   // opacity: STRONGER at noon (harsh midday sun), slightly less at dawn/dusk
-  // This creates uniform but realistic shadows - midday sun casts harder shadows
   // Noon: 0.45, Dawn/Dusk: 0.35
   const opacity = 0.45 - (angleFromNoon / 90) * 0.10; // Range: 0.35 to 0.45
   

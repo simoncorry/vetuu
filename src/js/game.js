@@ -17,6 +17,7 @@ import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
 import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
 import { cssVar } from './utils.js';
+import { initUI, initSettingsMenu, loadPanelState } from './ui.js';
 import './perf.js'; // Initialize perf monitoring (exposes VETUU_PERF() to console)
 
 // ============================================
@@ -363,9 +364,10 @@ export function updateHUD() {
   if (els.levelVal) els.levelVal.textContent = p.level;
 
   // XP progress calculation - works with generated XP table
+  // XP_TABLE[0] = 0 (level 1 start), XP_TABLE[1] = XP to reach level 2, etc.
   const isMaxLevel = p.level >= LEVEL_CAP;
-  const currentLevelXP = XP_TABLE[p.level] || 0;
-  const nextLevelXP = XP_TABLE[p.level + 1] || currentLevelXP;
+  const currentLevelXP = XP_TABLE[p.level - 1] || 0;
+  const nextLevelXP = XP_TABLE[p.level] || currentLevelXP;
   const xpIntoLevel = p.xp - currentLevelXP;
   const xpNeededForLevel = nextLevelXP - currentLevelXP;
   const xpProgress = isMaxLevel ? 100 : (xpNeededForLevel > 0 ? (xpIntoLevel / xpNeededForLevel) * 100 : 100);
@@ -409,14 +411,18 @@ function updateLocation() {
   }
 
   state.runtime.currentRegion = regionName;
-  document.getElementById('location-name').textContent = regionName;
-  document.getElementById('minimap-label').textContent = regionName;
+  
+  // Update minimap label only (location hint removed)
+  const minimapLabel = document.getElementById('minimap-label');
+  if (minimapLabel) minimapLabel.textContent = regionName;
 }
 
 // ============================================
 // MINIMAP
 // ============================================
 let minimapScale = 1;
+let minimapCanvasWidth = 200;
+let minimapCanvasHeight = 140;
 
 function initMinimap() {
   const canvas = document.getElementById('minimap-canvas');
@@ -424,6 +430,10 @@ function initMinimap() {
   const minimap = document.getElementById('minimap');
   if (!canvas) return;
 
+  // Get canvas dimensions
+  minimapCanvasWidth = canvas.width;
+  minimapCanvasHeight = canvas.height;
+  
   const ctx = canvas.getContext('2d');
   minimapScale = canvas.width / state.map.meta.width;
 
@@ -456,7 +466,7 @@ function initMinimap() {
     fogCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
   }
 
-  // Click-to-move on minimap
+  // Click-to-move on minimap (improved handler)
   if (minimap) {
     minimap.addEventListener('click', onMinimapClick);
   }
@@ -466,15 +476,32 @@ function initMinimap() {
 
 function onMinimapClick(e) {
   const minimap = document.getElementById('minimap');
-  if (!minimap) return;
+  const canvas = document.getElementById('minimap-canvas');
+  if (!minimap || !canvas) return;
+
+  // Don't process if clicking on other minimap elements
+  if (e.target.id === 'minimap-corpse') return;
 
   const rect = minimap.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
-
+  
+  // Get current zoom level from CSS variable
+  const computedStyle = getComputedStyle(minimap);
+  const zoom = parseFloat(computedStyle.getPropertyValue('--minimap-zoom')) || 1;
+  
+  // Account for zoom and centering
+  // Canvas is centered at 50% 50%, so we need to adjust coordinates
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+  
+  // Calculate click position relative to canvas center, adjusted for zoom
+  const canvasX = (clickX - centerX) / zoom + (minimapCanvasWidth / 2);
+  const canvasY = (clickY - centerY) / zoom + (minimapCanvasHeight / 2);
+  
   // Convert to world coordinates
-  const worldX = Math.floor(clickX / minimapScale);
-  const worldY = Math.floor(clickY / minimapScale);
+  const worldX = Math.floor(canvasX / minimapScale);
+  const worldY = Math.floor(canvasY / minimapScale);
 
   // Check bounds
   if (worldX < 0 || worldY < 0 || worldX >= state.map.meta.width || worldY >= state.map.meta.height) {
@@ -497,11 +524,21 @@ function updateMinimap() {
   }
   if (!cachedMinimapPlayer) return;
 
-  const x = state.player.x * minimapScale;
-  const y = state.player.y * minimapScale;
+  // Calculate player position on canvas
+  const canvasX = state.player.x * minimapScale;
+  const canvasY = state.player.y * minimapScale;
+  
+  // Get current zoom and minimap dimensions for centering
+  const minimap = document.getElementById('minimap');
+  const zoom = parseFloat(getComputedStyle(minimap).getPropertyValue('--minimap-zoom')) || 1;
+  
+  // Position relative to canvas center (canvas is centered with translate -50%, -50%)
+  // Player position = canvas center offset + (player canvas pos - canvas center) * zoom
+  const offsetX = (canvasX - minimapCanvasWidth / 2) * zoom;
+  const offsetY = (canvasY - minimapCanvasHeight / 2) * zoom;
 
-  // Use transform for GPU-accelerated positioning (includes -50% centering)
-  cachedMinimapPlayer.style.transform = `translate3d(calc(${x}px - 50%), calc(${y}px - 50%), 0)`;
+  // Use transform for GPU-accelerated positioning
+  cachedMinimapPlayer.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 0)`;
 
   updateMinimapFog();
 }
@@ -559,11 +596,18 @@ export function updateMinimapCorpse(x, y) {
   const minimap = document.getElementById('minimap');
   if (!minimap) return;
   
+  // Calculate position relative to canvas center (same as player)
+  const canvasX = x * minimapScale;
+  const canvasY = y * minimapScale;
+  const zoom = parseFloat(getComputedStyle(minimap).getPropertyValue('--minimap-zoom')) || 1;
+  const offsetX = (canvasX - minimapCanvasWidth / 2) * zoom;
+  const offsetY = (canvasY - minimapCanvasHeight / 2) * zoom;
+  
   const corpseMarker = document.createElement('div');
   corpseMarker.id = 'minimap-corpse';
   corpseMarker.className = 'minimap-corpse';
-  // Use transform for GPU-accelerated positioning
-  corpseMarker.style.transform = `translate3d(calc(${x * minimapScale}px - 50%), calc(${y * minimapScale}px - 50%), 0)`;
+  // Use transform for GPU-accelerated positioning (centered like player)
+  corpseMarker.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 0)`;
   corpseMarker.textContent = '💀';
   corpseMarker.title = 'Click to path to your corpse';
   
@@ -1516,6 +1560,21 @@ async function init() {
     updateShadowCSS(); // Set initial shadow CSS variables
     
     initMinimap();
+    
+    // Initialize UI module (draggable panels, settings menu)
+    initUI();
+    initSettingsMenu();
+    loadPanelState();
+    
+    // Initialize character sheet close button
+    const sheetClose = document.querySelector('.sheet-close');
+    if (sheetClose) {
+      sheetClose.addEventListener('click', async () => {
+        const { toggleCharacterSheet } = await import('./ui.js');
+        toggleCharacterSheet();
+      });
+    }
+    
     updateHUD();
     renderQuestTracker(state);
     checkInteraction();

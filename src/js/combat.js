@@ -14,11 +14,11 @@
  */
 
 import { saveGame } from './save.js';
-import { hasLineOfSight, canMoveTo } from './collision.js';
+import { hasLineOfSight, canMoveTo, canMoveToIgnoreEnemies } from './collision.js';
 import { WEAPONS, ENEMY_WEAPONS, BASIC_ATTACK_CD_MS } from './weapons.js';
 import { 
   distCoords, shuffleArray, applyEffect, tickEffects,
-  isSlowed, isVulnerable, cssVar
+  isSlowed, isVulnerable, isBurning, cssVar
 } from './utils.js';
 import { AI } from './aiConstants.js';
 import { getMaxHP, getHPPercent } from './entityCompat.js';
@@ -33,7 +33,7 @@ import {
   ensureEffects,
   retreatPack
 } from './aiUtils.js';
-import { actorTransform, isActorVisible, TILE_SIZE } from './render.js';
+import { actorTransform, isActorVisible, TILE_SIZE, getViewportInfo } from './render.js';
 import { SPRITES } from './sprites.js';
 import { perfStart, perfEnd } from './perf.js';
 
@@ -1019,6 +1019,9 @@ function startCombatTick() {
     
     // Update sense cooldowns (push, pull)
     tickSenseCooldowns(100);
+    
+    // Drop focus on targets that are too far away (outside viewport + 10% buffer)
+    checkTargetDistance();
 
     // Try to execute combat intent (handles immunity expiry, movement completion)
     tryExecuteCombatIntent();
@@ -1126,21 +1129,35 @@ function getEngagedEnemies() {
   );
 }
 
-// Find the next enemy to target - prioritize enemies attacking the player
+// Get all enemies that are engaged OR provoked (attacked by player abilities)
+function getAggressiveEnemies() {
+  if (!currentState?.runtime?.activeEnemies) return [];
+  const t = nowMs();
+  return currentState.runtime.activeEnemies.filter(e => {
+    if (e.hp <= 0) return false;
+    // Engaged enemies
+    if (e.isEngaged || e.state === 'ENGAGED') return true;
+    // Provoked enemies (e.g., hit by Push/Pull)
+    if (provokedEnemies.has(e.id) && !isExpired(e.provokedUntil, t)) return true;
+    return false;
+  });
+}
+
+// Find the next enemy to target - prioritize enemies attacking the player or provoked
 function findNextCombatTarget() {
   const player = currentState.player;
-  const engaged = getEngagedEnemies();
+  const aggressive = getAggressiveEnemies();
   
-  if (engaged.length === 0) return null;
+  if (aggressive.length === 0) return null;
   
-  // Sort by distance - closest engaged enemy first
-  engaged.sort((a, b) => {
+  // Sort by distance - closest aggressive enemy first
+  aggressive.sort((a, b) => {
     const distA = distCoords(a.x, a.y, player.x, player.y);
     const distB = distCoords(b.x, b.y, player.x, player.y);
     return distA - distB;
   });
   
-  return engaged[0];
+  return aggressive[0];
 }
 
 // End combat state
@@ -1531,9 +1548,9 @@ function initEnemyAIFields(enemy) {
     };
   }
   
-  // Default ranges
-  enemy.leashRadius = enemy.leashRadius ?? (enemy.isAlpha ? 18 : AI.DEFAULT_LEASH_RADIUS);
-  enemy.aggroRadius = enemy.aggroRadius ?? (enemy.isAlpha ? 12 : AI.DEFAULT_AGGRO_RADIUS);
+  // Default ranges (alphas get +4 leash, +2 aggro)
+  enemy.leashRadius = enemy.leashRadius ?? (enemy.isAlpha ? AI.DEFAULT_LEASH_RADIUS + 4 : AI.DEFAULT_LEASH_RADIUS);
+  enemy.aggroRadius = enemy.aggroRadius ?? (enemy.isAlpha ? AI.DEFAULT_AGGRO_RADIUS + 2 : AI.DEFAULT_AGGRO_RADIUS);
   
   ensureEffects(enemy);
 }
@@ -2757,8 +2774,8 @@ function canEnemyMoveToEx(x, y, enemy, respectFootprints = false) {
 }
 
 function updateEnemyPosition(enemy, x, y, forceMove = false, isIdle = false) {
-  // Rooted enemies can't move (unless retreating or forced)
-  if (!forceMove && !enemy.isRetreating && isRooted(enemy)) {
+  // Stunned or rooted enemies can't move (unless retreating or forced)
+  if (!forceMove && !enemy.isRetreating && (isStunned(enemy) || isRooted(enemy))) {
     return;
   }
   
@@ -3662,20 +3679,27 @@ function executeSwordShockwave(weapon, ability) {
 // ============================================
 const SENSE_ABILITIES = {
   4: {
-    id: 'push',
-    name: 'Push',
-    senseCost: 15,
-    cooldownMs: 8000,
-    radius: 2,           // Affects enemies within 2 tiles
-    pushToDistance: 8    // Push them to be at least 8 tiles away
-  },
-  5: {
     id: 'pull',
     name: 'Pull',
-    senseCost: 15,
+    senseCost: 10,       // 50% of base maxSense (20) - allows chaining
     cooldownMs: 8000,
-    radius: 6,           // Affects enemies within 6 tiles
-    pullToDistance: 2    // Pull them to within 2 tiles
+    radius: 8,           // Affects enemies within 8 tiles
+    pullToDistance: 2,   // Pull them to within 2 tiles
+    freezeDurationMs: 4000, // 4 second freeze (stun)
+    switchToMelee: true,    // Switch to melee weapon on use
+    autoAttackClosest: true // Auto-attack closest after pull
+  },
+  5: {
+    id: 'push',
+    name: 'Push',
+    senseCost: 10,       // 50% of base maxSense (20) - allows chaining
+    cooldownMs: 8000,
+    radius: 8,           // Affects enemies within 8 tiles
+    // Push distance varies by starting distance:
+    // 1 tile away = pushed 8 tiles, 8 tiles away = pushed 1 tile
+    burnDurationMs: 4000, // 4 second burn
+    burnDamagePercent: 10, // 10% of max HP over duration
+    switchToRanged: true   // Switch to ranged weapon on use
   },
   6: {
     id: 'locked',
@@ -3772,12 +3796,18 @@ function executePush(ability) {
   const enemies = currentState.runtime.activeEnemies || [];
   const affected = [];
   
-  // Find enemies within push radius
+  // Switch to ranged weapon if not already
+  if (ability.switchToRanged && currentWeapon !== 'laser_rifle') {
+    setWeapon('laser_rifle');
+    logCombat('Switched to ranged weapon.');
+  }
+  
+  // Find enemies within push radius, storing their starting distance
   for (const enemy of enemies) {
     if (enemy.hp <= 0) continue;
     const dist = distCoords(player.x, player.y, enemy.x, enemy.y);
     if (dist <= ability.radius) {
-      affected.push(enemy);
+      affected.push({ enemy, startDist: Math.round(dist) });
     }
   }
   
@@ -3789,32 +3819,88 @@ function executePush(ability) {
     return;
   }
   
-  // Push each enemy away
-  for (const enemy of affected) {
-    pushEnemyAway(enemy, player, ability.pushToDistance);
+  // Push each enemy away with variable distance based on starting distance
+  // Closer enemies get pushed further: dist 1 = push 8, dist 8 = push 1
+  // Track occupied tiles to prevent enemies from stacking
+  let pushedCount = 0;
+  let blockedCount = 0;
+  const pushedEnemies = [];
+  const occupiedTiles = new Set();
+  
+  // Pre-populate with player position
+  occupiedTiles.add(`${player.x},${player.y}`);
+  
+  for (const { enemy, startDist } of affected) {
+    // Calculate push distance: 9 - starting distance (so dist 1 = push 8, dist 8 = push 1)
+    const pushDistance = Math.max(1, 9 - startDist);
+    const targetDistance = startDist + pushDistance;
+    
+    const wasMoved = pushEnemyAway(enemy, player, targetDistance, occupiedTiles);
+    
+    // Mark the enemy's new position as occupied
+    occupiedTiles.add(`${enemy.x},${enemy.y}`);
     
     // Provoke passive enemies (makes them aggro)
     provokeEnemy(enemy, nowMs(), 'push');
     
+    // Apply burn effect (10% damage over 4s)
+    if (ability.burnDurationMs && ability.burnDamagePercent) {
+      applyEffect(enemy, {
+        type: 'burn',
+        durationMs: ability.burnDurationMs,
+        damagePercent: ability.burnDamagePercent
+      });
+    }
+    
     // Flash enemy outline to show they were affected
     flashEnemyAffected(enemy);
     
-    // Update visual position with animation
-    animateEnemyDisplacement(enemy);
+    if (wasMoved) {
+      pushedCount++;
+      pushedEnemies.push(enemy);
+    } else {
+      blockedCount++;
+    }
   }
   
-  logCombat(`Push: ${affected.length} enemies pushed away!`);
+  if (pushedCount > 0) {
+    logCombat(`Push: ${pushedCount} enemies pushed & burning!`);
+    
+    // Auto-target the closest pushed enemy and enable auto-attack
+    if (pushedEnemies.length > 0) {
+      pushedEnemies.sort((a, b) => {
+        const distA = distCoords(a.x, a.y, player.x, player.y);
+        const distB = distCoords(b.x, b.y, player.x, player.y);
+        return distA - distB;
+      });
+      
+      const closestEnemy = pushedEnemies[0];
+      selectTarget(closestEnemy);
+      autoAttackEnabled = true;
+      inCombat = true;
+      setAutoAttackIntent(closestEnemy);
+    }
+  } else if (blockedCount > 0) {
+    logCombat(`Push: ${affected.length} enemies burning but blocked by terrain.`);
+  }
 }
 
 
 /**
  * Pull: Pulls enemies within radius to within pullToDistance tiles
  * Collision-safe displacement. Always shows visual effect.
+ * Freezes enemies (stun) and auto-attacks closest.
  */
 function executePull(ability) {
   const player = currentState.player;
   const enemies = currentState.runtime.activeEnemies || [];
   const affected = [];
+  
+  // Switch to melee weapon if not already
+  if (ability.switchToMelee && currentWeapon !== 'vibro_sword') {
+    setWeapon('vibro_sword');
+    logCombat('Switched to melee weapon.');
+  }
   
   // Find enemies within pull radius (but not already close)
   for (const enemy of enemies) {
@@ -3834,79 +3920,142 @@ function executePull(ability) {
   }
   
   // Pull each enemy toward player
+  // Track occupied tiles to prevent enemies from stacking
+  let pulledCount = 0;
+  const pulledEnemies = [];
+  const occupiedTiles = new Set();
+  
+  // Pre-populate with player position
+  occupiedTiles.add(`${player.x},${player.y}`);
+  
   for (const enemy of affected) {
-    pullEnemyToward(enemy, player, ability.pullToDistance);
+    const wasMoved = pullEnemyToward(enemy, player, ability.pullToDistance, occupiedTiles);
+    
+    // Mark the enemy's new position as occupied
+    occupiedTiles.add(`${enemy.x},${enemy.y}`);
     
     // Provoke passive enemies (makes them aggro)
     provokeEnemy(enemy, nowMs(), 'pull');
     
+    // Apply freeze (stun) effect - can't move or attack for 4s
+    if (ability.freezeDurationMs) {
+      applyEffect(enemy, {
+        type: 'stun',
+        durationMs: ability.freezeDurationMs
+      });
+    }
+    
     // Flash enemy outline to show they were affected
     flashEnemyAffected(enemy);
     
-    // Update visual position with animation
-    animateEnemyDisplacement(enemy);
+    if (wasMoved) {
+      pulledCount++;
+    }
+    pulledEnemies.push(enemy);
   }
   
-  logCombat(`Pull: ${affected.length} enemies pulled in!`);
+  logCombat(`Pull: ${pulledCount} enemies pulled & frozen!`);
+  
+  // Auto-attack closest enemy after pull
+  if (ability.autoAttackClosest && pulledEnemies.length > 0) {
+    pulledEnemies.sort((a, b) => {
+      const distA = distCoords(a.x, a.y, player.x, player.y);
+      const distB = distCoords(b.x, b.y, player.x, player.y);
+      return distA - distB;
+    });
+    
+    const closestEnemy = pulledEnemies[0];
+    selectTarget(closestEnemy);
+    autoAttackEnabled = true;
+    inCombat = true;
+    const result = setAutoAttackIntent(closestEnemy);
+    if (result.success) {
+      // Immediately try to execute the attack
+      tryExecuteCombatIntent();
+    }
+  }
 }
 
 
 /**
- * Push enemy away from player until at least targetDist away
- * Step-wise collision check
+ * Push enemy away from player until at least targetDist away.
+ * Step-wise collision check. Returns true if enemy was moved.
+ * @param {Set} occupiedTiles - Set of "x,y" strings for tiles already occupied by displaced enemies
  */
-function pushEnemyAway(enemy, player, targetDist) {
-  const dx = enemy.x - player.x;
-  const dy = enemy.y - player.y;
+function pushEnemyAway(enemy, player, targetDist, occupiedTiles = new Set()) {
+  const startX = enemy.x;
+  const startY = enemy.y;
+  const dx = startX - player.x;
+  const dy = startY - player.y;
   const currentDist = Math.hypot(dx, dy);
   
-  if (currentDist >= targetDist || currentDist === 0) return;
+  if (currentDist >= targetDist || currentDist === 0) return false;
   
-  // Normalize direction
+  // Normalize direction (away from player)
   const nx = dx / currentDist;
   const ny = dy / currentDist;
   
-  // Push step by step until target distance or blocked
-  let newX = enemy.x;
-  let newY = enemy.y;
+  // Find the furthest valid position step by step
+  // We need a continuous path, so track last valid position
+  let lastValidX = startX;
+  let lastValidY = startY;
+  let lastTestedX = startX;
+  let lastTestedY = startY;
   const maxSteps = Math.ceil(targetDist - currentDist) + 2;
   
   for (let i = 1; i <= maxSteps; i++) {
-    const testX = Math.round(enemy.x + nx * i);
-    const testY = Math.round(enemy.y + ny * i);
+    const testX = Math.round(startX + nx * i);
+    const testY = Math.round(startY + ny * i);
     
-    if (canMoveTo(currentState, testX, testY)) {
-      newX = testX;
-      newY = testY;
+    // Skip duplicate positions (can happen with rounding)
+    if (testX === lastTestedX && testY === lastTestedY) continue;
+    lastTestedX = testX;
+    lastTestedY = testY;
+    
+    // Check if tile is already occupied by another displaced enemy
+    const tileKey = `${testX},${testY}`;
+    if (occupiedTiles.has(tileKey)) {
+      break; // Can't move here, stop at last valid position
+    }
+    
+    if (canMoveToIgnoreEnemies(currentState, testX, testY)) {
+      lastValidX = testX;
+      lastValidY = testY;
       
       // Check if we've reached target distance
-      const newDist = distCoords(player.x, player.y, newX, newY);
+      const newDist = distCoords(player.x, player.y, lastValidX, lastValidY);
       if (newDist >= targetDist) break;
     } else {
-      break; // Blocked
+      // Hit an obstacle - stop here, we can't path through walls
+      break;
     }
   }
   
-  enemy.x = newX;
-  enemy.y = newY;
+  // Only move if we found a new position different from start
+  if (lastValidX !== startX || lastValidY !== startY) {
+    updateEnemyPosition(enemy, lastValidX, lastValidY, true); // forceMove=true bypasses root check
+    return true;
+  }
+  return false;
 }
 
 /**
- * Pull enemy toward player until within targetDist
- * Step-wise collision check
+ * Pull enemy toward player until within targetDist.
+ * Step-wise collision check. Returns true if enemy was moved.
+ * @param {Set} occupiedTiles - Set of "x,y" strings for tiles already occupied by displaced enemies
  */
-function pullEnemyToward(enemy, player, targetDist) {
+function pullEnemyToward(enemy, player, targetDist, occupiedTiles = new Set()) {
   const dx = player.x - enemy.x;
   const dy = player.y - enemy.y;
   const currentDist = Math.hypot(dx, dy);
   
-  if (currentDist <= targetDist) return;
+  if (currentDist <= targetDist) return false;
   
   // Normalize direction (toward player)
   const nx = dx / currentDist;
   const ny = dy / currentDist;
   
-  // Pull step by step until target distance or blocked
+  // Find the closest valid position step by step
   let newX = enemy.x;
   let newY = enemy.y;
   const maxSteps = Math.ceil(currentDist - targetDist) + 2;
@@ -3918,7 +4067,13 @@ function pullEnemyToward(enemy, player, targetDist) {
     // Don't pull onto the player's tile
     if (testX === player.x && testY === player.y) break;
     
-    if (canMoveTo(currentState, testX, testY)) {
+    // Check if tile is already occupied by another displaced enemy
+    const tileKey = `${testX},${testY}`;
+    if (occupiedTiles.has(tileKey)) {
+      break; // Can't move here, stop at last valid position
+    }
+    
+    if (canMoveToIgnoreEnemies(currentState, testX, testY)) {
       newX = testX;
       newY = testY;
       
@@ -3930,25 +4085,12 @@ function pullEnemyToward(enemy, player, targetDist) {
     }
   }
   
-  enemy.x = newX;
-  enemy.y = newY;
-}
-
-/**
- * Animate enemy's visual position after displacement (for Push/Pull)
- */
-function animateEnemyDisplacement(enemy) {
-  const enemyEl = getEnemyEl(enemy.id);
-  if (enemyEl) {
-    enemyEl.style.transition = 'transform 0.2s ease-out';
-    enemyEl.style.transform = actorTransform(enemy.x, enemy.y);
-    
-    // Reset transition after animation completes
-    enemyEl.addEventListener('transitionend', function handler() {
-      enemyEl.style.transition = '';
-      enemyEl.removeEventListener('transitionend', handler);
-    });
+  // Only move if we found a new position
+  if (newX !== enemy.x || newY !== enemy.y) {
+    updateEnemyPosition(enemy, newX, newY, true); // forceMove=true bypasses root check
+    return true;
   }
+  return false;
 }
 
 /**
@@ -4070,19 +4212,19 @@ function showSenseAbilityText(x, y, text, color) {
 
 /**
  * Flash enemy outline when affected by Push/Pull
+ * Uses simple CSS transition (not animation) to avoid conflicts with position transition.
  */
 function flashEnemyAffected(enemy) {
   const enemyEl = getEnemyEl(enemy.id);
   if (!enemyEl) return;
   
-  // Add the flash class
+  // Add the flash class (CSS handles the visual with transition)
   enemyEl.classList.add('sense-affected');
   
-  // Remove after animation completes
-  enemyEl.addEventListener('animationend', function handler() {
+  // Remove after flash duration (400ms matches the transition)
+  setTimeout(() => {
     enemyEl.classList.remove('sense-affected');
-    enemyEl.removeEventListener('animationend', handler);
-  });
+  }, 400);
 }
 
 /**
@@ -5745,6 +5887,54 @@ async function handleInteractWithCurrentTarget() {
   }
 }
 
+/**
+ * Check if any focused target is too far away (outside viewport + 10% buffer).
+ * If so, silently drop focus on that target.
+ */
+function checkTargetDistance() {
+  const vp = getViewportInfo();
+  if (!vp) return;
+  
+  const { vw, vh, camX, camY, zoom } = vp;
+  
+  // Add 10% buffer outside viewport
+  const bufferX = vw * 0.1;
+  const bufferY = vh * 0.1;
+  
+  // Helper to check if an actor is outside viewport + buffer
+  const isOutsideViewport = (actor) => {
+    if (!actor) return false;
+    const screenX = (actor.x * TILE_SIZE - camX) * zoom;
+    const screenY = (actor.y * TILE_SIZE - camY) * zoom;
+    return screenX < -bufferX || screenX > vw + bufferX ||
+           screenY < -bufferY || screenY > vh + bufferY;
+  };
+  
+  // Check enemy target
+  if (currentTarget && isOutsideViewport(currentTarget)) {
+    const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
+    if (el) el.classList.remove('targeted');
+    currentTarget = null;
+    updateTargetFrame();
+    updateActionBarState();
+  }
+  
+  // Check NPC target
+  if (currentNpcTarget && isOutsideViewport(currentNpcTarget)) {
+    const prevEl = getNpcEl(currentNpcTarget.id);
+    if (prevEl) prevEl.classList.remove('targeted');
+    currentNpcTarget = null;
+    updateNpcTargetUI();
+  }
+  
+  // Check object target
+  if (currentObjectTarget && isOutsideViewport(currentObjectTarget)) {
+    const prevEl = document.querySelector(`[data-obj-id="${currentObjectTarget.id}"]`);
+    if (prevEl) prevEl.classList.remove('targeted');
+    currentObjectTarget = null;
+  }
+}
+
 function clearTarget() {
   if (currentTarget) {
     const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
@@ -5823,6 +6013,27 @@ async function handleEnemyDeath(enemy) {
   // Remove from provoked set and attacker slots
   provokedEnemies.delete(enemy.id);
   releaseAttackerSlot(enemy);
+  
+  // ============================================
+  // IMMEDIATE TARGET REACQUISITION (before any async operations)
+  // This MUST happen synchronously to avoid race conditions with combat tick
+  // ============================================
+  if (currentTarget?.id === enemy.id) {
+    currentTarget = null;
+    
+    if (inCombat && autoAttackEnabled) {
+      const nextTarget = findNextCombatTarget();
+      if (nextTarget) {
+        selectTarget(nextTarget);
+        // Continue auto-attack on the new target immediately
+        setAutoAttackIntent(nextTarget);
+        tryExecuteCombatIntent();
+      }
+    }
+    
+    updateTargetFrame();
+    updateActionBarState();
+  }
 
   // ============================================
   // COMEBACK MECHANIC - XP Scaling
@@ -5909,24 +6120,6 @@ async function handleEnemyDeath(enemy) {
     
     // Fallback: force remove after 100ms if animationend didn't fire
     setTimeout(removeEl, 100);
-  }
-
-  if (currentTarget?.id === enemy.id) {
-    // Target died - find next engaged enemy if in combat
-    currentTarget = null;
-    
-    if (inCombat && autoAttackEnabled) {
-      const nextTarget = findNextCombatTarget();
-      if (nextTarget) {
-        selectTarget(nextTarget);
-        // Continue auto-attack on the new target immediately
-        setAutoAttackIntent(nextTarget);
-        tryExecuteCombatIntent();
-      }
-    }
-    
-    updateTargetFrame();
-    updateActionBarState();
   }
 
   saveGame(currentState);
@@ -6405,6 +6598,7 @@ function updateEnemyStatusEffects(enemy) {
   el.classList.toggle('is-slowed', isSlowed(enemy));
   el.classList.toggle('is-vulnerable', isVulnerable(enemy));
   el.classList.toggle('is-immune', isImmune(enemy));
+  el.classList.toggle('is-burning', isBurning(enemy));
 }
 
 // Tick all enemy effects and update visuals
@@ -6422,6 +6616,31 @@ function tickAllEnemyEffects() {
     
     // Tick status effects (must happen for all enemies regardless of distance)
     tickEffects(enemy);
+    
+    // Process burn damage (DoT)
+    if (isBurning(enemy) && enemy.effects) {
+      const burnTickInterval = enemy.effects.burnTickInterval || 500;
+      const timeSinceLastTick = t - (enemy.effects.burnLastTick || 0);
+      
+      if (timeSinceLastTick >= burnTickInterval) {
+        const burnDuration = enemy.effects.burnUntil - (enemy.effects.burnLastTick || t);
+        const totalTicks = Math.ceil(burnDuration / burnTickInterval);
+        const totalDamagePercent = enemy.effects.burnDamagePercent || 10;
+        const damagePerTick = Math.ceil((getMaxHP(enemy) * totalDamagePercent / 100) / totalTicks);
+        
+        enemy.hp = Math.max(0, enemy.hp - damagePerTick);
+        enemy.effects.burnLastTick = t;
+        
+        // Show burn damage number
+        showDamageNumber(enemy.x, enemy.y, damagePerTick, false, false, true); // isBurn=true
+        updateEnemyHealthBar(enemy);
+        
+        if (enemy.hp <= 0) {
+          handleEnemyDeath(enemy);
+          continue;
+        }
+      }
+    }
     
     // Skip visual updates for distant enemies (off-screen)
     const dx = Math.abs(enemy.x - px);
@@ -6836,7 +7055,7 @@ function recycleDamageNumber(el) {
   }
 }
 
-function showDamageNumber(x, y, damage, isCrit, isPlayer = false) {
+function showDamageNumber(x, y, damage, isCrit, isPlayer = false, isBurn = false) {
   if (!cachedWorld) {
     cachedWorld = document.getElementById('world');
   }
@@ -6850,7 +7069,11 @@ function showDamageNumber(x, y, damage, isCrit, isPlayer = false) {
   void el.offsetHeight; // Force reflow
   el.style.animation = '';
   
-  el.className = `damage-number ${isCrit ? 'crit' : ''} ${isPlayer ? 'player-damage' : ''}`;
+  const classes = ['damage-number'];
+  if (isCrit) classes.push('crit');
+  if (isPlayer) classes.push('player-damage');
+  if (isBurn) classes.push('burn-damage');
+  el.className = classes.join(' ');
   el.textContent = damage;
   el.style.setProperty('--pos-x', `${x * 24 + 12}px`);
   el.style.setProperty('--pos-y', `${y * 24}px`);

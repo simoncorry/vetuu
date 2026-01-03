@@ -132,6 +132,79 @@ export function canMoveTo(state, x, y) {
   return true;
 }
 
+/**
+ * Like canMoveTo but ignores other enemies.
+ * Used for Push/Pull abilities where we want to move through enemy positions.
+ */
+export function canMoveToIgnoreEnemies(state, x, y) {
+  const { map } = state;
+
+  // Bounds check
+  if (x < 0 || y < 0 || x >= map.meta.width || y >= map.meta.height) {
+    return false;
+  }
+
+  // Ground tile walkability
+  const row = map.ground[y];
+  if (!row) return false;
+
+  const tileChar = row[x];
+  if (tileChar === undefined) return false;
+
+  const tileDef = map.legend.tiles[tileChar];
+  if (!tileDef || !tileDef.walkable) {
+    return false;
+  }
+
+  // Object collision
+  const obj = getObjectAt(state, x, y);
+  if (obj) {
+    if (obj.requires) {
+      if (obj.requires.flagNot) {
+        if (hasFlag(state, obj.requires.flagNot)) {
+          return true;
+        }
+      }
+      if (obj.requires.flag) {
+        if (!hasFlag(state, obj.requires.flag)) {
+          return true;
+        }
+      }
+    }
+    if (obj.solid) {
+      return false;
+    }
+  }
+
+  // NPC collision (can't push into NPCs)
+  const npc = getNpcAt(state, x, y);
+  if (npc) {
+    if (npc.requires?.flag && !hasFlag(state, npc.requires.flag)) {
+      return true;
+    }
+    if (npc.flags?.hidden) {
+      return true;
+    }
+    return false;
+  }
+
+  // SKIP enemy collision check - that's the difference from canMoveTo
+
+  // Boss collision
+  const boss = getBossAt(state, x, y);
+  if (boss) {
+    if (boss.requires?.flag && !hasFlag(state, boss.requires.flag)) {
+      return true;
+    }
+    if (state.runtime.defeatedBosses?.has(boss.id)) {
+      return true;
+    }
+    return false;
+  }
+
+  return true;
+}
+
 // ============================================
 // LINE OF SIGHT (Bresenham's line algorithm)
 // ============================================

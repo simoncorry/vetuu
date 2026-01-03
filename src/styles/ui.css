@@ -4,25 +4,216 @@
    ============================================ */
 
 /* ============================================
-   TOP LEFT: PLAYER HUD
+   DRAGGABLE PANEL BASE STYLES
    ============================================ */
-#hud {
+.ui-panel {
+  position: fixed;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  font-family: var(--font-display);
+  z-index: 1000;
+  /* GPU-accelerated for smooth drag */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.ui-panel.hidden {
+  display: none;
+}
+
+.ui-panel.dragging {
+  cursor: grabbing;
+  z-index: 1100;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.ui-panel.resizing {
+  cursor: se-resize;
+}
+
+.ui-panel.undocked {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.ui-panel.near-dock .redock-indicator {
+  opacity: 1;
+}
+
+/* Panel header (drag handle) */
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--frame-border);
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.panel-header:active {
+  cursor: grabbing;
+}
+
+.panel-title {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.panel-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.panel-btn {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.ui-panel.undocked .panel-btn {
+  opacity: 0.6;
+}
+
+.panel-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--frame-border);
+}
+
+/* Resize handle */
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.4;
+}
+
+.ui-panel:hover .resize-handle,
+.ui-panel.undocked .resize-handle {
+  opacity: 1;
+}
+
+/* Redock indicator */
+.redock-indicator {
+  position: absolute;
+  inset: -2px;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(105, 210, 214, 0.1);
+}
+
+.redock-indicator span {
+  background: var(--bg-panel);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  color: var(--accent);
+}
+
+/* ============================================
+   CHARACTER SHEET (replaces HUD)
+   ============================================ */
+#character-sheet {
   position: fixed;
   top: 1rem;
   left: 1rem;
   background: var(--bg-panel-alpha);
   border: 1px solid var(--frame-border);
   border-radius: 6px;
-  padding: 0.75rem 1rem;
-  min-width: 180px;
+  min-width: 200px;
   font-family: var(--font-display);
   z-index: 1000;
+  /* Hidden by default */
+  display: none;
+  opacity: 0;
+  transform: translate3d(-10px, 0, 0);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-#hud-stats {
+#character-sheet.visible {
+  display: block;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--frame-border);
+}
+
+.sheet-header h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sheet-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.sheet-close:hover {
+  color: var(--text-primary);
+}
+
+#sheet-stats {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  padding: 0.75rem 1rem;
+}
+
+#sheet-level {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .stat {
@@ -87,14 +278,6 @@
   color: var(--text-primary);
 }
 
-#hud-level {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
 #level-badge {
   font-size: 0.7rem;
   color: var(--text-secondary);
@@ -116,41 +299,24 @@
   background: var(--rarity-gold);
 }
 
-#hud-location {
-  padding-top: 0.25rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-#location-name {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
 /* ============================================
    QUEST TRACKER
    ============================================ */
 #quest-tracker {
   position: fixed;
-  top: 140px;
+  top: 230px;
   right: 1rem;
   background: var(--bg-panel-alpha);
   border: 1px solid var(--frame-border);
   border-radius: 6px;
-  padding: 0.75rem 1rem;
-  min-width: 200px;
-  max-width: 260px;
+  min-width: 180px;
+  max-width: 280px;
   font-family: var(--font-display);
   z-index: 1000;
 }
 
-#quest-tracker h3 {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0.5rem;
+#quest-tracker .panel-header .panel-title::before {
+  content: 'Quests';
 }
 
 #quest-list {
@@ -159,6 +325,7 @@
   gap: 0.5rem;
   max-height: 200px;
   overflow-y: auto;
+  padding: 0.5rem 0.75rem;
 }
 
 .quest-item {
@@ -1112,50 +1279,122 @@
 }
 
 /* ============================================
-   CONTROLS HINT
+   SETTINGS MENU
    ============================================ */
-#controls-hint {
+#settings-menu {
   position: fixed;
-  bottom: 100px;
-  right: 1rem;
-  background: var(--bg-panel-alpha);
-  border: 1px solid var(--frame-border);
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
+  top: 50%;
+  left: 50%;
+  transform: translate3d(-50%, -50%, 0) scale3d(0.95, 0.95, 1);
+  background: var(--bg-panel);
+  border: 2px solid var(--frame-border);
+  border-radius: 8px;
+  min-width: 320px;
+  max-width: 400px;
   font-family: var(--font-display);
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  z-index: 900;
-  opacity: 0.7;
+  z-index: 2100;
+  /* Hidden by default */
+  display: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-#controls-hint:hover { opacity: 1; }
+#settings-menu.visible {
+  display: block;
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale3d(1, 1, 1);
+}
 
-#controls-hint p { margin-bottom: 0.2rem; }
-#controls-hint p:last-child { margin-bottom: 0; }
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--frame-border);
+  background: rgba(255, 255, 255, 0.02);
+}
 
-#controls-hint kbd {
+.settings-header h2 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s ease;
+}
+
+.settings-close:hover {
+  color: var(--text-primary);
+}
+
+.settings-content {
+  padding: 0.75rem 1rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-bottom: 1rem;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section h3 {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.controls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.controls-list p {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.controls-list kbd {
   background: var(--frame-inner);
   border: 1px solid var(--frame-border);
-  border-radius: 2px;
-  padding: 0.05rem 0.2rem;
-  margin: 0 0.1rem;
-  font-size: 0.55rem;
+  border-radius: 3px;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  min-width: 1.5em;
+  text-align: center;
 }
 
 #reset-btn {
   display: block;
   width: 100%;
-  margin-top: 0.5rem;
-  padding: 0.4rem;
+  padding: 0.6rem 1rem;
   background: var(--danger-dark);
   border: 1px solid var(--danger);
   border-radius: 4px;
   color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   cursor: pointer;
-  /* GPU-friendly: specific background transition */
   transition: background-color 0.15s ease;
 }
 
@@ -1186,28 +1425,28 @@
     --tile-size: 20px;
   }
 
-  #hud {
+  #character-sheet {
     top: 0.5rem;
     left: 0.5rem;
-    padding: 0.5rem;
     min-width: 140px;
   }
 
   #minimap-container {
     top: 0.5rem;
     right: 0.5rem;
+    min-width: 140px;
+    min-height: 100px;
   }
 
   #minimap {
-    width: 100px;
-    height: 70px;
+    width: 140px;
+    height: 100px;
   }
 
   #quest-tracker {
-    top: 100px;
+    top: 140px;
     right: 0.5rem;
     max-width: 160px;
-    padding: 0.5rem;
   }
 
   #action-bar {
@@ -1236,9 +1475,10 @@
   #combat-log-container {
     display: none;
   }
-
-  #controls-hint {
-    display: none;
+  
+  #settings-menu {
+    min-width: 280px;
+    max-width: 90vw;
   }
 
   #xp-bar-container {
@@ -1251,6 +1491,12 @@
 
   #xp-bar-text {
     font-size: 0.5rem;
+  }
+  
+  /* Hide drag/resize on mobile - use toggles only */
+  .resize-handle,
+  .panel-header {
+    display: none;
   }
 }
 
