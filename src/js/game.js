@@ -1356,6 +1356,17 @@ function tickGuardPatrol() {
 // ============================================
 async function init() {
   try {
+    // Check for ?reset URL parameter to clear save data
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('reset')) {
+      localStorage.removeItem('vetuu_save');
+      localStorage.removeItem('vetuu_flags');
+      localStorage.removeItem('vetuu_fog');
+      // Remove the ?reset from URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+      console.log('Save data cleared via ?reset parameter');
+    }
+    
     await loadData();
 
     const saved = loadGame();
@@ -1482,6 +1493,31 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
   init();
+}
+
+// ============================================
+// DEBUG COMMANDS
+// ============================================
+if (typeof window !== 'undefined') {
+  /**
+   * Reset game to fresh state (clears localStorage and reloads)
+   * Usage: VETUU_RESET() in console
+   */
+  window.VETUU_RESET = () => {
+    localStorage.removeItem('vetuu_save');
+    localStorage.removeItem('vetuu_flags');
+    localStorage.removeItem('vetuu_fog');
+    console.log('Save data cleared. Reloading...');
+    location.reload();
+  };
+  
+  /**
+   * Get current player position
+   */
+  window.VETUU_POS = () => {
+    if (!state?.player) return 'No player state';
+    return { x: state.player.x, y: state.player.y };
+  };
 }
 
 export { state as gameState };
