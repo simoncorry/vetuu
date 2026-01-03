@@ -444,6 +444,7 @@ function onTouchEnd(e) {
 // ============================================
 function screenToWorld(screenX, screenY) {
   const viewport = document.getElementById('viewport');
+  const worldScaler = document.getElementById('world-scaler');
   const world = document.getElementById('world');
   if (!viewport || !world) return null;
 
@@ -451,18 +452,20 @@ function screenToWorld(screenX, screenY) {
   if (!state) return null;
 
   const rect = viewport.getBoundingClientRect();
-  const style = window.getComputedStyle(world);
-  const matrix = new DOMMatrix(style.transform);
   
-  // Extract scale factor from the matrix (matrix.a = scaleX)
-  const scale = matrix.a || 1;
+  // Get scale from world-scaler wrapper
+  const scalerStyle = window.getComputedStyle(worldScaler);
+  const scalerMatrix = new DOMMatrix(scalerStyle.transform);
+  const scale = scalerMatrix.a || 1.5; // Fallback to ZOOM_FACTOR
   
-  // The translation values in the matrix are already scaled
-  // For transform: scale(N) translate3d(-x, -y, 0), matrix gives:
-  // m41 = -x * scale, m42 = -y * scale
-  // So camera offset in unscaled coords is: -m41/scale, -m42/scale
-  const camX = -matrix.m41 / scale;
-  const camY = -matrix.m42 / scale;
+  // Get translation from world (now separate from scale)
+  const worldStyle = window.getComputedStyle(world);
+  const worldMatrix = new DOMMatrix(worldStyle.transform);
+  
+  // World transform is now just translate3d(-x, -y, 0)
+  // matrix.m41 = -x, matrix.m42 = -y (no scale multiplication)
+  const camX = -worldMatrix.m41;
+  const camY = -worldMatrix.m42;
 
   // Convert screen position to position in unscaled world coordinates
   const localX = screenX - rect.left;

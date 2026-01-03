@@ -11,6 +11,14 @@
   cursor: crosshair;
 }
 
+/* Scaler wrapper: handles zoom only (no transition needed) */
+#world-scaler {
+  position: absolute;
+  transform-origin: top left;
+  /* Scale is set via JS in render.js */
+}
+
+/* World: handles camera pan with smooth transition */
 #world {
   position: absolute;
   width: calc(var(--map-width) * var(--tile-size));
@@ -19,7 +27,6 @@
   /* Linear for smooth continuous movement - matches player */
   transition: transform var(--move-duration) linear;
   will-change: transform;
-  /* Zoom is handled via JS transform in render.js */
   transform-origin: top left;
 }
 
