@@ -11,23 +11,19 @@
   cursor: crosshair;
 }
 
-/* Scaler wrapper: handles zoom only (no transition needed) */
-#world-scaler {
-  position: absolute;
-  transform-origin: top left;
-  /* Scale is set via JS in render.js */
-}
-
-/* World: handles camera pan with smooth transition */
+/* World container - camera controlled via JS transform */
 #world {
   position: absolute;
   width: calc(var(--map-width) * var(--tile-size));
   height: calc(var(--map-height) * var(--tile-size));
-  background-color: var(--sand); /* Shows through transparent road gaps */
-  /* Linear for smooth continuous movement - matches player */
-  transition: transform var(--move-duration) linear;
-  will-change: transform;
+  background-color: var(--sand);
   transform-origin: top left;
+  /* Smooth camera following - linear to match player movement */
+  transition: transform var(--move-duration) linear;
+  /* GPU acceleration hint */
+  will-change: transform;
+  /* Force GPU layer in Safari */
+  -webkit-transform: translateZ(0);
 }
 
 .layer {

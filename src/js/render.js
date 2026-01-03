@@ -41,25 +41,20 @@ export function actorTransform(x, y) {
  */
 export function getViewportInfo() {
   const viewportEl = document.getElementById('viewport');
-  const scalerEl = document.getElementById('world-scaler');
   const worldEl = document.getElementById('world');
   if (!viewportEl || !worldEl) return null;
   
-  // Get zoom from scaler wrapper
-  const scalerStyle = window.getComputedStyle(scalerEl);
-  const scalerMatrix = new DOMMatrix(scalerStyle.transform);
-  const zoom = scalerMatrix.a || ZOOM_FACTOR;
+  const style = window.getComputedStyle(worldEl);
+  const matrix = new DOMMatrix(style.transform);
+  const zoom = matrix.a || ZOOM_FACTOR;
   
-  // Get translation from world (now separate from scale)
-  const worldStyle = window.getComputedStyle(worldEl);
-  const worldMatrix = new DOMMatrix(worldStyle.transform);
-  
-  // World transform is just translate3d(-x, -y, 0), no scale multiplication
+  // transform: scale(Z) translate3d(-x, -y, 0) results in:
+  // m41 = -x * scale, m42 = -y * scale
   return {
     vw: viewportEl.clientWidth,
     vh: viewportEl.clientHeight,
-    camX: -worldMatrix.m41, // Camera offset in logical pixels (no division needed)
-    camY: -worldMatrix.m42,
+    camX: -matrix.m41 / zoom,
+    camY: -matrix.m42 / zoom,
     zoom
   };
 }
@@ -133,7 +128,6 @@ window.VETUU_UI_DEBUG = function() {
 };
 
 let viewport = null;
-let worldScaler = null;
 let world = null;
 let groundCanvas = null;
 let groundCtx = null;
@@ -149,7 +143,6 @@ let currentState = null;
 // ============================================
 export function initRenderer(state) {
   viewport = document.getElementById('viewport');
-  worldScaler = document.getElementById('world-scaler');
   world = document.getElementById('world');
   objectLayer = document.getElementById('object-layer');
   actorLayer = document.getElementById('actor-layer');
@@ -157,11 +150,6 @@ export function initRenderer(state) {
   mapWidth = state.map.meta.width;
   mapHeight = state.map.meta.height;
   currentState = state;
-  
-  // Apply zoom scale to wrapper (no transition needed)
-  if (worldScaler) {
-    worldScaler.style.transform = `scale(${ZOOM_FACTOR})`;
-  }
 
   // Set CSS variables for map dimensions
   document.documentElement.style.setProperty('--map-width', mapWidth);
@@ -413,27 +401,22 @@ export function updateCamera(state, duration = null) {
   const vh = viewport.clientHeight;
 
   // Center camera on player (adjusted for zoom)
-  // We calculate in logical pixels (24px grid)
-  // The viewport center in logical pixels is (vw / ZOOM) / 2
   const targetX = state.player.x * TILE_SIZE + TILE_SIZE / 2 - (vw / ZOOM_FACTOR) / 2;
   const targetY = state.player.y * TILE_SIZE + TILE_SIZE / 2 - (vh / ZOOM_FACTOR) / 2;
 
   // Clamp to world bounds
   const worldW = mapWidth * TILE_SIZE;
   const worldH = mapHeight * TILE_SIZE;
-
-  // Ensure camera doesn't show out of bounds (adjusted for logical viewport size)
   const x = Math.max(0, Math.min(targetX, worldW - (vw / ZOOM_FACTOR)));
   const y = Math.max(0, Math.min(targetY, worldH - (vh / ZOOM_FACTOR)));
 
-  // Sync camera transition duration with player movement (for ghost mode, sprint, etc)
+  // Sync transition duration with player movement
   if (duration !== null) {
     world.style.transitionDuration = `${duration}ms`;
   }
 
-  // Apply ONLY translate3d to world (scale is on wrapper #world-scaler)
-  // This separation fixes Safari's issues with combined transforms during transitions
-  world.style.transform = `translate3d(${-x}px, ${-y}px, 0)`;
+  // Combined scale + translate transform
+  world.style.transform = `scale(${ZOOM_FACTOR}) translate3d(${-x}px, ${-y}px, 0)`;
 }
 
 // ============================================
