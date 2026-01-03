@@ -36,9 +36,10 @@ const panelState = {
 };
 
 // Default positions and sizes (will be set after init based on CSS)
+// Both minimap and quests share same width (220px)
 const defaultState = {
   minimap: { top: 16, right: 16, width: 220, height: 180 },
-  quests: { top: 220, right: 16, width: 220, height: null }, // height auto
+  quests: { top: 230, right: 16, width: 220, height: null }, // height auto, same width as minimap
   playerFrame: { left: null, bottom: null }, // Calculated from action bar
   targetFrame: { right: null, bottom: null } // Calculated from action bar
 };

@@ -90,7 +90,9 @@
   border: 1px solid var(--frame-border);
   border-radius: 6px;
   z-index: 1000;
-  min-width: 180px;
+  /* Default width - matches quest tracker */
+  width: 220px;
+  min-width: 150px;
   min-height: 140px;
 }
 
