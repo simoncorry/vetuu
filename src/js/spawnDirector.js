@@ -11,7 +11,7 @@
 
 import { canMoveTo } from './collision.js';
 import { hasFlag } from './save.js';
-import { distCoords, randomRange } from './utils.js';
+import { distCoords, randomRange, cssVar } from './utils.js';
 import { AI } from './aiConstants.js';
 import { nowMs } from './time.js';
 import { normalizeHealthKeys, clampHP } from './entityCompat.js';
@@ -249,119 +249,133 @@ export function releaseEnemyBlock(enemy) {
 // All enemies are either melee or ranged
 // - Melee: range = 2, faster movement (320-380ms)
 // - Ranged: range = 6, slower movement (420-480ms)
-const ENEMY_TYPES = {
-  // Nomads (passive wanderers, always solo, melee)
-  nomad: {
-    name: 'Nomad',
-    baseHp: 25,
-    baseAtk: 4,
-    baseDef: 2,
-    color: '#8B7355',
-    combatType: 'melee',
-    weapon: 'melee_club',
-    moveSpeed: 360, // Moderate speed
-    defaultAggroType: 'passive',
-    defaultAggroRadius: 3,
-    defaultLeashRadius: 10,
-    defaultDeaggroMs: 3000
-  },
-  
-  // Scavengers - ranged variant
-  scav_ranged: {
-    name: 'Scav Shooter',
-    baseHp: 30,
-    baseAtk: 10,
-    baseDef: 2,
-    color: '#8B4513',
-    combatType: 'ranged',
-    weapon: 'ranged_rifle',
-    projectileColor: '#9B59B6',
-    moveSpeed: 450,
-    defaultAggroType: 'conditional',
-    defaultAggroRadius: 6,
-    defaultLeashRadius: 14,
-    defaultDeaggroMs: 4000
-  },
-  // Scavengers - melee variant  
-  scav_melee: {
-    name: 'Scav Brawler',
-    baseHp: 45,
-    baseAtk: 12,
-    baseDef: 4,
-    color: '#8B5A2B',
-    combatType: 'melee',
-    weapon: 'melee_club',
-    moveSpeed: 350, // Fast melee
-    defaultAggroType: 'conditional',
-    defaultAggroRadius: 5,
-    defaultLeashRadius: 12,
-    defaultDeaggroMs: 4000
-  },
-  
-  // Trog Warband - melee warrior
-  trog_warrior: {
-    name: 'Trog Warrior',
-    baseHp: 50,
-    baseAtk: 14,
-    baseDef: 5,
-    color: '#556B2F',
-    combatType: 'melee',
-    weapon: 'melee_spear',
-    moveSpeed: 320, // Fast melee
-    defaultAggroType: 'aggressive',
-    defaultAggroRadius: 8,
-    defaultLeashRadius: 18,
-    defaultDeaggroMs: 5000
-  },
-  // Trog Warband - ranged shaman
-  trog_shaman: {
-    name: 'Trog Shaman',
-    baseHp: 35,
-    baseAtk: 18,
-    baseDef: 3,
-    color: '#6B8E23',
-    combatType: 'ranged',
-    weapon: 'ranged_bolt',
-    projectileColor: '#2ECC71',
-    moveSpeed: 480,
-    defaultAggroType: 'aggressive',
-    defaultAggroRadius: 10,
-    defaultLeashRadius: 16,
-    defaultDeaggroMs: 5000
-  },
-  
-  // Karth Directorate - ranged soldier
-  karth_grunt: {
-    name: 'Karth Soldier',
-    baseHp: 55,
-    baseAtk: 16,
-    baseDef: 6,
-    color: '#4A4A4A',
-    combatType: 'ranged',
-    weapon: 'karth_laser',
-    projectileColor: '#E74C3C',
-    moveSpeed: 420,
-    defaultAggroType: 'aggressive',
-    defaultAggroRadius: 10,
-    defaultLeashRadius: 20,
-    defaultDeaggroMs: 6000
-  },
-  // Karth Directorate - melee officer
-  karth_officer: {
-    name: 'Karth Officer',
-    baseHp: 70,
-    baseAtk: 20,
-    baseDef: 8,
-    color: '#2F2F2F',
-    combatType: 'melee',
-    weapon: 'melee_club',
-    moveSpeed: 350, // Fast melee
-    defaultAggroType: 'aggressive',
-    defaultAggroRadius: 8,
-    defaultLeashRadius: 18,
-    defaultDeaggroMs: 6000
+//
+// Colors reference CSS variables (resolved at spawn time)
+let _enemyTypes = null;
+
+function getEnemyTypes() {
+  if (!_enemyTypes) {
+    _enemyTypes = {
+      // Nomads (passive wanderers, always solo, melee)
+      nomad: {
+        name: 'Nomad',
+        baseHp: 25,
+        baseAtk: 4,
+        baseDef: 2,
+        color: cssVar('--enemy-scavenger'),
+        combatType: 'melee',
+        weapon: 'melee_club',
+        moveSpeed: 360,
+        defaultAggroType: 'passive',
+        defaultAggroRadius: 3,
+        defaultLeashRadius: 10,
+        defaultDeaggroMs: 3000
+      },
+      
+      // Scavengers - ranged variant
+      scav_ranged: {
+        name: 'Scav Shooter',
+        baseHp: 30,
+        baseAtk: 10,
+        baseDef: 2,
+        color: cssVar('--enemy-stalker'),
+        combatType: 'ranged',
+        weapon: 'ranged_rifle',
+        projectileColor: cssVar('--projectile-psionic'),
+        moveSpeed: 450,
+        defaultAggroType: 'conditional',
+        defaultAggroRadius: 6,
+        defaultLeashRadius: 14,
+        defaultDeaggroMs: 4000
+      },
+      // Scavengers - melee variant  
+      scav_melee: {
+        name: 'Scav Brawler',
+        baseHp: 45,
+        baseAtk: 12,
+        baseDef: 4,
+        color: cssVar('--enemy-bruiser'),
+        combatType: 'melee',
+        weapon: 'melee_club',
+        moveSpeed: 350,
+        defaultAggroType: 'conditional',
+        defaultAggroRadius: 5,
+        defaultLeashRadius: 12,
+        defaultDeaggroMs: 4000
+      },
+      
+      // Trog Warband - melee warrior
+      trog_warrior: {
+        name: 'Trog Warrior',
+        baseHp: 50,
+        baseAtk: 14,
+        baseDef: 5,
+        color: cssVar('--enemy-shaman'),
+        combatType: 'melee',
+        weapon: 'melee_spear',
+        moveSpeed: 320,
+        defaultAggroType: 'aggressive',
+        defaultAggroRadius: 8,
+        defaultLeashRadius: 18,
+        defaultDeaggroMs: 5000
+      },
+      // Trog Warband - ranged shaman
+      trog_shaman: {
+        name: 'Trog Shaman',
+        baseHp: 35,
+        baseAtk: 18,
+        baseDef: 3,
+        color: cssVar('--enemy-hunter'),
+        combatType: 'ranged',
+        weapon: 'ranged_bolt',
+        projectileColor: cssVar('--projectile-nature'),
+        moveSpeed: 480,
+        defaultAggroType: 'aggressive',
+        defaultAggroRadius: 10,
+        defaultLeashRadius: 16,
+        defaultDeaggroMs: 5000
+      },
+      
+      // Karth Directorate - ranged soldier
+      karth_grunt: {
+        name: 'Karth Soldier',
+        baseHp: 55,
+        baseAtk: 16,
+        baseDef: 6,
+        color: cssVar('--enemy-sentry'),
+        combatType: 'ranged',
+        weapon: 'karth_laser',
+        projectileColor: cssVar('--projectile-fire'),
+        moveSpeed: 420,
+        defaultAggroType: 'aggressive',
+        defaultAggroRadius: 10,
+        defaultLeashRadius: 20,
+        defaultDeaggroMs: 6000
+      },
+      // Karth Directorate - melee officer
+      karth_officer: {
+        name: 'Karth Officer',
+        baseHp: 70,
+        baseAtk: 20,
+        baseDef: 8,
+        color: cssVar('--enemy-veilwalker'),
+        combatType: 'melee',
+        weapon: 'melee_club',
+        moveSpeed: 350,
+        defaultAggroType: 'aggressive',
+        defaultAggroRadius: 8,
+        defaultLeashRadius: 18,
+        defaultDeaggroMs: 6000
+      }
+    };
   }
-};
+  return _enemyTypes;
+}
+
+// Alias for backward compatibility
+const ENEMY_TYPES = new Proxy({}, {
+  get: (_, prop) => getEnemyTypes()[prop]
+});
 
 
 // ============================================
@@ -2253,9 +2267,8 @@ export function getRings() {
   return RINGS;
 }
 
-export function getEnemyTypes() {
-  return ENEMY_TYPES;
-}
+// getEnemyTypes() is defined earlier with lazy CSS variable loading
+// and ENEMY_TYPES is a Proxy that calls it
 
 // ============================================
 // DEBUG HELPERS

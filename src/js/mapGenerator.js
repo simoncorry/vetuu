@@ -4,6 +4,8 @@
  * Drycross base centered at (240, 168) in expanded map
  */
 
+import { cssVar } from './utils.js';
+
 // Original base center in 120x80 map
 const ORIGINAL_BASE_CENTER = { x: 56, y: 38 };
 
@@ -407,7 +409,7 @@ function generateRoadLampPosts(width, height, offsetX, offsetY) {
         x: centerX + (lampOffset * verticalSide),
         y: nextLampY,
         solid: true,
-        light: { radius: 8, color: '#FFE4B5', intensity: 0.9 }
+        light: { radius: 8, color: cssVar('--light-lamp'), intensity: 0.9 }
       });
       
       // Alternate side for next lamp
@@ -434,7 +436,7 @@ function generateRoadLampPosts(width, height, offsetX, offsetY) {
         x: nextLampX,
         y: centerY + (lampOffset * horizontalSide),
         solid: true,
-        light: { radius: 8, color: '#FFE4B5', intensity: 0.9 }
+        light: { radius: 8, color: cssVar('--light-lamp'), intensity: 0.9 }
       });
       
       // Alternate side for next lamp

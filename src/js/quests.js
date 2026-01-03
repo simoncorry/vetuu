@@ -10,7 +10,7 @@
  */
 
 import { saveGame } from './save.js';
-import { renderActors } from './render.js';
+// Note: renderActors is imported dynamically to avoid circular dependency with render.js
 
 let questList = null;
 
@@ -208,7 +208,10 @@ export async function startQuest(state, questId) {
 
   // Update UI
   renderQuestTracker(state);
-  renderActors(state); // Update NPC quest markers
+  
+  // Update NPC quest markers (dynamic import to avoid circular dependency)
+  const { renderActors } = await import('./render.js');
+  renderActors(state);
 
   saveGame(state);
   return true;
@@ -424,7 +427,9 @@ export async function completeQuest(state, questId) {
 
   // Update UI
   renderQuestTracker(state);
-  renderActors(state);
+  
+  // Update NPC quest markers (dynamic import to avoid circular dependency)
+  import('./render.js').then(({ renderActors }) => renderActors(state));
 
   // Clean up progress data
   delete state.quests[questId + '_progress'];
@@ -448,8 +453,8 @@ export function checkQuestConditions(state) {
   });
   
   // Could show notifications for newly available quests
-  // For now just update UI
-  renderActors(state);
+  // For now just update UI (dynamic import to avoid circular dependency)
+  import('./render.js').then(({ renderActors }) => renderActors(state));
   renderQuestTracker(state);
   
   return newlyAvailable;

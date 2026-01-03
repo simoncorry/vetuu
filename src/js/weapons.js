@@ -34,7 +34,7 @@ export const WEAPONS = {
     baseDamage: 10,
     multiplier: 1.0,
     moveSpeed: 450,
-    projectileColor: '#00FF88',
+    // projectileColor uses CSS var --projectile-player (resolved in combat.js)
     icon: '🔫',
     
     // Basic attack (right-click auto-attack) - lower damage, ranged
@@ -87,7 +87,7 @@ export const WEAPONS = {
     baseDamage: 14,
     multiplier: 1.0,
     moveSpeed: 350, // Faster movement for melee
-    projectileColor: '#FF00FF',
+    // projectileColor uses CSS var --melee-player (resolved in combat.js)
     icon: '⚔️',
     
     // Basic attack (right-click auto-attack) - higher damage, melee
@@ -139,6 +139,8 @@ WEAPONS.sword = WEAPONS.vibro_sword;
 // ============================================
 // ENEMY WEAPONS (simplified - melee or ranged only)
 // ============================================
+// Note: projectileColor now uses CSS variables (resolved in combat.js)
+// --projectile-enemy for enemies, --melee-enemy for melee attacks
 export const ENEMY_WEAPONS = {
   // Melee weapons (range = 2)
   melee_claws: {
@@ -148,8 +150,7 @@ export const ENEMY_WEAPONS = {
     range: 2,
     baseDamage: 4,
     cooldown: 1200,
-    moveSpeed: 350, // Melee moves faster
-    projectileColor: '#6B5B4F'
+    moveSpeed: 350
   },
   melee_bite: {
     name: 'Bite',
@@ -158,8 +159,7 @@ export const ENEMY_WEAPONS = {
     range: 2,
     baseDamage: 5,
     cooldown: 1000,
-    moveSpeed: 320, // Fast melee
-    projectileColor: '#6B5B4F'
+    moveSpeed: 320
   },
   melee_club: {
     name: 'Club',
@@ -168,8 +168,7 @@ export const ENEMY_WEAPONS = {
     range: 2,
     baseDamage: 9,
     cooldown: 1300,
-    moveSpeed: 380, // Melee moves faster
-    projectileColor: '#9B59B6'
+    moveSpeed: 380
   },
   melee_spear: {
     name: 'Spear',
@@ -178,8 +177,7 @@ export const ENEMY_WEAPONS = {
     range: 2,
     baseDamage: 11,
     cooldown: 1100,
-    moveSpeed: 320, // Fast melee
-    projectileColor: '#2ECC71'
+    moveSpeed: 320
   },
   boss_blade: {
     name: 'Captain\'s Blade',
@@ -188,8 +186,7 @@ export const ENEMY_WEAPONS = {
     range: 2,
     baseDamage: 20,
     cooldown: 1000,
-    moveSpeed: 320,
-    projectileColor: '#8B45D6'
+    moveSpeed: 320
   },
 
   // Ranged weapons (range = 6)
@@ -200,8 +197,7 @@ export const ENEMY_WEAPONS = {
     range: 6,
     baseDamage: 10,
     cooldown: 1600,
-    moveSpeed: 450,
-    projectileColor: '#9B59B6'
+    moveSpeed: 450
   },
   ranged_bolt: {
     name: 'Bolt',
@@ -210,8 +206,7 @@ export const ENEMY_WEAPONS = {
     range: 6,
     baseDamage: 13,
     cooldown: 2000,
-    moveSpeed: 480,
-    projectileColor: '#2ECC71'
+    moveSpeed: 480
   },
   karth_laser: {
     name: 'Karth Laser',
@@ -220,8 +215,7 @@ export const ENEMY_WEAPONS = {
     range: 6,
     baseDamage: 14,
     cooldown: 1600,
-    moveSpeed: 420,
-    projectileColor: '#E74C3C'
+    moveSpeed: 420
   },
   guard_rifle: {
     name: 'Guard Rifle',
@@ -230,8 +224,7 @@ export const ENEMY_WEAPONS = {
     range: 6,
     baseDamage: 18,
     cooldown: 1400,
-    moveSpeed: 400,
-    projectileColor: '#3498DB'
+    moveSpeed: 400
   }
 };
 

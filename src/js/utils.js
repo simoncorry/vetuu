@@ -157,3 +157,23 @@ export function shuffleArray(arr) {
 export function randomRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+// ============================================
+// CSS VARIABLE ACCESS
+// ============================================
+
+// Cache computed style for performance
+let _computedStyle = null;
+
+/**
+ * Get a CSS custom property value from :root
+ * @param {string} name - Variable name (with or without --)
+ * @returns {string} The CSS value (trimmed)
+ */
+export function cssVar(name) {
+  if (!_computedStyle) {
+    _computedStyle = getComputedStyle(document.documentElement);
+  }
+  const varName = name.startsWith('--') ? name : `--${name}`;
+  return _computedStyle.getPropertyValue(varName).trim();
+}

@@ -18,7 +18,7 @@ import { hasLineOfSight, canMoveTo } from './collision.js';
 import { WEAPONS, ENEMY_WEAPONS, BASIC_ATTACK_CD_MS } from './weapons.js';
 import { 
   distCoords, shuffleArray, applyEffect, tickEffects,
-  isSlowed, isVulnerable
+  isSlowed, isVulnerable, cssVar
 } from './utils.js';
 import { AI } from './aiConstants.js';
 import { getMaxHP, getHPPercent } from './entityCompat.js';
@@ -34,6 +34,8 @@ import {
   retreatPack
 } from './aiUtils.js';
 import { isRevealed } from './fog.js';
+import { actorTransform } from './render.js';
+import { SPRITES } from './sprites.js';
 
 // Enemy type configurations (Simplified - no weakness/resistance)
 // All enemies are either melee (range 2) or ranged (range 6)
@@ -51,7 +53,8 @@ const ENEMY_CONFIGS = {
 };
 
 
-// Timing constants
+// Shared constants
+const TILE_SIZE = 24;           // Logical tile size (matches render.js)
 const DEFAULT_MOVE_COOLDOWN = 400;
 
 // ============================================
@@ -115,6 +118,30 @@ const CRIT_MULT = 1.5;        // Crits deal 150% damage
 // Damage variance
 const VAR_MIN = 0.95;
 const VAR_MAX = 1.05;
+
+// ============================================
+// COLORS - Cached from CSS variables
+// ============================================
+// Lazily populated on first use to ensure DOM is ready
+let COLORS = null;
+
+function getColors() {
+  if (!COLORS) {
+    COLORS = {
+      projectilePlayer: cssVar('--projectile-player'),
+      projectileEnemy: cssVar('--projectile-enemy'),
+      projectileSpecial: cssVar('--projectile-special'),
+      projectilePsionic: cssVar('--projectile-psionic'),
+      meleePlayer: cssVar('--melee-player'),
+      meleeEnemy: cssVar('--melee-enemy'),
+      meleeSpecial: cssVar('--melee-special'),
+      abilityPush: cssVar('--ability-push'),
+      abilityPull: cssVar('--ability-pull'),
+      boss: cssVar('--boss')
+    };
+  }
+  return COLORS;
+}
 
 // Debug capture for last hit
 let __LAST_HIT_DEBUG = null;
@@ -852,9 +879,9 @@ function enemyAttackGuard(enemy, guard) {
     guard.hp -= damage;
     
     if (weapon.type === 'ranged') {
-      showProjectile(enemy.x, enemy.y, guard.x, guard.y, weapon.projectileColor || '#FF4444');
+      showProjectile(enemy.x, enemy.y, guard.x, guard.y, weapon.projectileColor || getColors().projectileEnemy);
     } else {
-      showMeleeSwipe(enemy.x, enemy.y, guard.x, guard.y, weapon.projectileColor || '#FF4444');
+      showMeleeSwipe(enemy.x, enemy.y, guard.x, guard.y, weapon.projectileColor || getColors().projectileEnemy);
     }
     
     showDamageNumber(guard.x, guard.y, damage, false);
@@ -1706,7 +1733,7 @@ function snapNearHomeWithinFootprint(enemy, t) {
       const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
       if (el) {
         el.classList.add('is-teleporting');
-        el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+        el.style.transform = actorTransform(enemy.x, enemy.y);
         el.offsetHeight;
         requestAnimationFrame(() => {
           el.classList.remove('is-teleporting');
@@ -1857,7 +1884,7 @@ function snapEnemyToHome(enemy, t) {
   if (el) {
     // Add teleporting class to disable transitions
     el.classList.add('is-teleporting');
-    el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+    el.style.transform = actorTransform(enemy.x, enemy.y);
     
     // Force reflow then remove class next frame
     el.offsetHeight;
@@ -2077,7 +2104,7 @@ function aiIdle(enemy, now, weapon) {
       const toSpawnX = Math.sign(enemy.spawnX - enemy.x);
       const toSpawnY = Math.sign(enemy.spawnY - enemy.y);
       if (canEnemyMoveTo(enemy.x + toSpawnX, enemy.y + toSpawnY, enemy)) {
-        updateEnemyPosition(enemy, enemy.x + toSpawnX, enemy.y + toSpawnY);
+        updateEnemyPosition(enemy, enemy.x + toSpawnX, enemy.y + toSpawnY, false, true); // idle=true
       }
       enemy.moveCooldown = now + moveCD;
       return;
@@ -2085,7 +2112,7 @@ function aiIdle(enemy, now, weapon) {
   }
   
   if (canEnemyMoveTo(newX, newY, enemy)) {
-    updateEnemyPosition(enemy, newX, newY);
+    updateEnemyPosition(enemy, newX, newY, false, true); // idle=true
   }
   
   enemy.moveCooldown = now + moveCD;
@@ -2655,7 +2682,7 @@ function canEnemyMoveToEx(x, y, enemy, respectFootprints = false) {
   return true;
 }
 
-function updateEnemyPosition(enemy, x, y, forceMove = false) {
+function updateEnemyPosition(enemy, x, y, forceMove = false, isIdle = false) {
   // Rooted enemies can't move (unless retreating or forced)
   if (!forceMove && !enemy.isRetreating && isRooted(enemy)) {
     return;
@@ -2666,7 +2693,25 @@ function updateEnemyPosition(enemy, x, y, forceMove = false) {
 
   const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (el) {
-    el.style.transform = `translate3d(${x * 24}px, ${y * 24}px, 0)`;
+    // Idle movement uses slower transition (2x duration)
+    if (isIdle) {
+      el.classList.add('idle');
+    } else {
+      el.classList.remove('idle');
+    }
+    
+    el.style.transform = actorTransform(x, y);
+    
+    // Add moving class for walk animation
+    el.classList.add('moving');
+    
+    // Remove after transition (read from CSS var or use default, double for idle)
+    const moveSpeed = parseInt(el.dataset.moveSpeed) || 400;
+    const duration = isIdle ? moveSpeed * 2 : moveSpeed;
+    clearTimeout(enemy._moveTimeout);
+    enemy._moveTimeout = setTimeout(() => {
+      el.classList.remove('moving');
+    }, duration);
     
     // Add/remove retreating class for visual feedback
     if (enemy.isRetreating) {
@@ -2737,9 +2782,9 @@ function enemyAttack(enemy, weapon, t = nowMs()) {
   let damage = calculateEnemyDamage(enemy, weapon, player);
 
   if (weapon.type === 'ranged') {
-    showProjectile(enemy.x, enemy.y, player.x, player.y, weapon.projectileColor || '#FF4444');
+    showProjectile(enemy.x, enemy.y, player.x, player.y, weapon.projectileColor || getColors().projectileEnemy);
   } else {
-    showMeleeSwipe(enemy.x, enemy.y, player.x, player.y, weapon.projectileColor || '#FF4444');
+    showMeleeSwipe(enemy.x, enemy.y, player.x, player.y, weapon.projectileColor || getColors().projectileEnemy);
   }
 
   player.hp -= damage;
@@ -3255,7 +3300,7 @@ function executeRifleBurst(weapon, ability) {
       if (!currentTarget || currentTarget.id !== targetId) return; // Target swap guard
       
       const damage = calculateDamage(weapon, target, damagePerShot);
-      showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FF88');
+      showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || getColors().projectilePlayer);
       
       target.hp -= damage;
       markCombatEvent();
@@ -3283,7 +3328,7 @@ function executeRifleSuppress(weapon, ability) {
   const player = currentState.player;
   const damage = calculateDamage(weapon, currentTarget, ability.damage || 10);
   
-  showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, '#FFAA00', true);
+  showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, getColors().projectileSpecial, true);
   
   currentTarget.hp -= damage;
   markCombatEvent();
@@ -3313,7 +3358,7 @@ function executeRifleOvercharge(weapon, ability) {
   const damage = calculateDamage(weapon, currentTarget, ability.damage || 30);
   
   // Big enhanced projectile
-  showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, '#FF4444', true);
+  showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, getColors().projectileEnemy, true);
   
   currentTarget.hp -= damage;
   markCombatEvent();
@@ -3404,7 +3449,7 @@ function executeSwordLunge(weapon, ability) {
       // Update player position visually
       const playerEl = document.getElementById('player');
       if (playerEl) {
-        playerEl.style.transform = `translate3d(${player.x * 24}px, ${player.y * 24}px, 0)`;
+        playerEl.style.transform = actorTransform(player.x, player.y);
       }
     }
   }
@@ -3412,7 +3457,7 @@ function executeSwordLunge(weapon, ability) {
   // Perform the strike
   const damage = calculateDamage(weapon, currentTarget, ability.damage || 16);
   
-  showMeleeSwipe(player.x, player.y, currentTarget.x, currentTarget.y, '#00FFFF', true);
+  showMeleeSwipe(player.x, player.y, currentTarget.x, currentTarget.y, getColors().meleePlayer, true);
   
   currentTarget.hp -= damage;
   markCombatEvent();
@@ -3483,7 +3528,7 @@ function executeSwordShockwave(weapon, ability) {
           // Update enemy position visually
           const enemyEl = document.getElementById(target.id);
           if (enemyEl) {
-            enemyEl.style.transform = `translate3d(${target.x * 24}px, ${target.y * 24}px, 0)`;
+            enemyEl.style.transform = actorTransform(target.x, target.y);
           }
         }
       }
@@ -3784,7 +3829,7 @@ function animateEnemyDisplacement(enemy) {
   const enemyEl = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
   if (enemyEl) {
     enemyEl.style.transition = 'transform 0.2s ease-out';
-    enemyEl.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+    enemyEl.style.transform = actorTransform(enemy.x, enemy.y);
     
     // Reset transition after animation completes
     enemyEl.addEventListener('transitionend', function handler() {
@@ -3826,7 +3871,7 @@ function showPushEffect(x, y) {
   effect.addEventListener('animationend', () => effect.remove(), { once: true });
   
   // Show floating "PUSH!" text
-  showSenseAbilityText(x, y, 'PUSH!', '#4B9CD6');
+  showSenseAbilityText(x, y, 'PUSH!', getColors().abilityPush);
 }
 
 /**
@@ -3861,7 +3906,7 @@ function showPullEffect(x, y) {
   effect.addEventListener('animationend', () => effect.remove(), { once: true });
   
   // Show floating "PULL!" text
-  showSenseAbilityText(x, y, 'PULL!', '#9B59B6');
+  showSenseAbilityText(x, y, 'PULL!', getColors().abilityPull);
 }
 
 /**
@@ -4182,9 +4227,9 @@ function executeEnhancedAttack(weapon, action) {
   let damage = calculateDamage(weapon, currentTarget, action.damage);
 
   if (weapon.type === 'ranged') {
-    showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, weapon.projectileColor || '#00FFFF', true);
+    showProjectile(player.x, player.y, currentTarget.x, currentTarget.y, weapon.projectileColor || getColors().meleePlayer, true);
   } else {
-    showMeleeSwipe(player.x, player.y, currentTarget.x, currentTarget.y, weapon.projectileColor || '#FFD700', true);
+    showMeleeSwipe(player.x, player.y, currentTarget.x, currentTarget.y, weapon.projectileColor || getColors().meleeSpecial, true);
   }
 
   currentTarget.hp -= damage;
@@ -4217,7 +4262,7 @@ function executeDoubleAttack(weapon, action) {
   
   // First shot
   const damage1 = calculateDamage(weapon, target, action.damage);
-  showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+  showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || getColors().meleePlayer);
   target.hp -= damage1;
   markCombatEvent(); // Track combat activity
   showDamageNumber(target.x, target.y, damage1, false);
@@ -4238,7 +4283,7 @@ function executeDoubleAttack(weapon, action) {
     if (!target || target.hp <= 0) return;
     
     const damage2 = calculateDamage(weapon, target, extraDamage);
-    showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+    showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || getColors().meleePlayer);
     target.hp -= damage2;
     markCombatEvent(); // Track combat activity
     showDamageNumber(target.x, target.y, damage2, false);
@@ -4272,7 +4317,7 @@ function executeRapidFire(weapon, action) {
       if (!target || target.hp <= 0) return;
 
       const damage = calculateDamage(weapon, target, action.damage);
-      showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+      showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || getColors().meleePlayer);
       target.hp -= damage;
       markCombatEvent(); // Track combat activity
       showDamageNumber(target.x, target.y, damage, false);
@@ -4360,7 +4405,7 @@ function executeDash(weapon, action) {
       // Update visual position
       const playerEl = document.getElementById('player');
       if (playerEl) {
-        playerEl.style.transform = `translate3d(${newX * 24}px, ${newY * 24}px, 0)`;
+        playerEl.style.transform = actorTransform(newX, newY);
       }
       
       // Update camera
@@ -4965,9 +5010,9 @@ function executeBasicAttack(weapon, target) {
   
   // Visual effects
   if (weapon.type === 'ranged') {
-    showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+    showProjectile(player.x, player.y, target.x, target.y, weapon.projectileColor || getColors().meleePlayer);
   } else {
-    showMeleeSwipe(player.x, player.y, target.x, target.y, weapon.projectileColor || '#00FFFF');
+    showMeleeSwipe(player.x, player.y, target.x, target.y, weapon.projectileColor || getColors().meleePlayer);
   }
   
   // Apply damage
@@ -5279,6 +5324,7 @@ if (typeof window !== 'undefined') {
 export function handleTargeting(action, data) {
   switch (action) {
     case 'cycle': cycleTarget(); break;
+    case 'cycleFriendly': cycleFriendlyTarget(); break;
     case 'select': selectTarget(data); break;
     case 'selectNpc': selectNpcTarget(data); break;
     case 'clear': clearTarget(); break;
@@ -5332,22 +5378,28 @@ function isEnemyVisible(enemy) {
   const world = document.getElementById('world');
   if (!viewport || !world) return true; // Fallback to visible if no viewport
   
-  const tileSize = currentState.map.meta.tileSize;
   const vw = viewport.clientWidth;
   const vh = viewport.clientHeight;
   
-  // Get camera position from world transform
+  // Get zoom factor from world transform (scale is first in transform: scale(Z) translate3d(...))
   const style = window.getComputedStyle(world);
   const matrix = new DOMMatrix(style.transform);
-  const camX = -matrix.m41; // Camera offset is negative of world position
-  const camY = -matrix.m42;
+  const zoom = matrix.a || 1.5; // Scale factor is in m11/a, default to 1.5 if not set
   
-  // Calculate enemy screen position
-  const enemyScreenX = enemy.x * tileSize - camX;
-  const enemyScreenY = enemy.y * tileSize - camY;
+  // The translate is in logical (unscaled) pixels, but matrix gives us scaled values
+  // transform: scale(1.5) translate3d(-x, -y, 0) results in:
+  // m41 = -x * scale, m42 = -y * scale
+  const camX = -matrix.m41 / zoom; // Camera offset in logical pixels
+  const camY = -matrix.m42 / zoom;
   
-  // Add small buffer to account for tile size
-  const buffer = tileSize;
+  // Calculate enemy position in screen pixels
+  // Enemy logical position * tileSize gives logical pixel pos
+  // Subtract camera to get relative pos, then multiply by zoom for screen pos
+  const enemyScreenX = (enemy.x * TILE_SIZE - camX) * zoom;
+  const enemyScreenY = (enemy.y * TILE_SIZE - camY) * zoom;
+  
+  // Add buffer to account for tile size (in screen pixels)
+  const buffer = TILE_SIZE * zoom;
   return enemyScreenX >= -buffer && 
          enemyScreenX <= vw + buffer && 
          enemyScreenY >= -buffer && 
@@ -5376,6 +5428,70 @@ function cycleTarget() {
   const nextIndex = (currentIndex + 1) % enemies.length;
 
   selectTarget(enemies[nextIndex]);
+}
+
+function cycleFriendlyTarget() {
+  // Filter to NPCs that are visible, not hidden, and meet flag requirements
+  const npcs = (currentState.entities?.npcs || []).filter(npc => {
+    // Skip hidden NPCs
+    if (npc.flags?.hidden) return false;
+    // Skip NPCs with unmet flag requirements
+    if (npc.requires?.flag && !currentState.flags?.[npc.requires.flag]) return false;
+    // Must be visible in viewport
+    return isNpcVisible(npc);
+  });
+  
+  if (npcs.length === 0) {
+    clearNpcTarget();
+    return;
+  }
+
+  const player = currentState.player;
+  npcs.sort((a, b) => {
+    const distA = distCoords(a.x, a.y, player.x, player.y);
+    const distB = distCoords(b.x, b.y, player.x, player.y);
+    return distA - distB;
+  });
+
+  const currentIndex = currentNpcTarget ? npcs.findIndex(n => n.id === currentNpcTarget.id) : -1;
+  const nextIndex = (currentIndex + 1) % npcs.length;
+
+  selectNpcTarget(npcs[nextIndex]);
+}
+
+/**
+ * Check if an NPC is visible to the player (in viewport and not fogged).
+ */
+function isNpcVisible(npc) {
+  // Must not be in fog
+  if (!isRevealed(npc.x, npc.y)) {
+    return false;
+  }
+  
+  // Must be within viewport bounds
+  const viewport = document.getElementById('viewport');
+  const world = document.getElementById('world');
+  if (!viewport || !world) return true; // Fallback to visible if no viewport
+  
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  
+  // Get zoom factor from world transform
+  const style = window.getComputedStyle(world);
+  const matrix = new DOMMatrix(style.transform);
+  const zoom = matrix.a || 1.5;
+  
+  const camX = -matrix.m41 / zoom;
+  const camY = -matrix.m42 / zoom;
+  
+  const npcScreenX = (npc.x * TILE_SIZE - camX) * zoom;
+  const npcScreenY = (npc.y * TILE_SIZE - camY) * zoom;
+  
+  const buffer = TILE_SIZE * zoom;
+  return npcScreenX >= -buffer && 
+         npcScreenX <= vw + buffer && 
+         npcScreenY >= -buffer && 
+         npcScreenY <= vh + buffer;
 }
 
 function selectTarget(enemy) {
@@ -5460,7 +5576,7 @@ export function spawnBoss(state, bossDef) {
     cooldownUntil: 0,
     moveCooldown: 0,
     isBoss: true,
-    color: '#8B45D6'
+    color: getColors().boss
   };
 
   state.runtime.activeEnemies.push(boss);
@@ -5628,7 +5744,7 @@ async function handlePlayerDeath() {
   if (playerEl) {
     playerEl.classList.add('downed'); // Visual indicator that we're in the med bay
     playerEl.style.transition = 'none';
-    playerEl.style.transform = `translate3d(${spawnX * 24}px, ${spawnY * 24}px, 0)`;
+    playerEl.style.transform = actorTransform(spawnX, spawnY);
     playerEl.offsetHeight; // Force reflow
     playerEl.style.transition = '';
   }
@@ -5676,7 +5792,7 @@ export async function reviveAtBase() {
     if (playerEl) {
     playerEl.classList.remove('ghost', 'downed');
     playerEl.style.transition = 'none';
-    playerEl.style.transform = `translate3d(${spawnX * 24}px, ${spawnY * 24}px, 0)`;
+    playerEl.style.transform = actorTransform(spawnX, spawnY);
     playerEl.offsetHeight;
     playerEl.style.transition = '';
     }
@@ -5744,7 +5860,7 @@ async function reviveAtCorpse() {
     playerEl.classList.remove('ghost', 'downed');
     // Update position to corpse location
     playerEl.style.transition = 'none';
-    playerEl.style.transform = `translate3d(${corpseLocation.x * 24}px, ${corpseLocation.y * 24}px, 0)`;
+    playerEl.style.transform = actorTransform(corpseLocation.x, corpseLocation.y);
     playerEl.offsetHeight;
     playerEl.style.transition = '';
     
@@ -5880,12 +5996,21 @@ export function renderEnemies(state) {
     const moveSpeed = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
     
     // Set CSS variables for enemy-specific values
-    el.style.setProperty('--enemy-color', enemy.color);
     el.style.setProperty('--enemy-move-speed', `${moveSpeed}ms`);
+    el.style.setProperty('--sprite-idle', `url('${SPRITES.actor.idle}')`);
+    
+    // Shadow and sprite elements
+    const shadow = document.createElement('div');
+    shadow.className = 'shadow';
+    el.appendChild(shadow);
+    
+    const sprite = document.createElement('div');
+    sprite.className = 'sprite';
+    el.appendChild(sprite);
     
     // Initial position without transition
     el.style.transition = 'none';
-    el.style.transform = `translate3d(${enemy.x * 24}px, ${enemy.y * 24}px, 0)`;
+    el.style.transform = actorTransform(enemy.x, enemy.y);
     
     el.dataset.moveSpeed = moveSpeed;
 

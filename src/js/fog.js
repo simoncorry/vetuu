@@ -3,6 +3,7 @@
  * Canvas-based fog rendering for performance on large maps
  */
 
+const TILE_SIZE = 24;
 const REVEAL_RADIUS = 8;
 const FOG_STORAGE_KEY = 'vetuu_fog_v2';
 
@@ -11,7 +12,6 @@ let fogCtx = null;
 let fogMask = null; // 2D array: true = revealed
 let mapWidth = 0;
 let mapHeight = 0;
-let tileSize = 24;
 
 // ============================================
 // INITIALIZATION
@@ -21,13 +21,12 @@ export function initFog(state) {
   
   mapWidth = state.map.meta.width;
   mapHeight = state.map.meta.height;
-  tileSize = state.map.meta.tileSize;
-
+  
   // Create full-size fog canvas (in world coordinates)
   fogCanvas = document.createElement('canvas');
   fogCanvas.id = 'fog-canvas';
-  fogCanvas.width = mapWidth * tileSize;
-  fogCanvas.height = mapHeight * tileSize;
+  fogCanvas.width = mapWidth * TILE_SIZE;
+  fogCanvas.height = mapHeight * TILE_SIZE;
   fogCanvas.style.cssText = 'position: absolute; top: 0; left: 0; pointer-events: none;';
   
   fogLayer.innerHTML = '';
@@ -181,8 +180,8 @@ function createFogFadeElement(x, y, fromState, toState) {
   
   const el = document.createElement('div');
   el.className = 'fog-fade';
-  el.style.setProperty('--pos-x', `${x * tileSize}px`);
-  el.style.setProperty('--pos-y', `${y * tileSize}px`);
+  el.style.setProperty('--pos-x', `${x * TILE_SIZE}px`);
+  el.style.setProperty('--pos-y', `${y * TILE_SIZE}px`);
   
   // Choose the right dither pattern based on transition
   if (toState === FOG_STATE.REVEALED) {
@@ -351,7 +350,7 @@ const BAYER_4X4 = [
  * Threshold determines how many pixels are drawn (0-16 scale).
  */
 function drawDitheredTile(x, y, threshold) {
-  drawDitheredTileAt(x * tileSize, y * tileSize, threshold);
+  drawDitheredTileAt(x * TILE_SIZE, y * TILE_SIZE, threshold);
 }
 
 /**
@@ -360,7 +359,7 @@ function drawDitheredTile(x, y, threshold) {
 function drawDitheredTileAt(px, py, threshold) {
   // Calculate how many "dither cells" fit in a tile (6 cells = 4px each for 24px tile)
   const cellSize = 4;
-  const cells = tileSize / cellSize;
+  const cells = TILE_SIZE / cellSize;
   
   for (let cy = 0; cy < cells; cy++) {
     for (let cx = 0; cx < cells; cx++) {
@@ -400,7 +399,7 @@ export function renderFog(_state) {
           drawDitheredTile(x, y, 12);
         } else {
           // Full fog for all other tiles
-          fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+          fogCtx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
       }
     }
@@ -425,10 +424,10 @@ export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
   
   // Clear and redraw just this area
   fogCtx.clearRect(
-    startX * tileSize, 
-    startY * tileSize, 
-    (endX - startX) * tileSize, 
-    (endY - startY) * tileSize
+    startX * TILE_SIZE, 
+    startY * TILE_SIZE, 
+    (endX - startX) * TILE_SIZE, 
+    (endY - startY) * TILE_SIZE
   );
   
   fogCtx.fillStyle = 'rgba(10, 12, 14, 0.95)';
@@ -442,7 +441,7 @@ export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
         } else if (distToRevealed === 2) {
           drawDitheredTile(x, y, 12);
         } else {
-          fogCtx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+          fogCtx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
       }
     }

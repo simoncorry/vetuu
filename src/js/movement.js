@@ -8,11 +8,13 @@
  */
 
 import { tryExecuteCombatIntent, cancelCombatPursuit } from './combat.js';
+import { actorTransform } from './render.js';
+
+const TILE_SIZE = 24;
 
 // ============================================
 // CONSTANTS
 // ============================================
-const TILE_SIZE = 24;
 const MOVE_DURATION = 280; // ms per tile - Classic WoW pacing (slower, tactical)
 const DIAGONAL_MULTIPLIER = Math.SQRT2; // ~1.414 - diagonal moves take longer to maintain consistent speed
 const SPRINT_BUFF_MULTIPLIER = 0.59; // Sprint buff: 70% faster (1/1.7 ≈ 0.59)
@@ -223,11 +225,12 @@ function startMove(targetX, targetY) {
   state.player.x = targetX;
   state.player.y = targetY;
   
-  // Update CSS transition duration for sprint
+  // Update CSS transition duration and add moving class for walk animation
   if (playerEl) {
+    playerEl.classList.add('moving');
     playerEl.style.transitionDuration = `${duration}ms`;
     // Set final position - CSS transition handles the animation
-    playerEl.style.transform = `translate3d(${targetX * TILE_SIZE}px, ${targetY * TILE_SIZE}px, 0)`;
+    playerEl.style.transform = actorTransform(targetX, targetY);
   }
   
   // Notify game to update camera simultaneously (both transitions start together)
@@ -259,6 +262,11 @@ function completeMove() {
   
   currentTween = null;
   isMoving = false;
+  
+  // Remove moving class (stops walk animation)
+  if (playerEl) {
+    playerEl.classList.remove('moving');
+  }
   
   // Notify completion
   onMoveComplete(targetX, targetY);
@@ -611,7 +619,7 @@ export function setPlayerPosition(x, y, animate = true) {
     }
     // Disable transition for instant position set
     playerEl.style.transition = 'none';
-    playerEl.style.transform = `translate3d(${x * TILE_SIZE}px, ${y * TILE_SIZE}px, 0)`;
+    playerEl.style.transform = actorTransform(x, y);
     // Force reflow then restore transition
     playerEl.offsetHeight;
     playerEl.style.transition = '';

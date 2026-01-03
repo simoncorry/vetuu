@@ -11,6 +11,21 @@ import { hasFlag } from './save.js';
 import { getNpcQuestMarker } from './quests.js';
 import { SPRITES } from './sprites.js';
 
+// Rendering constants
+const TILE_SIZE = 24;          // Logical tile size (matches sprite/map data)
+const ZOOM_FACTOR = 1.5;       // Uniform scale for world + actors
+const SPRITE_HEIGHT = 32;      // Character sprites are taller than tiles
+
+/**
+ * Generate transform string for actor positioning
+ * Offset Y by (SPRITE_HEIGHT - TILE_SIZE) so feet align with tile bottom
+ */
+export function actorTransform(x, y) {
+  const px = x * TILE_SIZE;
+  const py = y * TILE_SIZE - (SPRITE_HEIGHT - TILE_SIZE); // -8px offset
+  return `translate3d(${px}px, ${py}px, 0)`;
+}
+
 let viewport = null;
 let world = null;
 let groundCanvas = null;
@@ -18,7 +33,6 @@ let groundCtx = null;
 let objectLayer = null;
 let actorLayer = null;
 
-const TILE_SIZE = 24;
 let mapWidth = 0;
 let mapHeight = 0;
 let currentState = null;
@@ -39,7 +53,9 @@ export function initRenderer(state) {
   // Set CSS variables for map dimensions
   document.documentElement.style.setProperty('--map-width', mapWidth);
   document.documentElement.style.setProperty('--map-height', mapHeight);
-  document.documentElement.style.setProperty('--tile-size', `${state.map.meta.tileSize}px`);
+  // Use the zoomed tile size for CSS (logical size, scaled by transform)
+  document.documentElement.style.setProperty('--tile-size', `${TILE_SIZE}px`);
+  // Actor scale is handled via actorTransform() function
 
   // Create ground canvas
   const groundLayer = document.getElementById('ground-layer');
@@ -144,6 +160,21 @@ export function renderObjects(state) {
 // ============================================
 // ACTOR RENDERING
 // ============================================
+
+/**
+ * Create shadow and sprite child elements for actor
+ * Shadow must be added first to render behind sprite
+ */
+function createActorChildren(parent) {
+  const shadow = document.createElement('div');
+  shadow.className = 'shadow';
+  parent.appendChild(shadow);
+  
+  const sprite = document.createElement('div');
+  sprite.className = 'sprite';
+  parent.appendChild(sprite);
+}
+
 export function renderActors(state) {
   const fragment = document.createDocumentFragment();
 
@@ -156,17 +187,9 @@ export function renderActors(state) {
     player.id = 'player';
     player.className = 'actor';
     player.style.transition = 'none'; // Prevent transition on initial placement
-    player.style.transform = `translate3d(${state.player.x * TILE_SIZE}px, ${state.player.y * TILE_SIZE}px, 0)`;
-    
-    // Apply Sprite Variables
-    player.style.setProperty('--sprite-idle', `url('${SPRITES.cpt.idle}')`);
-    player.style.setProperty('--sprite-bob', `url('${SPRITES.cpt.bob}')`);
-    
-    // Default to idle
-    player.style.backgroundImage = `var(--sprite-idle)`;
-    player.style.backgroundSize = 'contain';
-    player.style.backgroundRepeat = 'no-repeat';
-    player.style.backgroundColor = 'transparent'; // Override default color
+    player.style.transform = actorTransform(state.player.x, state.player.y);
+    player.style.setProperty('--sprite-idle', `url('${SPRITES.actor.idle}')`);
+    createActorChildren(player);
 
     fragment.appendChild(player);
   }
@@ -185,8 +208,9 @@ export function renderActors(state) {
     if (npc.isMedic) npcClass += ' medic';
     el.className = npcClass;
     
-    el.style.transform = `translate3d(${npc.x * TILE_SIZE}px, ${npc.y * TILE_SIZE}px, 0)`;
-    el.style.setProperty('--npc-color', npc.color);
+    el.style.transform = actorTransform(npc.x, npc.y);
+    el.style.setProperty('--sprite-idle', `url('${SPRITES.actor.idle}')`);
+    createActorChildren(el);
     el.dataset.npcId = npc.id;
     el.dataset.name = npc.name;
 
@@ -195,15 +219,10 @@ export function renderActors(state) {
       el.dataset.hidden = 'true';
     }
 
-    // Guard label
+    // Tooltip for special NPCs
     if (npc.isGuard) {
-      el.dataset.guard = 'true';
       el.title = `${npc.name} (Lv.${npc.level})`;
-    }
-    
-    // Medic label
-    if (npc.isMedic) {
-      el.dataset.medic = 'true';
+    } else if (npc.isMedic) {
       el.title = `${npc.name} - Field Medic`;
     }
 
@@ -231,7 +250,9 @@ export function renderActors(state) {
 
     const el = document.createElement('div');
     el.className = 'actor boss';
-    el.style.transform = `translate3d(${boss.x * TILE_SIZE}px, ${boss.y * TILE_SIZE}px, 0)`;
+    el.style.transform = actorTransform(boss.x, boss.y);
+    el.style.setProperty('--sprite-idle', `url('${SPRITES.actor.idle}')`);
+    createActorChildren(el);
     el.dataset.bossId = boss.id;
     el.dataset.name = boss.name;
     fragment.appendChild(el);
@@ -277,24 +298,30 @@ export function updateCamera(state, duration = null) {
   const vw = viewport.clientWidth;
   const vh = viewport.clientHeight;
 
-  // Center camera on player
-  const targetX = state.player.x * TILE_SIZE + TILE_SIZE / 2 - vw / 2;
-  const targetY = state.player.y * TILE_SIZE + TILE_SIZE / 2 - vh / 2;
+  // Center camera on player (adjusted for zoom)
+  // We calculate in logical pixels (24px grid)
+  // The viewport center in logical pixels is (vw / ZOOM) / 2
+  const targetX = state.player.x * TILE_SIZE + TILE_SIZE / 2 - (vw / ZOOM_FACTOR) / 2;
+  const targetY = state.player.y * TILE_SIZE + TILE_SIZE / 2 - (vh / ZOOM_FACTOR) / 2;
 
   // Clamp to world bounds
   const worldW = mapWidth * TILE_SIZE;
   const worldH = mapHeight * TILE_SIZE;
 
-  const x = Math.max(0, Math.min(targetX, worldW - vw));
-  const y = Math.max(0, Math.min(targetY, worldH - vh));
+  // Ensure camera doesn't show out of bounds (adjusted for logical viewport size)
+  const x = Math.max(0, Math.min(targetX, worldW - (vw / ZOOM_FACTOR)));
+  const y = Math.max(0, Math.min(targetY, worldH - (vh / ZOOM_FACTOR)));
 
   // Sync camera transition duration with player movement (for ghost mode, sprint, etc)
   if (duration !== null) {
     world.style.transitionDuration = `${duration}ms`;
   }
 
-  // Use translate3d for GPU acceleration
-  world.style.transform = `translate3d(${-x}px, ${-y}px, 0)`;
+  // Apply Scale AND Translate
+  // translate3d moves the layer in logical pixels
+  // scale magnifies the result
+  world.style.transform = `scale(${ZOOM_FACTOR}) translate3d(${-x}px, ${-y}px, 0)`;
+  world.style.transformOrigin = 'top left'; // Important!
 }
 
 // ============================================

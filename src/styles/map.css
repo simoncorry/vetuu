@@ -19,6 +19,8 @@
   /* Linear for smooth continuous movement - matches player */
   transition: transform var(--move-duration) linear;
   will-change: transform;
+  /* Zoom is handled via JS transform in render.js */
+  transform-origin: top left;
 }
 
 .layer {
@@ -96,6 +98,7 @@
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 #minimap-fog {
@@ -104,6 +107,7 @@
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
   pointer-events: none;
 }
 

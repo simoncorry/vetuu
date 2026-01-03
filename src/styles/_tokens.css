@@ -10,14 +10,15 @@
   --map-width: 120;
   --map-height: 80;
 
-  /* Palette: Desert tones */
-  --sand: #D0AD73;
-  --rock: #6B7075;
-  --road: #A8895F;
-  --scrap-town: #4C545A;
+  /* Palette: Desert tones (synced with map.json) */
+  --sand: #C9A870;
+  --rock: #6E6659;
+  --road: #A58B60;
+  --scrap-town: #52504B;
   --planks: #8A5F3D;
-  --ash: #8D7A5B;
-  --salt: #D8D2BE;
+  --ash: #8A7858;
+  --salt: #D5CFC0;
+  --wall: #3C3124;
 
   /* UI Colors */
   --bg-dark: #0D0F11;
@@ -28,11 +29,11 @@
   --text-secondary: #B8B4AB;
   --text-muted: #8A8780;
   --text-disabled: #5A5752;
-  --accent: #69D2D6;
-  --accent-dim: #3A8A8E;
+  --accent: #5B9AA3;
+  --accent-dim: #3A6A6E;
   --danger: #D64545;
   --danger-dark: #8B2020;
-  --warning: #E18B37;
+  --warning: #D48842;
   --success: #5DAD5D;
   --hp-color: #45A845;
   --hp-bg: #1E3A1E;
@@ -46,6 +47,38 @@
   --player: #00E5E5;
   --militia: #22B6B8;
   --boss: #8B45D6;
+
+  /* Enemy type colors */
+  --enemy-scavenger: #8B7355;
+  --enemy-stalker: #8B4513;
+  --enemy-bruiser: #8B5A2B;
+  --enemy-shaman: #556B2F;
+  --enemy-hunter: #6B8E23;
+  --enemy-sentry: #4A4A4A;
+  --enemy-veilwalker: #2F2F2F;
+  --enemy-sandwurm: #B8A038;
+
+  /* Combat effect colors */
+  --projectile-player: #00FF88;
+  --projectile-enemy: #FF4444;
+  --projectile-special: #FFAA00;
+  --projectile-psionic: #9B59B6;
+  --projectile-nature: #2ECC71;
+  --projectile-fire: #E74C3C;
+  --projectile-ice: #3498DB;
+  --melee-player: #00FFFF;
+  --melee-enemy: #FF4444;
+  --melee-special: #FFD700;
+  --ability-push: #4B9CD6;
+  --ability-pull: #9B59B6;
+
+  /* Weapon projectile colors */
+  --weapon-kinetic: #6B5B4F;
+  --weapon-energy: #FF00FF;
+
+  /* Light colors */
+  --light-torch: #FFE4B5;
+  --light-lamp: #FFE4B5;
 
   /* Level badge colors */
   --level-trivial: #888888;

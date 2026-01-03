@@ -3,7 +3,7 @@
  * Main game module: state management, initialization, game loop
  */
 
-import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects } from './render.js';
+import { initRenderer, renderWorld, updateCamera, renderActors, renderObjects, actorTransform } from './render.js';
 import { initInput } from './input.js';
 import { initMovement, createPathTo } from './movement.js';
 import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo, updateNpcPosition } from './collision.js';
@@ -16,6 +16,7 @@ import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
 import { initDayCycle, updateDayCycle, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
+import { cssVar } from './utils.js';
 
 // ============================================
 // GAME STATE
@@ -902,7 +903,8 @@ function initLightingCanvas(gameState) {
   const world = document.getElementById('world');
   if (!world) return;
   
-  lightingTileSize = gameState.map.meta.tileSize || 24;
+  // Use global TILE_SIZE (24) to match renderer
+  lightingTileSize = 24; 
   const width = gameState.map.meta.width * lightingTileSize;
   const height = gameState.map.meta.height * lightingTileSize;
   
@@ -941,7 +943,7 @@ function initLightingCanvas(gameState) {
       x: (obj.x + 0.5) * lightingTileSize,
       y: (obj.y + 0.5) * lightingTileSize,
       radius: (obj.light.radius || 6) * lightingTileSize,
-      color: obj.light.color || '#FFE4B5',
+      color: obj.light.color || cssVar('--light-lamp'),
       intensity: obj.light.intensity || 0.8
     }));
   
@@ -1295,7 +1297,16 @@ function tickGuardPatrol() {
     // Update visual position (CSS handles the smooth transition)
     const npcEl = document.querySelector(`[data-npc-id="${npc.id}"]`);
     if (npcEl) {
-      npcEl.style.transform = `translate3d(${newX * 24}px, ${newY * 24}px, 0)`;
+      // Use idle speed for patrol (half normal speed = 560ms)
+      npcEl.classList.add('idle');
+      npcEl.style.transform = actorTransform(newX, newY);
+      
+      // Add moving class for walk animation
+      npcEl.classList.add('moving');
+      clearTimeout(npc._moveTimeout);
+      npc._moveTimeout = setTimeout(() => {
+        npcEl.classList.remove('moving');
+      }, 560); // Match idle transition duration
     }
   }
 }

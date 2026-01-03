@@ -8,12 +8,13 @@ import { createPathTo, cancelPath } from './movement.js';
 import { cancelCombatPursuit } from './combat.js';
 import { toggleTorch } from './game.js';
 
+const TILE_SIZE = 24;
+
 // ============================================
 // STATE
 // ============================================
 let targetCallback = null;
-
-const TILE_SIZE = 24;
+let interactCallback = null;
 
 // Debounce for weapon toggle (prevents double-fire from multiple event paths)
 let lastWeaponToggleAt = 0;
@@ -22,7 +23,8 @@ const WEAPON_TOGGLE_DEBOUNCE_MS = 150;
 // ============================================
 // INITIALIZATION
 // ============================================
-export function initInput(_onInteract, onTarget, _onSecondary) {
+export function initInput(onInteract, onTarget, _onSecondary) {
+  interactCallback = onInteract || (() => {});
   targetCallback = onTarget || (() => {});
 
   // Non-movement keyboard
@@ -199,11 +201,26 @@ function onKeyDown(e) {
   }
 
   // ============================================
-  // TAB TARGET
+  // INTERACT (E)
+  // ============================================
+  if (code === 'KeyE') {
+    e.preventDefault();
+    if (!dialogueOpen && interactCallback) interactCallback();
+    return;
+  }
+
+  // ============================================
+  // TAB TARGET (Tab = enemies, Shift+Tab = friendlies)
   // ============================================
   if (code === 'Tab') {
     e.preventDefault();
-    if (targetCallback) targetCallback('cycle');
+    if (targetCallback) {
+      if (e.shiftKey) {
+        targetCallback('cycleFriendly');
+      } else {
+        targetCallback('cycle');
+      }
+    }
     return;
   }
 
@@ -356,14 +373,27 @@ function screenToWorld(screenX, screenY) {
   const rect = viewport.getBoundingClientRect();
   const style = window.getComputedStyle(world);
   const matrix = new DOMMatrix(style.transform);
-  const camX = matrix.m41;
-  const camY = matrix.m42;
+  
+  // Extract scale factor from the matrix (matrix.a = scaleX)
+  const scale = matrix.a || 1;
+  
+  // The translation values in the matrix are already scaled
+  // For transform: scale(N) translate3d(-x, -y, 0), matrix gives:
+  // m41 = -x * scale, m42 = -y * scale
+  // So camera offset in unscaled coords is: -m41/scale, -m42/scale
+  const camX = -matrix.m41 / scale;
+  const camY = -matrix.m42 / scale;
 
+  // Convert screen position to position in unscaled world coordinates
   const localX = screenX - rect.left;
   const localY = screenY - rect.top;
+  
+  // Divide by scale to get unscaled pixel position, then add camera offset
+  const unscaledX = localX / scale + camX;
+  const unscaledY = localY / scale + camY;
 
-  const worldX = Math.floor((localX - camX) / TILE_SIZE);
-  const worldY = Math.floor((localY - camY) / TILE_SIZE);
+  const worldX = Math.floor(unscaledX / TILE_SIZE);
+  const worldY = Math.floor(unscaledY / TILE_SIZE);
 
   if (worldX < 0 || worldY < 0 || worldX >= state.map.meta.width || worldY >= state.map.meta.height) {
     return null;

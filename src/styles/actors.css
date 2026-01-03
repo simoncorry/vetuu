@@ -4,18 +4,69 @@
    ============================================ */
 
 /* ---------- Actors ---------- */
+/* 
+ * Sprites are 24x32 (tile width × 1.33 height) for natural proportions.
+ * Element is 24x32 positioned via JS transform.
+ * .sprite child element holds the background for GPU-accelerated walk bob.
+ */
 .actor {
   position: absolute;
   width: var(--tile-size);
-  height: var(--tile-size);
-  border-radius: 4px;
+  height: calc(var(--tile-size) * 4 / 3); /* 32px for 24px tiles */
   z-index: 15;
+}
+
+.actor > .sprite {
+  position: absolute;
+  inset: 0;
+  /* Sprite rendering */
+  background-image: var(--sprite-idle);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  /* Ensure pixel art scales sharply */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  /* Scale from feet so bob keeps feet planted */
+  transform-origin: center bottom;
+  /* Pixel outline for contrast against background (60% opacity) */
+  filter:
+    drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(-1px 0 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 1px 0 rgba(36, 23, 6, 0.6))
+    drop-shadow(0 -1px 0 rgba(36, 23, 6, 0.6));
+  /* GPU layer for animation */
+  will-change: transform;
+  /* Allow clicks to pass through to parent .actor element */
+  pointer-events: none;
+}
+
+/* Dynamic ground shadow - smooth ellipse behind character */
+.actor > .shadow {
+  position: absolute;
+  /* Position below feet (actor is 32px tall, tile is 24px) */
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Smooth ellipse shadow */
+  width: 24px;
+  height: 6px;
+  background: rgba(36, 23, 6, 0.1);
+  border-radius: 50%;
+  /* Behind sprite */
+  z-index: 0;
+  /* Allow clicks to pass through to parent .actor element */
+  pointer-events: none;
+}
+
+.actor > .sprite {
+  z-index: 1;
 }
 
 /* ---------- Player ---------- */
 #player {
-  background: var(--player);
-  box-shadow: 0 0 8px var(--player), inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  /* Sprite-based rendering - no background color or effects */
+  background-color: transparent;
   z-index: 100;
   /* GPU-accelerated movement - linear for smooth continuous walking */
   transition: transform var(--move-duration) linear;
@@ -49,25 +100,19 @@
   will-change: transform;
 }
 
-#player.moving {
-  /* Combine translation bob with sprite swap */
-  animation: 
-    actor-bob var(--move-duration) steps(var(--move-steps), end),
-    sprite-walk 0.4s steps(1) infinite;
+/* Walk bob for all moving actors */
+.actor.moving > .sprite {
+  animation: walk-bob 0.2s ease-in-out infinite;
 }
 
-@keyframes sprite-walk {
-  0%, 49% { background-image: var(--sprite-idle); }
-  50%, 100% { background-image: var(--sprite-bob); }
+@keyframes walk-bob {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.969); } /* ~1px head movement on 32px sprite */
 }
 
 /* Ghost mode - player is semi-transparent and ethereal */
 #player.ghost {
-  background: rgba(0, 229, 229, 0.4);
-  box-shadow: 
-    0 0 16px rgba(200, 220, 255, 0.6),
-    0 0 32px rgba(200, 220, 255, 0.3),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.1);
+  opacity: 0.5;
   animation: ghost-pulse 2s ease-in-out infinite;
   filter: brightness(1.2) saturate(0.5);
 }
@@ -79,10 +124,6 @@
 
 /* Sprinting - speed boost active */
 #player.sprinting {
-  box-shadow: 
-    0 0 12px var(--player),
-    0 8px 16px rgba(0, 200, 255, 0.4),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.2);
   filter: brightness(1.1);
 }
 
@@ -98,26 +139,18 @@
 @keyframes heal-glow {
   0% {
     filter: brightness(1.5) saturate(1.3);
-    box-shadow: 0 0 20px #5DAD5D, 0 0 40px rgba(93, 173, 93, 0.5);
   }
   100% {
     filter: none;
-    box-shadow: 0 0 8px var(--player), inset 0 -4px 0 rgba(0, 0, 0, 0.2);
   }
 }
 
 @keyframes ghost-pulse {
   0%, 100% { 
-    opacity: 0.5;
-    box-shadow: 
-      0 0 16px rgba(200, 220, 255, 0.6),
-      0 0 32px rgba(200, 220, 255, 0.3);
+    opacity: 0.4;
   }
   50% { 
-    opacity: 0.7;
-    box-shadow: 
-      0 0 24px rgba(200, 220, 255, 0.8),
-      0 0 48px rgba(200, 220, 255, 0.5);
+    opacity: 0.6;
   }
 }
 
@@ -154,17 +187,10 @@
   0%, 100% { 
     opacity: 1;
     filter: brightness(1.5) saturate(1.2);
-    box-shadow: 
-      0 0 16px rgba(255, 215, 0, 0.8),
-      0 0 32px rgba(255, 215, 0, 0.4),
-      inset 0 -4px 0 rgba(0, 0, 0, 0.2);
   }
   50% { 
     opacity: 0.4;
     filter: brightness(1) saturate(1);
-    box-shadow: 
-      0 0 8px rgba(255, 215, 0, 0.4),
-      inset 0 -4px 0 rgba(0, 0, 0, 0.2);
   }
 }
 
@@ -228,26 +254,27 @@
   50% { transform: translate3d(-50%, -4px, 0); }
 }
 
-@keyframes actor-bob {
-  0%, 100% { transform: translate3d(var(--actor-x), var(--actor-y), 0); }
-  50% { transform: translate3d(var(--actor-x), calc(var(--actor-y) - 2px), 0); }
-}
 
 /* ---------- NPCs ---------- */
 .npc {
-  background: var(--npc-color, var(--militia));
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+  /* Sprite-based - no background color */
   cursor: pointer;
-  /* GPU-accelerated movement for patrol etc */
-  transition: transform 280ms ease-out;
+  /* GPU-accelerated movement - uses CSS var for speed control */
+  --npc-move-speed: 280ms;
+  --npc-idle-speed: 560ms; /* Half speed for patrol/idle */
+  transition: transform var(--npc-move-speed) ease-out;
   will-change: transform;
+}
+
+/* Idle/patrol movement - slower, relaxed pace */
+.npc.idle {
+  transition: transform var(--npc-idle-speed) ease-out;
 }
 
 /* NPC selected (not in combat) - offset stroke */
 .npc.targeted {
   outline: 3px solid var(--success, #4CAF50);
   outline-offset: 2px;
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
 }
 
 .npc[data-hidden="true"] { display: none; }
@@ -281,80 +308,47 @@
   50% { transform: translate3d(-50%, -3px, 0); }
 }
 
-/* Guards */
+/* Guards - cyan tint to distinguish from regular NPCs */
 .npc.guard {
-  background: var(--npc-color, #22B6B8);
-  box-shadow: 
-    0 0 8px rgba(34, 182, 184, 0.5),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  filter: sepia(0.3) saturate(2) hue-rotate(140deg);
+  box-shadow: 0 0 6px rgba(34, 182, 184, 0.4);
 }
 
-.npc.guard::after {
-  content: '⚔';
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translate3d(-50%, 0, 0);
-  font-size: 10px;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
-}
-
-/* Medic */
+/* Medic - red/pink tint */
 .npc.medic {
-  background: var(--npc-color, #E85D75);
-  box-shadow: 
-    0 0 8px rgba(232, 93, 117, 0.5),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  filter: sepia(0.3) saturate(1.5) hue-rotate(310deg);
+  box-shadow: 0 0 6px rgba(232, 93, 117, 0.4);
 }
 
-.npc.medic::after {
-  content: '✚';
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translate3d(-50%, 0, 0);
-  font-size: 10px;
-  color: #E85D75;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
-}
-
-/* Guard/NPC downed state */
+/* NPC downed state (guards can be killed by enemies) */
 .npc.downed {
   opacity: 0.3;
-  filter: grayscale(0.5);
-  transition: transform 280ms ease-out, opacity 0.3s ease, filter 0.3s ease;
-}
-
-.npc:not(.downed) {
-  opacity: 1;
-  filter: none;
+  filter: grayscale(0.8) brightness(0.6);
   transition: transform 280ms ease-out, opacity 0.3s ease, filter 0.3s ease;
 }
 
 /* ---------- Enemies ---------- */
 .enemy {
-  background: var(--enemy-color, var(--danger));
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  /* Sprite-based - no background color */
   cursor: pointer;
   /* GPU-accelerated movement */
-  transition: transform var(--enemy-move-speed, 400ms) linear, box-shadow 0.15s ease, background-color 0.3s ease;
+  transition: transform var(--enemy-move-speed, 400ms) linear, box-shadow 0.15s ease;
   will-change: transform;
 }
 
-/* Passive enemies (yellow) - non-aggressive until provoked */
+/* Idle/patrol movement - slower, relaxed pace (2x duration) */
+.enemy.idle {
+  transition: transform calc(var(--enemy-move-speed, 400ms) * 2) ease-out, box-shadow 0.15s ease;
+}
+
+/* Passive enemies (yellow glow) - non-aggressive until provoked */
 .enemy.passive {
-  --enemy-color: #B8A038;
-  box-shadow: 
-    0 0 6px rgba(184, 160, 56, 0.4),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 6px rgba(184, 160, 56, 0.4);
+  filter: sepia(0.4) saturate(1.5);
 }
 
 .enemy.passive:hover {
-  box-shadow: 
-    0 0 10px rgba(184, 160, 56, 0.6),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 10px rgba(184, 160, 56, 0.6);
 }
 
 .enemy-level-badge.passive-badge {
@@ -368,8 +362,7 @@
   border: 2px solid var(--rarity-gold);
   box-shadow: 
     0 0 8px rgba(214, 165, 90, 0.6),
-    0 0 16px rgba(214, 165, 90, 0.3),
-    inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+    0 0 16px rgba(214, 165, 90, 0.3);
   animation: alpha-pulse 2s ease-in-out infinite;
 }
 
@@ -387,26 +380,23 @@
   0%, 100% { 
     box-shadow: 
       0 0 8px rgba(214, 165, 90, 0.6),
-      0 0 16px rgba(214, 165, 90, 0.3),
-      inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+      0 0 16px rgba(214, 165, 90, 0.3);
   }
   50% { 
     box-shadow: 
       0 0 12px rgba(214, 165, 90, 0.8),
-      0 0 24px rgba(214, 165, 90, 0.5),
-      inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+      0 0 24px rgba(214, 165, 90, 0.5);
   }
 }
 
 .enemy:hover {
-  box-shadow: 0 0 8px var(--danger), inset 0 -4px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 8px var(--danger);
 }
 
 /* Enemy selected (not yet in combat) - offset stroke */
 .enemy.targeted {
   outline: 3px solid var(--danger);
   outline-offset: 2px;
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3);
 }
 
 /* Enemy in active combat - flashing red glow */
@@ -452,7 +442,7 @@
 .enemy-level-badge {
   position: absolute;
   top: -12px;
-  right: -4px;
+  right: -10px; /* Further right to avoid hp bar overlap */
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
@@ -465,6 +455,7 @@
   line-height: 12px;
   text-align: center;
   color: var(--level-normal);
+  z-index: 6; /* Above hp bar (z-index: 5) */
   z-index: 5;
 }
 
@@ -503,9 +494,11 @@
   background: rgba(0, 0, 0, 0.6);
   border-radius: 2px;
   overflow: hidden;
+  z-index: 5; /* Above sprite (z-index: 1) */
 }
 
 .enemy-hp-fill {
+  display: block; /* Span needs block display for width/height */
   height: 100%;
   width: 100%;
   background: var(--danger);
@@ -516,12 +509,11 @@
   will-change: transform;
 }
 
-/* Boss */
+/* Boss - sprite-based with distinctive glow */
 .boss {
-  width: calc(var(--tile-size) * 1.5);
-  height: calc(var(--tile-size) * 1.5);
-  background: var(--boss);
   box-shadow: 0 0 12px var(--boss);
   border-radius: 6px;
+  filter: hue-rotate(280deg) saturate(1.5);
 }
+
 

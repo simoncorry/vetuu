@@ -11,17 +11,17 @@
     "tiles": {
       "0": {
         "name": "sand",
-        "color": "#D0AD73",
+        "color": "#C9A870",
         "walkable": true
       },
       "1": {
         "name": "dune",
-        "color": "#D0AD73",
+        "color": "#C9A870",
         "walkable": true
       },
       "2": {
         "name": "rock",
-        "color": "#6B7075",
+        "color": "#6E6659",
         "walkable": true
       },
       "3": {
@@ -31,7 +31,7 @@
       },
       "4": {
         "name": "scrapTown",
-        "color": "#4C545A",
+        "color": "#52504B",
         "walkable": true
       },
       "5": {
@@ -41,22 +41,22 @@
       },
       "6": {
         "name": "ash",
-        "color": "#8D7A5B",
+        "color": "#8A7858",
         "walkable": true
       },
       "7": {
         "name": "salt",
-        "color": "#D8D2BE",
+        "color": "#D5CFC0",
         "walkable": true
       },
       "8": {
         "name": "drySand",
-        "color": "#B68F5F",
+        "color": "#B08A5C",
         "walkable": true
       },
       "9": {
         "name": "landingPad",
-        "color": "#5A636B",
+        "color": "#5A5854",
         "walkable": true
       },
       "a": {
@@ -66,7 +66,7 @@
       },
       "b": {
         "name": "workshop",
-        "color": "#544A42",
+        "color": "#524A44",
         "walkable": true
       },
       "c": {
@@ -76,7 +76,7 @@
       },
       "d": {
         "name": "market",
-        "color": "#D0AD73",
+        "color": "#C9A870",
         "walkable": true
       },
       "e": {
@@ -92,7 +92,7 @@
     },
     "objects": {
       "wall": {
-        "color": "#3B2D20",
+        "color": "#3C3124",
         "solid": true
       },
       "gate": {
@@ -100,11 +100,11 @@
         "solid": false
       },
       "lamp": {
-        "color": "#69D2D6",
+        "color": "#5B9AA3",
         "solid": false
       },
       "stall": {
-        "color": "#E18B37",
+        "color": "#D48842",
         "solid": true
       },
       "crate": {
@@ -116,19 +116,19 @@
         "solid": true
       },
       "tent": {
-        "color": "#B65A4A",
+        "color": "#A85C48",
         "solid": true
       },
       "banner": {
-        "color": "#3B8BA1",
+        "color": "#3B8894",
         "solid": false
       },
       "antenna": {
-        "color": "#6B7075",
+        "color": "#6E6659",
         "solid": true
       },
       "pad": {
-        "color": "#6B7075",
+        "color": "#6E6659",
         "solid": false
       },
       "wreck": {
@@ -140,7 +140,7 @@
         "solid": false
       },
       "pillar": {
-        "color": "#6B7075",
+        "color": "#6E6659",
         "solid": true
       },
       "bones": {
