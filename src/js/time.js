@@ -435,9 +435,21 @@ export function getShadowParams() {
 
 /**
  * Update CSS custom properties for shadows based on current time.
- * Call this in the game loop (e.g., after updateDayCycle).
+ * Throttled to avoid expensive style recalculations every frame.
+ * Shadows move slowly enough that 2 updates/second is smooth.
  */
-export function updateShadowCSS() {
+let lastShadowUpdate = 0;
+const SHADOW_UPDATE_INTERVAL = 500; // ms between shadow CSS updates
+
+export function updateShadowCSS(force = false) {
+  const now = performance.now();
+  
+  // Skip if updated recently (unless forced)
+  if (!force && now - lastShadowUpdate < SHADOW_UPDATE_INTERVAL) {
+    return;
+  }
+  lastShadowUpdate = now;
+  
   const params = getShadowParams();
   const root = document.documentElement;
   
@@ -489,7 +501,7 @@ if (typeof window !== 'undefined') {
   
   window.VETUU_SET_HOUR = (hour) => {
     setTimeOfDay(hour / 24);
-    updateShadowCSS(); // Immediately update shadows
+    updateShadowCSS(true); // Force immediate shadow update
     
     // Force instant shadow update (bypass 30s CSS transition)
     // The shadows use CSS variables from :root, so we need to:
