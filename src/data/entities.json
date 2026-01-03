@@ -75,7 +75,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_north_2",
@@ -87,7 +88,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_south_1",
@@ -99,7 +101,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_south_2",
@@ -111,7 +114,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_east_1",
@@ -123,7 +127,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_east_2",
@@ -135,7 +140,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_west_1",
@@ -147,7 +153,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "guard_west_2",
@@ -159,7 +166,8 @@
       "isGuard": true,
       "level": 25,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     },
     {
       "id": "npc_nurse_vela",
@@ -181,7 +189,8 @@
       "isGuard": true,
       "level": 15,
       "patrol": true,
-      "patrolRadius": 1
+      "patrolRadius": 1,
+      "dialogueRoot": "dlg_guard_root"
     }
   ],
   "enemySpawns": [

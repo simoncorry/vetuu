@@ -390,14 +390,15 @@ export function getSunAngle() {
 export function getShadowParams() {
   const sunAngle = getSunAngle();
   
-  // Night: very faint, diffuse shadows (moonlight/ambient)
+  // Night: soft ambient shadows (moonlight/torchlight)
+  // More visible than before but still diffuse
   if (sunAngle === null) {
     return {
       skewX: 0,
-      scaleY: 0.3,
+      scaleY: 0.4,
       scaleX: 1.0,
-      opacity: 0.05,
-      blur: 2
+      opacity: 0.15,
+      blur: 3
     };
   }
   
@@ -405,22 +406,23 @@ export function getShadowParams() {
   // skewX: sun at 0° (east) = shadow points west (+30°)
   //        sun at 90° (overhead) = straight down (0°)
   //        sun at 180° (west) = shadow points east (-30°)
-  const skewX = (90 - sunAngle) * 0.33; // Range: +30° to -30°
+  const skewX = (90 - sunAngle) * 0.4; // Range: +36° to -36° (more dramatic angle)
   
   // scaleY: shorter at noon (sun overhead), longer at dawn/dusk
-  // At 90° (noon): scaleY = 0.2 (shortest)
-  // At 0°/180°: scaleY = 0.5 (longest)
+  // At 90° (noon): scaleY = 0.25 (shortest)
+  // At 0°/180°: scaleY = 0.7 (longest - dramatic golden hour)
   const angleFromNoon = Math.abs(sunAngle - 90);
-  const scaleY = 0.2 + (angleFromNoon / 90) * 0.3; // Range: 0.2 to 0.5
+  const scaleY = 0.25 + (angleFromNoon / 90) * 0.45; // Range: 0.25 to 0.7
   
   // scaleX: slightly wider at low sun angles
-  const scaleX = 1.0 + (angleFromNoon / 90) * 0.15; // Range: 1.0 to 1.15
+  const scaleX = 1.0 + (angleFromNoon / 90) * 0.2; // Range: 1.0 to 1.2
   
-  // opacity: stronger at noon, softer at dawn/dusk
-  const opacity = 0.1 + (1 - angleFromNoon / 90) * 0.1; // Range: 0.1 to 0.2
+  // opacity: INVERTED - stronger at dawn/dusk for dramatic golden hour shadows
+  // Noon: 0.18, Dawn/Dusk: 0.3
+  const opacity = 0.18 + (angleFromNoon / 90) * 0.12; // Range: 0.18 to 0.3
   
-  // blur: sharper at noon, softer at dawn/dusk
-  const blur = 1 + (angleFromNoon / 90) * 1; // Range: 1px to 2px
+  // blur: sharper at noon, slightly softer at dawn/dusk (but not too soft)
+  const blur = 0.5 + (angleFromNoon / 90) * 1; // Range: 0.5px to 1.5px
   
   return { skewX, scaleY, scaleX, opacity, blur };
 }
@@ -482,6 +484,29 @@ if (typeof window !== 'undefined') {
   window.VETUU_SET_HOUR = (hour) => {
     setTimeOfDay(hour / 24);
     updateShadowCSS(); // Immediately update shadows
+    
+    // Force instant shadow update (bypass 30s CSS transition)
+    // The shadows use CSS variables from :root, so we need to:
+    // 1. Disable transitions
+    // 2. Force style recalculation
+    // 3. Re-enable transitions
+    const shadows = document.querySelectorAll('.actor > .shadow');
+    shadows.forEach(el => {
+      // Disable transition
+      el.style.transition = 'none';
+      // Force synchronous style recalculation by reading a layout property
+      void el.offsetWidth;
+    });
+    
+    // Use double-rAF to ensure the no-transition frame is painted first
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        shadows.forEach(el => {
+          el.style.transition = '';
+        });
+      });
+    });
+    
     const params = getShadowParams();
     return `Set to ${formatTimeOfDay()} (${getDayPhase()}) — Shadow: skew=${params.skewX.toFixed(1)}°, scaleY=${params.scaleY.toFixed(2)}, opacity=${params.opacity.toFixed(2)}`;
   };

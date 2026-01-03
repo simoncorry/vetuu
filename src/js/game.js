@@ -115,6 +115,7 @@ async function loadData() {
 
   state.dialogue.nodes = dialogueData.nodes;
   state.dialogue.texts = dialogueData.texts;
+  state.dialogue.guardQuips = dialogueData.guardQuips || [];
 
   state.questDefs = questsData.quests;
   state.items = itemsData.items;
@@ -743,9 +744,44 @@ function onMoveComplete(x, y) {
   // Quest progress
   updateQuestProgress(state, 'reach', { x, y });
   
+  // Check for pending interaction (from double-click or E key on target)
+  if (state.runtime.pendingInteraction) {
+    const { type, target } = state.runtime.pendingInteraction;
+    state.runtime.pendingInteraction = null;
+    
+    // Check if we're adjacent to the target
+    const dx = Math.abs(x - target.x);
+    const dy = Math.abs(y - target.y);
+    if (dx <= 1 && dy <= 1) {
+      // Trigger the interaction
+      if (type === 'npc' && target.dialogueRoot) {
+        showDialogue(state, target.dialogueRoot, target);
+        updateQuestProgress(state, 'talk', { entityId: target.id });
+        updateQuestProgress(state, 'return', { entityId: target.id });
+      } else if (type === 'object' && target.interact) {
+        handleObjectInteractInternal(target);
+      }
+    }
+  }
+  
   // Update UI
   checkInteraction();
   updateHUD();
+}
+
+/**
+ * Internal object interaction handler (for pending interactions).
+ */
+function handleObjectInteractInternal(obj) {
+  const action = obj.interact;
+
+  switch (action.action) {
+    case 'collect': handleCollect(obj); break;
+    case 'read': handleRead(obj); break;
+    case 'loot': handleLoot(obj); break;
+    case 'triggerAct3': handleAct3Trigger(obj); break;
+    case 'unlockPath': handleUnlockPath(obj); break;
+  }
 }
 
 // ============================================
@@ -1410,6 +1446,7 @@ async function init() {
     
     // Initialize day/night cycle (start at morning)
     initDayCycle(0.35);
+    updateShadowCSS(); // Set initial shadow CSS variables
     
     initMinimap();
     updateHUD();

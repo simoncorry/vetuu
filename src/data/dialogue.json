@@ -513,6 +513,38 @@
           ]
         }
       ]
+    },
+    "dlg_guard_root": {
+      "speaker": "Drycross Guard",
+      "text": "$GUARD_QUIP",
+      "choices": [
+        {
+          "text": "Keep up the good work, I guess...",
+          "next": "END"
+        }
+      ]
     }
-  }
+  },
+  "guardQuips": [
+    "Storm's brewing. I can smell it.",
+    "Stay within the perimeter. It's ugly out there.",
+    "Seen critters twice the size of these. You're lucky.",
+    "Don't let the quiet fool you. Desert's never really quiet.",
+    "Another day, another patrol. Beats the alternative.",
+    "Heard there's Scavs massing to the south. Watch yourself.",
+    "Captain Dax has us running double shifts. Something's coming.",
+    "Iron Parish pays well, but not well enough for what's out there.",
+    "You look like trouble. Good—we need trouble on our side.",
+    "The walls hold. For now.",
+    "Saw something moving near the ridge last night. Something big.",
+    "Keep your weapon ready. Always.",
+    "Verdleg traders came through yesterday. Nervous types.",
+    "Some nights you can hear the Trogs chanting. Eerie stuff.",
+    "Desert takes what it wants. We just delay the inevitable.",
+    "Another sunrise. Count your blessings.",
+    "Karth Directorate's been sniffing around. Bad sign.",
+    "I've seen that look before. Wanderer's eyes. Be careful out there.",
+    "Heat's getting to everyone. Stay hydrated.",
+    "Three years on this wall. Still breathing. That's the job."
+  ]
 }

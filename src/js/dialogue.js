@@ -264,7 +264,17 @@ function renderNode(node, nodeId = null, addToHistory = true) {
   const isAtRoot = currentNodeId === rootNodeId;
   
   speakerEl.textContent = node.speaker || '';
-  textEl.textContent = node.text || '';
+  
+  // Handle dynamic text replacements (e.g., guard quips)
+  let displayText = node.text || '';
+  if (displayText.includes('$GUARD_QUIP')) {
+    const quips = currentState.dialogue.guardQuips || [];
+    if (quips.length > 0) {
+      const randomQuip = quips[Math.floor(Math.random() * quips.length)];
+      displayText = displayText.replace('$GUARD_QUIP', randomQuip);
+    }
+  }
+  textEl.textContent = displayText;
 
   choicesEl.innerHTML = '';
   choiceButtons = [];

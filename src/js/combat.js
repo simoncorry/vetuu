@@ -542,6 +542,7 @@ const COMBAT_TIMEOUT = 3000;                // 3s to be considered "out of comba
 let currentState = null;
 let currentTarget = null; // Enemy target
 let currentNpcTarget = null; // Friendly NPC target (can't attack)
+let currentObjectTarget = null; // Interactive object target
 let currentWeapon = 'laser_rifle';
 let actionCooldowns = { 1: 0, 2: 0, 3: 0 };
 let actionMaxCooldowns = { 1: 1500, 2: 5000, 3: 20000 };
@@ -5401,6 +5402,7 @@ export function handleTargeting(action, data) {
     case 'cycleFriendly': cycleFriendlyTarget(); break;
     case 'select': selectTarget(data); break;
     case 'selectNpc': selectNpcTarget(data); break;
+    case 'selectObject': selectObjectTarget(data); break;
     case 'clear': clearTarget(); break;
     case 'attack': 
       // If enemy data provided, select it first then start auto-attack
@@ -5423,6 +5425,16 @@ export function handleTargeting(action, data) {
       break;
     case 'special': playerSpecial(); break;
     case 'cycleWeapon': cycleWeapon(); break;
+    
+    // Move to and interact with NPC/object
+    case 'interactWith': 
+      handleInteractWith(data);
+      break;
+    
+    // Move to and interact with current target (E key)
+    case 'interactWithTarget':
+      handleInteractWithCurrentTarget();
+      break;
     
     // Legacy action handler (still works with old format)
     case 'action': useAction(data); break;
@@ -5469,32 +5481,54 @@ function cycleTarget() {
 }
 
 function cycleFriendlyTarget() {
-  // Filter to NPCs that are visible, not hidden, and meet flag requirements
-  const npcs = (currentState.entities?.npcs || []).filter(npc => {
-    // Skip hidden NPCs
-    if (npc.flags?.hidden) return false;
-    // Skip NPCs with unmet flag requirements
-    if (npc.requires?.flag && !currentState.flags?.[npc.requires.flag]) return false;
-    // Must be visible (fog + viewport check via render.js)
-    return isActorVisible(npc);
-  });
+  // Build combined list of NPCs and interactive objects
+  const targets = [];
   
-  if (npcs.length === 0) {
+  // Add visible NPCs
+  for (const npc of currentState.entities?.npcs || []) {
+    if (npc.flags?.hidden) continue;
+    if (npc.requires?.flag && !currentState.flags?.[npc.requires.flag]) continue;
+    if (!isActorVisible(npc)) continue;
+    targets.push({ type: 'npc', entity: npc, x: npc.x, y: npc.y });
+  }
+  
+  // Add interactive objects
+  for (const obj of currentState.map?.objects || []) {
+    if (!obj.interact) continue;
+    if (!isActorVisible(obj)) continue;
+    targets.push({ type: 'object', entity: obj, x: obj.x, y: obj.y });
+  }
+  
+  if (targets.length === 0) {
     clearNpcTarget();
+    clearObjectTarget();
     return;
   }
 
+  // Sort by distance
   const player = currentState.player;
-  npcs.sort((a, b) => {
+  targets.sort((a, b) => {
     const distA = distCoords(a.x, a.y, player.x, player.y);
     const distB = distCoords(b.x, b.y, player.x, player.y);
     return distA - distB;
   });
 
-  const currentIndex = currentNpcTarget ? npcs.findIndex(n => n.id === currentNpcTarget.id) : -1;
-  const nextIndex = (currentIndex + 1) % npcs.length;
+  // Find current index (check both NPC and object targets)
+  let currentIndex = -1;
+  if (currentNpcTarget) {
+    currentIndex = targets.findIndex(t => t.type === 'npc' && t.entity.id === currentNpcTarget.id);
+  } else if (currentObjectTarget) {
+    currentIndex = targets.findIndex(t => t.type === 'object' && t.entity.id === currentObjectTarget.id);
+  }
+  
+  const nextIndex = (currentIndex + 1) % targets.length;
+  const next = targets[nextIndex];
 
-  selectNpcTarget(npcs[nextIndex]);
+  if (next.type === 'npc') {
+    selectNpcTarget(next.entity);
+  } else {
+    selectObjectTarget(next.entity);
+  }
 }
 
 function selectTarget(enemy) {
@@ -5541,6 +5575,64 @@ function clearNpcTarget() {
   currentNpcTarget = null;
 }
 
+function selectObjectTarget(obj) {
+  // Clear any other targets
+  clearTarget();
+  clearNpcTarget();
+  
+  if (currentObjectTarget) {
+    const prevEl = document.querySelector(`[data-obj-id="${currentObjectTarget.id}"]`);
+    if (prevEl) prevEl.classList.remove('targeted');
+  }
+
+  currentObjectTarget = obj;
+
+  const el = document.querySelector(`[data-obj-id="${obj.id}"]`);
+  if (el) el.classList.add('targeted');
+
+  updateTargetFrame();
+  updateActionBarState();
+}
+
+function clearObjectTarget() {
+  if (currentObjectTarget) {
+    const el = document.querySelector(`[data-obj-id="${currentObjectTarget.id}"]`);
+    if (el) el.classList.remove('targeted');
+  }
+  currentObjectTarget = null;
+}
+
+/**
+ * Handle double-click move-to-and-interact with NPC/object.
+ */
+async function handleInteractWith(data) {
+  const { type, target, x, y } = data;
+  
+  // Import movement function
+  const { createPathTo } = await import('./movement.js');
+  
+  // Path to the target
+  createPathTo(x, y, true);
+  
+  // Store pending interaction
+  currentState.runtime.pendingInteraction = { type, target };
+}
+
+/**
+ * Handle E key - move to and interact with current friendly target.
+ */
+async function handleInteractWithCurrentTarget() {
+  if (currentNpcTarget) {
+    const { createPathTo } = await import('./movement.js');
+    createPathTo(currentNpcTarget.x, currentNpcTarget.y, true);
+    currentState.runtime.pendingInteraction = { type: 'npc', target: currentNpcTarget };
+  } else if (currentObjectTarget) {
+    const { createPathTo } = await import('./movement.js');
+    createPathTo(currentObjectTarget.x, currentObjectTarget.y, true);
+    currentState.runtime.pendingInteraction = { type: 'object', target: currentObjectTarget };
+  }
+}
+
 function clearTarget() {
   if (currentTarget) {
     const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
@@ -5556,6 +5648,7 @@ function clearTarget() {
   // It will check for engaged/provoked enemies and end combat when appropriate
   
   clearNpcTarget();
+  clearObjectTarget();
   updateTargetFrame();
   updateActionBarState();
 }
@@ -6266,27 +6359,27 @@ function updateTargetFrame() {
 
   // Check for enemy target
   if (currentTarget) {
-  frame.classList.remove('hidden');
-    frame.classList.remove('friendly');
+    frame.classList.remove('hidden');
+    frame.classList.remove('friendly', 'object');
     frame.classList.add('hostile');
 
-  const nameEl = frame.querySelector('.frame-name');
-  const levelEl = frame.querySelector('.frame-level');
-  const hpFill = frame.querySelector('.frame-hp-fill');
-  const hpText = frame.querySelector('.frame-hp-text');
+    const nameEl = frame.querySelector('.frame-name');
+    const levelEl = frame.querySelector('.frame-level');
+    const hpFill = frame.querySelector('.frame-hp-fill');
+    const hpText = frame.querySelector('.frame-hp-text');
 
-  const targetMax = getMaxHP(currentTarget);
-  if (nameEl) nameEl.textContent = currentTarget.name;
-  if (levelEl) levelEl.textContent = `Lv.${currentTarget.level}`;
-  if (hpFill) hpFill.style.setProperty('--hp-pct', getHPPercent(currentTarget));
-  if (hpText) hpText.textContent = `${Math.max(0, currentTarget.hp)}/${targetMax}`;
+    const targetMax = getMaxHP(currentTarget);
+    if (nameEl) nameEl.textContent = currentTarget.name;
+    if (levelEl) levelEl.textContent = `Lv.${currentTarget.level}`;
+    if (hpFill) hpFill.style.setProperty('--hp-pct', getHPPercent(currentTarget));
+    if (hpText) hpText.textContent = `${Math.max(0, currentTarget.hp)}/${targetMax}`;
     return;
   }
 
   // Check for NPC target
   if (currentNpcTarget) {
     frame.classList.remove('hidden');
-    frame.classList.remove('hostile');
+    frame.classList.remove('hostile', 'object');
     frame.classList.add('friendly');
 
     const nameEl = frame.querySelector('.frame-name');
@@ -6319,9 +6412,42 @@ function updateTargetFrame() {
     return;
   }
 
+  // Check for object target
+  if (currentObjectTarget) {
+    frame.classList.remove('hidden');
+    frame.classList.remove('hostile', 'friendly');
+    frame.classList.add('object');
+
+    const nameEl = frame.querySelector('.frame-name');
+    const levelEl = frame.querySelector('.frame-level');
+    const hpFill = frame.querySelector('.frame-hp-fill');
+    const hpText = frame.querySelector('.frame-hp-text');
+
+    // Object name from interact label or type
+    const objName = currentObjectTarget.interact?.label || 
+                    currentObjectTarget.name || 
+                    currentObjectTarget.type || 
+                    'Object';
+    if (nameEl) nameEl.textContent = objName;
+    
+    // Show interaction type
+    if (levelEl) {
+      const action = currentObjectTarget.interact?.action;
+      if (action === 'collect') levelEl.textContent = 'Collect';
+      else if (action === 'read') levelEl.textContent = 'Read';
+      else if (action === 'loot') levelEl.textContent = 'Search';
+      else levelEl.textContent = 'Interact';
+    }
+    
+    // Objects don't have HP (unless destructible in future)
+    if (hpFill) hpFill.style.setProperty('--hp-pct', 100);
+    if (hpText) hpText.textContent = '—';
+    return;
+  }
+
   // No target
   frame.classList.add('hidden');
-  frame.classList.remove('friendly', 'hostile');
+  frame.classList.remove('friendly', 'hostile', 'object');
 }
 
 function updateActionBar() {
