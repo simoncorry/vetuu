@@ -1138,6 +1138,7 @@ function createEnemyFromSlot(spawner, slot, rosterEntry, t) {
 // ============================================
 // Track newly spawned enemies for incremental DOM updates
 let newlySpawnedEnemies = [];
+let cachedPlayerEl = null; // Cached player element for ghost check
 
 function spawnDirectorTick() {
   if (!currentState) return;
@@ -1147,8 +1148,11 @@ function spawnDirectorTick() {
   const now = nowMs();
   const player = currentState.player;
   
-  // Don't spawn while ghost running
-  if (document.getElementById('player')?.classList.contains('ghost')) {
+  // Don't spawn while ghost running (cache player element reference)
+  if (!cachedPlayerEl) {
+    cachedPlayerEl = document.getElementById('player');
+  }
+  if (cachedPlayerEl?.classList.contains('ghost')) {
     perfEnd('spawn:tick');
     return;
   }

@@ -123,6 +123,20 @@ const VAR_MAX = 1.05;
 // Map of enemyId -> DOM element (cleared on renderEnemies, updated incrementally)
 const enemyEls = new Map();
 
+/**
+ * Get cached enemy element, with fallback to querySelector
+ * @param {string|number} enemyId - Enemy ID
+ * @returns {HTMLElement|null}
+ */
+function getEnemyEl(enemyId) {
+  let el = enemyEls.get(enemyId);
+  if (!el) {
+    el = document.querySelector(`[data-enemy-id="${enemyId}"]`);
+    if (el) enemyEls.set(enemyId, el);
+  }
+  return el;
+}
+
 // Previous visual state cache for dirty-flag optimization
 // Map of enemyId -> { retreating, engaged, spawnImmune, passive }
 const enemyVisualState = new Map();
@@ -1722,7 +1736,7 @@ function handleRetreatState(enemy, t) {
   enemy.moveCooldown = t + moveCD;
   
   // Update visual to show retreating state
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const el = getEnemyEl(enemy.id);
   if (el && !el.classList.contains('retreating')) {
     el.classList.add('retreating');
   }
@@ -1758,7 +1772,7 @@ function snapNearHomeWithinFootprint(enemy, t) {
       enemy.x = testX;
       enemy.y = testY;
       
-      const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+      const el = getEnemyEl(enemy.id);
       if (el) {
         el.classList.add('is-teleporting');
         el.style.transform = actorTransform(enemy.x, enemy.y);
@@ -1908,7 +1922,7 @@ function snapEnemyToHome(enemy, t) {
   enemy.y = destY;
   
   // Update DOM element position immediately with no tween
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const el = getEnemyEl(enemy.id);
   if (el) {
     // Add teleporting class to disable transitions
     el.classList.add('is-teleporting');
@@ -1959,7 +1973,7 @@ function finishRetreat(enemy, t) {
   provokedEnemies.delete(enemy.id);
   
   // Update visuals
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const el = getEnemyEl(enemy.id);
   if (el) {
     el.classList.remove('retreating');
     el.classList.add('spawn-immune');
@@ -2057,13 +2071,8 @@ function updateEnemyVisuals() {
   for (const enemy of currentState.runtime.activeEnemies) {
     if (enemy.hp <= 0) continue;
     
-    // Use cached DOM reference instead of querySelector
-    let el = enemyEls.get(enemy.id);
-    if (!el) {
-      // Fallback to querySelector if not in cache (shouldn't happen often)
-      el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
-      if (el) enemyEls.set(enemy.id, el);
-    }
+    // Use cached DOM reference
+    const el = getEnemyEl(enemy.id);
     if (!el) continue;
     
     // Calculate current visual state
@@ -2729,7 +2738,7 @@ function updateEnemyPosition(enemy, x, y, forceMove = false, isIdle = false) {
   enemy.x = x;
   enemy.y = y;
 
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const el = getEnemyEl(enemy.id);
   if (el) {
     // Idle movement uses slower transition (2x duration)
     if (isIdle) {
@@ -3902,7 +3911,7 @@ function pullEnemyToward(enemy, player, targetDist) {
  * Animate enemy's visual position after displacement (for Push/Pull)
  */
 function animateEnemyDisplacement(enemy) {
-  const enemyEl = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const enemyEl = getEnemyEl(enemy.id);
   if (enemyEl) {
     enemyEl.style.transition = 'transform 0.2s ease-out';
     enemyEl.style.transform = actorTransform(enemy.x, enemy.y);
@@ -4021,7 +4030,7 @@ function showSenseAbilityText(x, y, text, color) {
  * Flash enemy outline when affected by Push/Pull
  */
 function flashEnemyAffected(enemy) {
-  const enemyEl = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const enemyEl = getEnemyEl(enemy.id);
   if (!enemyEl) return;
   
   // Add the flash class
@@ -6330,7 +6339,8 @@ function updateEnemyHealthBar(enemy) {
 
 // Update enemy element with current status effect classes
 function updateEnemyStatusEffects(enemy) {
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  // Use cached DOM reference instead of querySelector
+  const el = enemyEls.get(enemy.id);
   if (!el) return;
   
   // Toggle status effect classes
@@ -6344,38 +6354,30 @@ function updateEnemyStatusEffects(enemy) {
 // Tick all enemy effects and update visuals
 function tickAllEnemyEffects() {
   const t = nowMs();
+  const enemies = currentState.runtime.activeEnemies;
+  if (!enemies || enemies.length === 0) return;
   
-  for (const enemy of currentState.runtime.activeEnemies || []) {
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
     if (enemy.hp <= 0) continue;
     
     // Tick status effects
     tickEffects(enemy);
     updateEnemyStatusEffects(enemy);
     
+    // Use cached DOM reference instead of querySelector
+    const el = enemyEls.get(enemy.id);
+    if (!el) continue;
+    
     // Sync spawn immunity visual state
-    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
-    if (el) {
-      const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
-      if (immuneRemaining > 0) {
-        el.classList.add('spawn-immune');
-      } else {
-        el.classList.remove('spawn-immune');
-      }
-      
-      // Sync retreating visual
-      if (enemy.isRetreating) {
-        el.classList.add('retreating');
-      } else {
-        el.classList.remove('retreating');
-      }
-      
-      // Sync engaged visual (red tint for testing)
-      if (enemy.isEngaged || enemy.state === 'ENGAGED') {
-        el.classList.add('engaged');
-      } else {
-        el.classList.remove('engaged');
-      }
-    }
+    const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
+    el.classList.toggle('spawn-immune', immuneRemaining > 0);
+    
+    // Sync retreating visual
+    el.classList.toggle('retreating', !!enemy.isRetreating);
+    
+    // Sync engaged visual
+    el.classList.toggle('engaged', !!(enemy.isEngaged || enemy.state === 'ENGAGED'));
   }
 }
 
