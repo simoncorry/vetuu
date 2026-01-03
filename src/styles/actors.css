@@ -316,12 +316,7 @@
     hue-rotate(60deg);  /* Yellow-ish */
 }
 
-/* Alpha enemies - 20% larger, gold tint */
-.enemy.alpha {
-  scale: 1.2;
-  transform-origin: center bottom;
-}
-
+/* Alpha enemies - gold tint (same size as regular enemies) */
 .enemy.alpha > .sprite {
   filter: 
     drop-shadow(1px 0 0 rgba(36, 23, 6, 0.6))
