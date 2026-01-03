@@ -18,6 +18,7 @@ import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from '
 import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
 import { cssVar } from './utils.js';
 import { initUI, initSettingsMenu, loadPanelState } from './ui.js';
+import { initMinimap, updateMinimap as updateMinimapNew, addMarker, removeMarker } from './minimap.js';
 import './perf.js'; // Initialize perf monitoring (exposes VETUU_PERF() to console)
 
 // ============================================
@@ -395,7 +396,7 @@ export function updateHUD() {
   }
 
   updateLocation();
-  updateMinimap();
+  updateMinimapNew();
 }
 
 function updateLocation() {
@@ -418,217 +419,18 @@ function updateLocation() {
 }
 
 // ============================================
-// MINIMAP
+// MINIMAP (handled by minimap.js module)
 // ============================================
-let minimapScale = 1;
-let minimapCanvasWidth = 200;
-let minimapCanvasHeight = 140;
 
-function initMinimap() {
-  const canvas = document.getElementById('minimap-canvas');
-  const fogCanvas = document.getElementById('minimap-fog');
-  const minimap = document.getElementById('minimap');
-  if (!canvas) return;
-
-  // Get canvas dimensions
-  minimapCanvasWidth = canvas.width;
-  minimapCanvasHeight = canvas.height;
-  
-  const ctx = canvas.getContext('2d');
-  minimapScale = canvas.width / state.map.meta.width;
-
-  // Draw terrain
-  for (let y = 0; y < state.map.ground.length; y++) {
-    const row = state.map.ground[y];
-    for (let x = 0; x < row.length; x++) {
-      const tileChar = row[x];
-      // Look up by character directly (legend keys are strings)
-      const tile = state.map.legend.tiles[tileChar];
-      if (tile) {
-        ctx.fillStyle = tile.color;
-        ctx.fillRect(x * minimapScale, y * minimapScale, Math.ceil(minimapScale), Math.ceil(minimapScale));
-      }
-    }
-  }
-
-  // Draw regions/POIs
-  for (const region of state.map.regions) {
-    const b = region.bounds;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(b.x0 * minimapScale, b.y0 * minimapScale, (b.x1 - b.x0) * minimapScale, (b.y1 - b.y0) * minimapScale);
-  }
-
-  // Initialize fog canvas
-  if (fogCanvas) {
-    const fogCtx = fogCanvas.getContext('2d');
-    fogCtx.fillStyle = 'rgba(13, 15, 17, 0.95)';
-    fogCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
-  }
-
-  // Click-to-move on minimap (improved handler)
-  if (minimap) {
-    minimap.addEventListener('click', onMinimapClick);
-  }
-
-  updateMinimapFog();
-}
-
-function onMinimapClick(e) {
-  const minimap = document.getElementById('minimap');
-  const canvas = document.getElementById('minimap-canvas');
-  if (!minimap || !canvas) return;
-
-  // Don't process if clicking on other minimap elements
-  if (e.target.id === 'minimap-corpse') return;
-
-  const rect = minimap.getBoundingClientRect();
-  const clickX = e.clientX - rect.left;
-  const clickY = e.clientY - rect.top;
-  
-  // Get current zoom level from CSS variable
-  const computedStyle = getComputedStyle(minimap);
-  const zoom = parseFloat(computedStyle.getPropertyValue('--minimap-zoom')) || 1;
-  
-  // Account for zoom and centering
-  // Canvas is centered at 50% 50%, so we need to adjust coordinates
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  
-  // Calculate click position relative to canvas center, adjusted for zoom
-  const canvasX = (clickX - centerX) / zoom + (minimapCanvasWidth / 2);
-  const canvasY = (clickY - centerY) / zoom + (minimapCanvasHeight / 2);
-  
-  // Convert to world coordinates
-  const worldX = Math.floor(canvasX / minimapScale);
-  const worldY = Math.floor(canvasY / minimapScale);
-
-  // Check bounds
-  if (worldX < 0 || worldY < 0 || worldX >= state.map.meta.width || worldY >= state.map.meta.height) {
-    return;
-  }
-
-  // Create path to clicked location
-  createPathTo(worldX, worldY, false);
-}
-
-// Cached minimap elements and state
-let cachedMinimapPlayer = null;
-let cachedMinimapFogCanvas = null;
-let cachedMinimapFogCtx = null;
-let minimapRevealedCount = 0; // Track how many tiles we've already drawn
-
-function updateMinimap() {
-  if (!cachedMinimapPlayer) {
-    cachedMinimapPlayer = document.getElementById('minimap-player');
-  }
-  if (!cachedMinimapPlayer) return;
-
-  // Calculate player position on canvas
-  const canvasX = state.player.x * minimapScale;
-  const canvasY = state.player.y * minimapScale;
-  
-  // Get current zoom and minimap dimensions for centering
-  const minimap = document.getElementById('minimap');
-  const zoom = parseFloat(getComputedStyle(minimap).getPropertyValue('--minimap-zoom')) || 1;
-  
-  // Position relative to canvas center (canvas is centered with translate -50%, -50%)
-  // Player position = canvas center offset + (player canvas pos - canvas center) * zoom
-  const offsetX = (canvasX - minimapCanvasWidth / 2) * zoom;
-  const offsetY = (canvasY - minimapCanvasHeight / 2) * zoom;
-
-  // Use transform for GPU-accelerated positioning
-  cachedMinimapPlayer.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 0)`;
-
-  updateMinimapFog();
-}
-
-function updateMinimapFog() {
-  if (!cachedMinimapFogCanvas) {
-    cachedMinimapFogCanvas = document.getElementById('minimap-fog');
-    if (cachedMinimapFogCanvas) {
-      cachedMinimapFogCtx = cachedMinimapFogCanvas.getContext('2d');
-    }
-  }
-  if (!cachedMinimapFogCtx) return;
-
-  const revealed = state.runtime.revealedTiles || new Set();
-  const currentCount = revealed.size;
-  
-  // Early exit if no new tiles revealed
-  if (currentCount === minimapRevealedCount) return;
-  
-  // Only draw if new tiles were revealed
-  if (currentCount > minimapRevealedCount) {
-    cachedMinimapFogCtx.globalCompositeOperation = 'destination-out';
-    cachedMinimapFogCtx.fillStyle = 'rgba(255, 255, 255, 1)';
-    
-    // Draw all tiles (we can't easily track "new" tiles without more state)
-    // But the fillRect on already-cleared pixels is very cheap
-    for (const key of revealed) {
-      const [x, y] = key.split(',').map(Number);
-      cachedMinimapFogCtx.fillRect(
-        x * minimapScale - 0.5,
-        y * minimapScale - 0.5,
-        Math.ceil(minimapScale) + 1,
-        Math.ceil(minimapScale) + 1
-      );
-    }
-
-    cachedMinimapFogCtx.globalCompositeOperation = 'source-over';
-  }
-  
-  minimapRevealedCount = currentCount;
-}
-
-// Corpse marker on minimap
-// Store corpse world coordinates for click-to-path
-let corpseWorldX = null;
-let corpseWorldY = null;
-
+// Corpse marker on minimap - uses new minimap module
 export function updateMinimapCorpse(x, y) {
-  clearMinimapCorpse(); // Remove any existing marker
-  
-  // Store world coordinates for click handler
-  corpseWorldX = x;
-  corpseWorldY = y;
-  
-  const minimap = document.getElementById('minimap');
-  if (!minimap) return;
-  
-  // Calculate position relative to canvas center (same as player)
-  const canvasX = x * minimapScale;
-  const canvasY = y * minimapScale;
-  const zoom = parseFloat(getComputedStyle(minimap).getPropertyValue('--minimap-zoom')) || 1;
-  const offsetX = (canvasX - minimapCanvasWidth / 2) * zoom;
-  const offsetY = (canvasY - minimapCanvasHeight / 2) * zoom;
-  
-  const corpseMarker = document.createElement('div');
-  corpseMarker.id = 'minimap-corpse';
-  corpseMarker.className = 'minimap-corpse';
-  // Use transform for GPU-accelerated positioning (centered like player)
-  corpseMarker.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 0)`;
-  corpseMarker.textContent = '💀';
-  corpseMarker.title = 'Click to path to your corpse';
-  
-  // Click to path to corpse
-  corpseMarker.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (corpseWorldX !== null && corpseWorldY !== null) {
-      createPathTo(corpseWorldX, corpseWorldY, false);
-    }
+  addMarker('corpse', x, y, '💀', () => {
+    createPathTo(x, y, false);
   });
-  
-  minimap.appendChild(corpseMarker);
 }
 
 export function clearMinimapCorpse() {
-  corpseWorldX = null;
-  corpseWorldY = null;
-  const existing = document.getElementById('minimap-corpse');
-  if (existing) {
-    existing.remove();
-  }
+  removeMarker('corpse');
 }
 
 // ============================================
@@ -1559,7 +1361,8 @@ async function init() {
     initDayCycle(0.35);
     updateShadowCSS(); // Set initial shadow CSS variables
     
-    initMinimap();
+    // Initialize new minimap system
+    initMinimap(state);
     
     // Initialize UI module (draggable panels, settings menu)
     initUI();

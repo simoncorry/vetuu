@@ -60,8 +60,7 @@ export function initUI() {
   initDraggableUnitFrame('player-frame', 'playerFrame');
   initDraggableUnitFrame('target-frame', 'targetFrame');
   
-  // Initialize minimap zoom
-  initMinimapZoom();
+  // Note: Minimap zoom is now handled by minimap.js module
   
   // Position unit frames relative to action bar after layout
   requestAnimationFrame(() => {
@@ -587,10 +586,7 @@ function onResize(e) {
   panelState[panelKey].width = newWidth;
   panelState[panelKey].height = newHeight;
   
-  // For minimap, update canvas size
-  if (panelKey === 'minimap') {
-    updateMinimapSize(newWidth, newHeight);
-  }
+  // Minimap resizing is handled automatically by minimap.js via ResizeObserver
 }
 
 function endResize() {
@@ -643,105 +639,21 @@ function dockPanel(elementId, panelKey) {
   panelState[panelKey].width = null;
   panelState[panelKey].height = null;
   
-  // Reset minimap zoom
+  // Reset minimap zoom (handled by minimap.js module)
   if (panelKey === 'minimap') {
     panelState.minimap.zoom = 1;
-    updateMinimapZoom(1);
+    // Minimap will auto-reset when container is resized
+    import('./minimap.js').then(m => m.resetZoom?.());
   }
   
   savePanelState();
 }
 
 // ============================================
-// MINIMAP ZOOM
+// MINIMAP (zoom/resize handled by minimap.js)
 // ============================================
-function initMinimapZoom() {
-  const minimapContainer = document.getElementById('minimap-container');
-  const minimap = document.getElementById('minimap');
-  
-  if (!minimap || !minimapContainer) return;
-  
-  // Wheel zoom
-  minimapContainer.addEventListener('wheel', (e) => {
-    // Only zoom if hovering over minimap content area
-    if (!e.target.closest('#minimap')) return;
-    
-    e.preventDefault();
-    
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    const newZoom = Math.max(0.5, Math.min(3, panelState.minimap.zoom + delta));
-    
-    panelState.minimap.zoom = newZoom;
-    updateMinimapZoom(newZoom);
-  }, { passive: false });
-  
-  // Pinch zoom (touch)
-  let lastTouchDist = null;
-  
-  minimapContainer.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
-      lastTouchDist = getTouchDistance(e.touches);
-    }
-  }, { passive: true });
-  
-  minimapContainer.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 2 && lastTouchDist !== null) {
-      e.preventDefault();
-      
-      const dist = getTouchDistance(e.touches);
-      const scale = dist / lastTouchDist;
-      
-      const newZoom = Math.max(0.5, Math.min(3, panelState.minimap.zoom * scale));
-      panelState.minimap.zoom = newZoom;
-      updateMinimapZoom(newZoom);
-      
-      lastTouchDist = dist;
-    }
-  }, { passive: false });
-  
-  minimapContainer.addEventListener('touchend', () => {
-    lastTouchDist = null;
-  }, { passive: true });
-}
-
-function getTouchDistance(touches) {
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
-  return Math.hypot(dx, dy);
-}
-
-function updateMinimapZoom(zoom) {
-  const minimap = document.getElementById('minimap');
-  const canvas = document.getElementById('minimap-canvas');
-  const fogCanvas = document.getElementById('minimap-fog');
-  
-  if (!minimap) return;
-  
-  // Scale the internal content
-  minimap.style.setProperty('--minimap-zoom', zoom);
-  
-  // Update canvas transforms
-  if (canvas) {
-    canvas.style.transform = `scale3d(${zoom}, ${zoom}, 1)`;
-    canvas.style.transformOrigin = 'center center';
-  }
-  if (fogCanvas) {
-    fogCanvas.style.transform = `scale3d(${zoom}, ${zoom}, 1)`;
-    fogCanvas.style.transformOrigin = 'center center';
-  }
-}
-
-function updateMinimapSize(width, height) {
-  const minimap = document.getElementById('minimap');
-  if (!minimap) return;
-  
-  // Adjust inner minimap size (account for padding)
-  const innerWidth = width - 16; // padding
-  const innerHeight = height - 48; // padding + header + label
-  
-  minimap.style.width = `${Math.max(100, innerWidth)}px`;
-  minimap.style.height = `${Math.max(80, innerHeight)}px`;
-}
+// The minimap module now handles its own zoom and responsiveness internally.
+// Container resizing is detected via ResizeObserver in minimap.js.
 
 // ============================================
 // PANEL TOGGLES
@@ -891,9 +803,7 @@ function restorePanelPositions() {
       el.classList.add('undocked');
     }
     
-    if (panelState.minimap.zoom !== 1) {
-      updateMinimapZoom(panelState.minimap.zoom);
-    }
+    // Minimap zoom is now handled internally by minimap.js
   }
   
   // Restore quests position if undocked
