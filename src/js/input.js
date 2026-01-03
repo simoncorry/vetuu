@@ -278,7 +278,7 @@ function isDoubleClick(x, y) {
   return timeDiff < DOUBLE_CLICK_MS && dist <= DOUBLE_CLICK_DIST;
 }
 
-function onLeftClick(e) {
+function onLeftClick(e, forceDoubleClick = false) {
   // Ignore clicks on UI elements
   if (e.target.closest('#hud, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #controls-hint, #dialogue-panel, #inventory-panel')) {
     return;
@@ -291,7 +291,8 @@ function onLeftClick(e) {
   const state = window.__vetuuState;
   if (!state) return;
   
-  const doubleClick = isDoubleClick(x, y);
+  // Use forced double-click (from double-tap) or check timing-based double-click
+  const doubleClick = forceDoubleClick || isDoubleClick(x, y);
 
   // Check for enemy at click location
   const enemy = findEnemyAt(state, x, y);
@@ -310,9 +311,9 @@ function onLeftClick(e) {
   const npc = findNpcAt(state, x, y);
   if (npc) {
     if (doubleClick) {
-      // Double-click: move to and interact
+      // Double-click: move to and interact (use NPC's actual coords, not click coords)
       targetCallback('selectNpc', npc);
-      targetCallback('interactWith', { type: 'npc', target: npc, x, y });
+      targetCallback('interactWith', { type: 'npc', target: npc, x: npc.x, y: npc.y });
     } else {
       // Single-click: just select (show portrait)
       targetCallback('selectNpc', npc);
@@ -324,9 +325,9 @@ function onLeftClick(e) {
   const obj = findObjectAt(state, x, y);
   if (obj?.interact) {
     if (doubleClick) {
-      // Double-click: move to and interact
+      // Double-click: move to and interact (use object's actual coords, not click coords)
       targetCallback('selectObject', obj);
-      targetCallback('interactWith', { type: 'object', target: obj, x, y });
+      targetCallback('interactWith', { type: 'object', target: obj, x: obj.x, y: obj.y });
     } else {
       // Single-click: just select (show in target frame)
       targetCallback('selectObject', obj);
@@ -423,22 +424,12 @@ function onTouchEnd(e) {
     const tapDist = Math.abs(touch.clientX - lastTapX) + Math.abs(touch.clientY - lastTapY);
     const isDoubleTap = (now - lastTapTime < DOUBLE_TAP_MS) && (tapDist < DOUBLE_TAP_DIST);
     
-    // For double-tap: simulate two rapid clicks so isDoubleClick() returns true
-    if (isDoubleTap) {
-      // Reset to trigger double-click detection
-      lastClickTime = now - 50; // Just under the threshold
-      const worldPos = screenToWorld(touch.clientX, touch.clientY);
-      if (worldPos) {
-        lastClickX = worldPos.x;
-        lastClickY = worldPos.y;
-      }
-    }
-    
+    // Pass double-tap flag directly to avoid timing simulation issues
     onLeftClick({
       clientX: touch.clientX,
       clientY: touch.clientY,
       target: document.elementFromPoint(touch.clientX, touch.clientY)
-    });
+    }, isDoubleTap);
     
     lastTapTime = now;
     lastTapX = touch.clientX;

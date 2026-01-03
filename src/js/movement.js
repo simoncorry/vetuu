@@ -383,7 +383,11 @@ export function createPathTo(targetX, targetY, shouldInteract = false) {
   
   // Already at destination
   if (startX === targetX && startY === targetY) {
-    if (shouldInteract) onInteract();
+    if (shouldInteract) {
+      onInteract();
+      // Also trigger onMoveComplete to process pendingInteraction
+      onMoveComplete(startX, startY);
+    }
     return true;
   }
   
@@ -401,6 +405,8 @@ export function createPathTo(targetX, targetY, shouldInteract = false) {
     // Already adjacent?
     if (Math.abs(targetX - startX) + Math.abs(targetY - startY) <= 1) {
       onInteract();
+      // Also trigger onMoveComplete to process pendingInteraction
+      onMoveComplete(startX, startY);
       return true;
     }
   } else if (!canMoveTo(destX, destY)) {
