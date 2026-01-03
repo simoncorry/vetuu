@@ -22,11 +22,11 @@ const CONFIG = {
   zoomStep: 3,          // Tiles to add/remove per scroll
   
   // Colors - matching game actor colors
-  playerColor: '#BAB9A7',      // Matches player sprite body color
-  playerGlow: 'rgba(186, 185, 167, 0.5)',
-  playerStroke: 'rgba(36, 23, 6, 0.6)',  // Matches player sprite outline
-  pathColor: '#BAB9A7',        // Same as player
-  pathStroke: 'rgba(36, 23, 6, 0.6)',    // Same dark outline
+  playerColor: '#00E5E5',      // Cyan for minimap visibility
+  playerGlow: 'rgba(0, 229, 229, 0.4)',
+  playerStroke: 'rgba(255, 255, 255, 0.7)',
+  pathColor: '#00E5E5',        // Cyan to match player
+  pathStroke: 'rgba(255, 255, 255, 0.5)',
   npcColor: '#4CAF50',         // Green (friendly NPCs)
   npcGuardColor: '#69d2d6',    // Cyan (guards)
   npcMedicColor: '#E91E63',    // Pink (medics)
@@ -71,7 +71,6 @@ let cameraInitialized = false;
 // Player dot state for smooth interpolation
 let playerDotX = 0;
 let playerDotY = 0;
-let playerDotInitialized = false;
 
 // Cached references
 let gameState = null;
@@ -128,11 +127,9 @@ export function initMinimap(state) {
     cameraY = gameState.player.y;
     targetCameraX = cameraX;
     targetCameraY = cameraY;
-    cameraInitialized = true;
-    
     playerDotX = gameState.player.x;
     playerDotY = gameState.player.y;
-    playerDotInitialized = true;
+    cameraInitialized = true;
   }
   
   // Start render loop
@@ -176,40 +173,33 @@ function updateCamera() {
     cameraY = targetY;
     targetCameraX = targetX;
     targetCameraY = targetY;
-    cameraInitialized = true;
-  }
-  
-  if (!playerDotInitialized) {
     playerDotX = targetX;
     playerDotY = targetY;
-    playerDotInitialized = true;
+    cameraInitialized = true;
+    return;
   }
   
   // Set targets
   targetCameraX = targetX;
   targetCameraY = targetY;
   
-  // Smooth camera interpolation (lerp)
-  const camDx = targetCameraX - cameraX;
-  const camDy = targetCameraY - cameraY;
+  // Calculate delta to target
+  const dx = targetCameraX - cameraX;
+  const dy = targetCameraY - cameraY;
   
-  if (Math.abs(camDx) > 0.001 || Math.abs(camDy) > 0.001) {
-    cameraX += camDx * CONFIG.cameraSmoothing;
-    cameraY += camDy * CONFIG.cameraSmoothing;
+  // Both camera and player dot use SAME interpolation to stay perfectly in sync
+  if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+    const smoothX = dx * CONFIG.cameraSmoothing;
+    const smoothY = dy * CONFIG.cameraSmoothing;
+    
+    cameraX += smoothX;
+    cameraY += smoothY;
+    playerDotX += smoothX;
+    playerDotY += smoothY;
   } else {
+    // Snap to target when close enough
     cameraX = targetCameraX;
     cameraY = targetCameraY;
-  }
-  
-  // Smooth player dot interpolation (slightly faster than camera for responsive feel)
-  const dotSmoothing = CONFIG.cameraSmoothing * 1.5;
-  const dotDx = targetX - playerDotX;
-  const dotDy = targetY - playerDotY;
-  
-  if (Math.abs(dotDx) > 0.001 || Math.abs(dotDy) > 0.001) {
-    playerDotX += dotDx * dotSmoothing;
-    playerDotY += dotDy * dotSmoothing;
-  } else {
     playerDotX = targetX;
     playerDotY = targetY;
   }

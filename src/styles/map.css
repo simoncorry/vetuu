@@ -172,7 +172,7 @@
   top: 0;
   width: 4px;
   height: 4px;
-  background: #BAB9A7;  /* Matches player sprite body color */
+  background: #FFC17A;  /* Matches player sprite skin color */
   outline: 0.25px solid rgba(36, 23, 6, 0.6);  /* Matches player sprite outline */
   pointer-events: none;
   z-index: 8;
