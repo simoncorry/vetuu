@@ -637,8 +637,8 @@ function showPathMarkers(path) {
   const actorLayer = document.getElementById('actor-layer');
   if (!actorLayer) return;
   
-  // 4x4 markers, centered on tile (offset by half size = 2)
-  const markerSize = 4;
+  // 3x3 markers, centered on tile (offset by half size = 1.5)
+  const markerSize = 3;
   const offset = markerSize / 2;
   
   for (let i = 0; i < path.length; i++) {
