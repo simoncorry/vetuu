@@ -101,3 +101,4 @@ export function getHPPercent(entity) {
   return Math.max(0, Math.min(100, (entity.hp / max) * 100));
 }
 
+

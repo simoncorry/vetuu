@@ -3956,20 +3956,25 @@ function animateEnemyDisplacement(enemy) {
  * Uses scale3d for GPU-accelerated animation
  */
 function showPushEffect(x, y) {
-  const world = document.getElementById('world');
-  if (!world) return;
+  if (!cachedWorld) {
+    cachedWorld = document.getElementById('world');
+  }
+  if (!cachedWorld) return;
   
   const size = 6 * 24 * 2; // Final size
+  const posX = x * 24 + 12;
+  const posY = y * 24 + 12;
+  
   const effect = document.createElement('div');
   effect.className = 'push-effect';
-  effect.style.setProperty('--pos-x', `${x * 24 + 12}px`);
-  effect.style.setProperty('--pos-y', `${y * 24 + 12}px`);
   effect.style.cssText = `
     position: absolute;
     left: 0;
     top: 0;
     width: ${size}px;
     height: ${size}px;
+    --pos-x: ${posX}px;
+    --pos-y: ${posY}px;
     border: 3px solid var(--sense-color);
     border-radius: 50%;
     pointer-events: none;
@@ -3979,7 +3984,7 @@ function showPushEffect(x, y) {
     will-change: transform, opacity;
   `;
   
-  world.appendChild(effect);
+  cachedWorld.appendChild(effect);
   effect.addEventListener('animationend', () => effect.remove(), { once: true });
   
   // Show floating "PUSH!" text
@@ -3991,20 +3996,25 @@ function showPushEffect(x, y) {
  * Uses scale3d for GPU-accelerated animation
  */
 function showPullEffect(x, y) {
-  const world = document.getElementById('world');
-  if (!world) return;
+  if (!cachedWorld) {
+    cachedWorld = document.getElementById('world');
+  }
+  if (!cachedWorld) return;
   
   const size = 6 * 24 * 2; // Starting size
+  const posX = x * 24 + 12;
+  const posY = y * 24 + 12;
+  
   const effect = document.createElement('div');
   effect.className = 'pull-effect';
-  effect.style.setProperty('--pos-x', `${x * 24 + 12}px`);
-  effect.style.setProperty('--pos-y', `${y * 24 + 12}px`);
   effect.style.cssText = `
     position: absolute;
     left: 0;
     top: 0;
     width: ${size}px;
     height: ${size}px;
+    --pos-x: ${posX}px;
+    --pos-y: ${posY}px;
     border: 3px solid var(--sense-color);
     border-radius: 50%;
     pointer-events: none;
@@ -4014,7 +4024,7 @@ function showPullEffect(x, y) {
     will-change: transform, opacity;
   `;
   
-  world.appendChild(effect);
+  cachedWorld.appendChild(effect);
   effect.addEventListener('animationend', () => effect.remove(), { once: true });
   
   // Show floating "PULL!" text
@@ -4025,18 +4035,23 @@ function showPullEffect(x, y) {
  * Show floating ability text (PUSH!/PULL!) above player
  */
 function showSenseAbilityText(x, y, text, color) {
-  const world = document.getElementById('world');
-  if (!world) return;
+  if (!cachedWorld) {
+    cachedWorld = document.getElementById('world');
+  }
+  if (!cachedWorld) return;
+  
+  const posX = x * 24 + 12;
+  const posY = y * 24 - 8;
   
   const textEl = document.createElement('div');
   textEl.className = 'sense-ability-text';
   textEl.textContent = text;
-  textEl.style.setProperty('--pos-x', `${x * 24 + 12}px`);
-  textEl.style.setProperty('--pos-y', `${y * 24 - 8}px`);
   textEl.style.cssText = `
     position: absolute;
     left: 0;
     top: 0;
+    --pos-x: ${posX}px;
+    --pos-y: ${posY}px;
     color: ${color};
     font-family: var(--font-display, 'Rajdhani', sans-serif);
     font-size: 1rem;
@@ -4049,7 +4064,7 @@ function showSenseAbilityText(x, y, text, color) {
     will-change: transform, opacity;
   `;
   
-  world.appendChild(textEl);
+  cachedWorld.appendChild(textEl);
   textEl.addEventListener('animationend', () => textEl.remove(), { once: true });
 }
 
@@ -4653,6 +4668,13 @@ function showProjectile(fromX, fromY, toX, toY, color, isEnhanced = false) {
   if (!cachedWorld) return;
 
   const projectile = getPooledElement(projectilePool, 'projectile');
+  
+  // Reset animation by removing class, forcing reflow, then re-adding
+  projectile.className = '';
+  projectile.style.animation = 'none';
+  void projectile.offsetHeight; // Force reflow
+  projectile.style.animation = '';
+  
   projectile.className = `projectile ${isEnhanced ? 'enhanced' : ''}`;
   projectile.style.setProperty('--color', color);
   projectile.style.setProperty('--pos-x', `${fromX * 24 + 12}px`);
@@ -4680,6 +4702,13 @@ function showMeleeSwipe(fromX, fromY, toX, toY, color, isEnhanced = false) {
   if (!cachedWorld) return;
 
   const swipe = getPooledElement(swipePool, 'melee-swipe');
+  
+  // Reset animation by removing class, forcing reflow, then re-adding
+  swipe.className = '';
+  swipe.style.animation = 'none';
+  void swipe.offsetHeight; // Force reflow
+  swipe.style.animation = '';
+  
   swipe.className = `melee-swipe ${isEnhanced ? 'enhanced' : ''}`;
   swipe.style.setProperty('--color', color);
   swipe.style.setProperty('--pos-x', `${toX * 24}px`);
@@ -6814,6 +6843,13 @@ function showDamageNumber(x, y, damage, isCrit, isPlayer = false) {
   if (!cachedWorld) return;
 
   const el = getDamageNumberElement();
+  
+  // Reset animation by removing class, forcing reflow, then re-adding
+  el.className = '';
+  el.style.animation = 'none';
+  void el.offsetHeight; // Force reflow
+  el.style.animation = '';
+  
   el.className = `damage-number ${isCrit ? 'crit' : ''} ${isPlayer ? 'player-damage' : ''}`;
   el.textContent = damage;
   el.style.setProperty('--pos-x', `${x * 24 + 12}px`);
