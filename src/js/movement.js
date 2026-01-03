@@ -637,12 +637,16 @@ function showPathMarkers(path) {
   const actorLayer = document.getElementById('actor-layer');
   if (!actorLayer) return;
   
+  // 6x6 markers, centered on tile (offset by half size = 3)
+  const markerSize = 6;
+  const offset = markerSize / 2;
+  
   for (let i = 0; i < path.length; i++) {
     const { x, y } = path[i];
     const marker = document.createElement('div');
     marker.className = 'path-marker';
-    marker.style.setProperty('--pos-x', `${x * TILE_SIZE + TILE_SIZE / 2 - 4}px`);
-    marker.style.setProperty('--pos-y', `${y * TILE_SIZE + TILE_SIZE / 2 - 4}px`);
+    marker.style.setProperty('--pos-x', `${x * TILE_SIZE + TILE_SIZE / 2 - offset}px`);
+    marker.style.setProperty('--pos-y', `${y * TILE_SIZE + TILE_SIZE / 2 - offset}px`);
     marker.style.setProperty('--marker-opacity', 0.3 + (i / path.length) * 0.5);
     actorLayer.appendChild(marker);
     pathMarkers.push(marker);
@@ -706,6 +710,10 @@ if (typeof window !== 'undefined') {
 
 export function hasActivePath() {
   return currentPath.length > 0;
+}
+
+export function getCurrentPath() {
+  return currentPath;
 }
 
 export function getPlayerPosition() {

@@ -22,8 +22,10 @@ const CONFIG = {
   zoomStep: 3,          // Tiles to add/remove per scroll
   
   // Colors - matching game actor colors
-  playerColor: '#69d2d6',      // Cyan (matches player sprite tint)
-  playerGlow: 'rgba(105, 210, 214, 0.6)',
+  playerColor: '#00E5E5',      // Cyan (matches --player CSS var)
+  playerGlow: 'rgba(0, 229, 229, 0.5)',
+  pathColor: '#00E5E5',        // Same as player
+  pathStroke: 'rgba(255, 255, 255, 0.7)',
   npcColor: '#4CAF50',         // Green (friendly NPCs)
   npcGuardColor: '#69d2d6',    // Cyan (guards)
   npcMedicColor: '#E91E63',    // Pink (medics)
@@ -35,6 +37,7 @@ const CONFIG = {
   // Sizes (in canvas pixels)
   playerSize: 6,
   entitySize: 4,
+  pathMarkerSize: 3,  // Slightly smaller than player for hierarchy
   
   // Camera smoothing
   cameraSmoothing: 0.15, // Lerp factor (0-1, lower = smoother/slower)
@@ -532,6 +535,9 @@ function render() {
   // Draw entities
   renderEntities(vp);
   
+  // Draw path markers (between entities and player)
+  renderPath(vp);
+  
   // Draw player (always on top, always centered)
   renderPlayer(vp);
 }
@@ -698,6 +704,59 @@ function renderEntities(vp) {
   }
 }
 
+// Path markers cache (updated via dynamic import)
+let cachedPath = [];
+let pathUpdateScheduled = false;
+
+function updatePathCache() {
+  if (pathUpdateScheduled) return;
+  pathUpdateScheduled = true;
+  
+  import('./movement.js').then(({ getCurrentPath }) => {
+    cachedPath = getCurrentPath() || [];
+    pathUpdateScheduled = false;
+  }).catch(() => {
+    cachedPath = [];
+    pathUpdateScheduled = false;
+  });
+}
+
+function renderPath(vp) {
+  // Update path cache
+  updatePathCache();
+  
+  if (!cachedPath || cachedPath.length === 0) return;
+  
+  const size = CONFIG.pathMarkerSize;
+  const halfSize = size / 2;
+  
+  // Draw path markers as small squares
+  for (let i = 0; i < cachedPath.length; i++) {
+    const { x, y } = cachedPath[i];
+    
+    // Check if in view
+    if (!isInView(x, y, vp)) continue;
+    
+    const pos = worldToScreen(x + 0.5, y + 0.5);
+    if (!pos) continue;
+    
+    // Opacity increases along path (more opaque near destination)
+    const opacity = 0.4 + (i / cachedPath.length) * 0.5;
+    
+    // Draw square marker with stroke
+    ctx.fillStyle = CONFIG.pathColor;
+    ctx.globalAlpha = opacity;
+    ctx.fillRect(pos.x - halfSize, pos.y - halfSize, size, size);
+    
+    // Stroke
+    ctx.strokeStyle = CONFIG.pathStroke;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(pos.x - halfSize, pos.y - halfSize, size, size);
+    
+    ctx.globalAlpha = 1;
+  }
+}
+
 function renderPlayer(_vp) {
   // Player dot uses interpolated position for smooth movement
   const pos = worldToScreen(playerDotX + 0.5, playerDotY + 0.5);
@@ -709,16 +768,15 @@ function renderPlayer(_vp) {
   ctx.arc(pos.x, pos.y, CONFIG.playerSize + 2, 0, Math.PI * 2);
   ctx.fill();
   
-  // Player dot
+  // Player dot - square to match path markers
   ctx.fillStyle = CONFIG.playerColor;
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, CONFIG.playerSize / 2, 0, Math.PI * 2);
-  ctx.fill();
+  const playerHalf = CONFIG.playerSize / 2;
+  ctx.fillRect(pos.x - playerHalf, pos.y - playerHalf, CONFIG.playerSize, CONFIG.playerSize);
   
   // White border
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
   ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.strokeRect(pos.x - playerHalf, pos.y - playerHalf, CONFIG.playerSize, CONFIG.playerSize);
 }
 
 function isInView(x, y, vp) {
