@@ -599,7 +599,37 @@ let currentState = null;
 let currentTarget = null; // Enemy target
 let currentNpcTarget = null; // Friendly NPC target (can't attack)
 let currentObjectTarget = null; // Interactive object target
-let currentWeapon = 'laser_rifle';
+
+// Combat Overhaul: Weapon type is determined by unlock status, not toggle
+// Player starts with melee (vibro_sword), ranged (laser_rifle) unlocks via MSQ
+function getActiveWeaponType() {
+  const flags = window.__vetuuFlags || {};
+  // If rifle is unlocked via MSQ, player can use ranged
+  // Otherwise, melee only
+  return flags.rifle_unlocked ? 'ranged' : 'melee';
+}
+
+function getActiveWeapon() {
+  const type = getActiveWeaponType();
+  return type === 'ranged' ? WEAPONS.laser_rifle : WEAPONS.vibro_sword;
+}
+
+// Determine best attack type based on distance and unlock status
+function getBestAttackType(targetDist) {
+  const flags = window.__vetuuFlags || {};
+  
+  // If rifle not unlocked, always melee
+  if (!flags.rifle_unlocked) {
+    return 'melee';
+  }
+  
+  // Rifle unlocked: use ranged if far, melee if close
+  const MELEE_RANGE = 2;
+  return targetDist <= MELEE_RANGE ? 'melee' : 'ranged';
+}
+
+// Legacy - kept for backward compatibility with old code
+let currentWeapon = 'vibro_sword';
 // Ability cooldowns (slots 2-7)
 let actionCooldowns = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
 let actionMaxCooldowns = { 2: 8000, 3: 8000, 4: 4000, 5: 10000, 6: 8000, 7: 8000 };
@@ -854,6 +884,9 @@ export function initCombat(state) {
   initGuardsFromNPCs();
   startCombatTick();
   updateActionBar();
+  
+  // Initialize auto-attack UI with correct icon based on unlock status
+  updateAutoAttackUI(false);
 }
 
 // ============================================
@@ -3038,11 +3071,24 @@ function toggleAutoAttack() {
 
 /**
  * Update the auto-attack slot UI to show active/inactive state
+ * Also updates icon based on whether player has rifle unlocked
  */
 function updateAutoAttackUI(active) {
   const slot = document.getElementById('auto-attack-slot');
   if (slot) {
     slot.classList.toggle('active', active);
+  }
+  
+  // Update icon based on unlock status
+  const icon = document.getElementById('auto-attack-icon');
+  const label = document.getElementById('auto-attack-label');
+  const flags = window.__vetuuFlags || {};
+  
+  if (icon) {
+    icon.textContent = flags.rifle_unlocked ? '🔫' : '⚔️';
+  }
+  if (label) {
+    label.textContent = flags.rifle_unlocked ? 'Attack' : 'Strike';
   }
 }
 
@@ -5710,10 +5756,12 @@ function setAutoAttackIntent(target) {
     return { success: false, reason: check.reason };
   }
   
-  const weapon = WEAPONS[currentWeapon];
-  const basic = weapon?.basic;
-  const range = basic?.range || weapon?.range || 1;
-  const requiresLOS = basic?.requiresLOS ?? (weapon?.combatType === 'ranged');
+  // Determine attack type based on unlock status
+  // If rifle is unlocked, use its range (6), otherwise melee range (2)
+  const flags = window.__vetuuFlags || {};
+  const hasRifle = !!flags.rifle_unlocked;
+  const range = hasRifle ? 6 : 2;
+  const requiresLOS = hasRifle; // Only ranged requires LOS
   
   // Preserve existing timer state if target hasn't changed (prevents timer reset on spam)
   const now = nowMs();
@@ -5930,15 +5978,20 @@ function executeBasicIntent(now) {
     return;
   }
   
-  const weapon = WEAPONS[currentWeapon];
-  if (!weapon) return;
-  
   const player = currentState.player;
   const dist = distCoords(player.x, player.y, target.x, target.y);
-  const hasLOS = !combatIntent.requiresLOS || hasLineOfSight(currentState, player.x, player.y, target.x, target.y);
+  
+  // Determine attack type based on distance and unlock status
+  const attackType = getBestAttackType(dist);
+  const weapon = attackType === 'ranged' ? WEAPONS.laser_rifle : WEAPONS.vibro_sword;
+  if (!weapon) return;
+  
+  // Update intent range based on actual weapon being used
+  const effectiveRange = attackType === 'ranged' ? 6 : 2;
+  const hasLOS = attackType !== 'ranged' || hasLineOfSight(currentState, player.x, player.y, target.x, target.y);
   
   // Out of range or no LOS
-  if (dist > combatIntent.requiredRange || !hasLOS) {
+  if (dist > effectiveRange || !hasLOS) {
     // Initial engagement (never attacked yet): path to enemy
     // This handles right-click on out-of-range enemy
     if (!combatIntent.lastSuccessAt && !pendingAttack) {
@@ -5971,8 +6024,8 @@ function executeBasicIntent(now) {
 }
 
 /**
- * Execute a basic attack using weapon.basic.damage
- * This is separate from weapon abilities (1-3)
+ * Execute a basic attack using the new BASIC_ATTACKS system
+ * Weapon type is determined by unlock status and distance
  */
 function executeBasicAttack(weapon, target) {
   if (!target || target.hp <= 0) return;
@@ -5988,10 +6041,12 @@ function executeBasicAttack(weapon, target) {
   provokeEnemy(target);
   
   const player = currentState.player;
-  const basic = weapon.basic || {};
   
-  // Calculate damage using basic attack damage (not ability damage)
-  const baseDamage = basic.damage || weapon.baseDamage || 10;
+  // Use the new BASIC_ATTACKS system for damage
+  const attackType = weapon.type === 'ranged' ? 'ranged' : 'melee';
+  const basicAttack = BASIC_ATTACKS[attackType];
+  const baseDamage = basicAttack?.damage || 10;
+  
   let damage = calculateBasicDamage(weapon, target, baseDamage);
   
   // Visual effects
