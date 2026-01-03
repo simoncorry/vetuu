@@ -747,6 +747,12 @@
   cursor: not-allowed;
 }
 
+/* GCD (Global Cooldown) active state - subtle border pulse */
+.action-slot.gcd-active:not(.on-cooldown) {
+  border-color: var(--text-muted);
+  opacity: 0.7;
+}
+
 /* Cooldown overlay that fills from bottom to top */
 .cooldown-overlay {
   position: absolute;

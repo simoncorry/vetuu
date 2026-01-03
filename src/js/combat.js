@@ -54,6 +54,24 @@ const ENEMY_CONFIGS = {
 
 // Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;
+const GCD_MS = 1500; // Global cooldown - 1.5s lockout between abilities
+
+// GCD state
+let gcdUntil = 0; // Timestamp when GCD expires
+
+// GCD helpers
+function isGcdActive() {
+  return performance.now() < gcdUntil;
+}
+
+function triggerGcd() {
+  gcdUntil = performance.now() + GCD_MS;
+  updateGcdUI();
+}
+
+function getGcdRemaining() {
+  return Math.max(0, gcdUntil - performance.now());
+}
 
 // ============================================
 // COMBAT SIMPLIFIED CONSTANTS
@@ -1011,6 +1029,7 @@ function startCombatTick() {
     // Throttle UI updates to every 200ms (every 2nd tick)
     if (lastUIUpdateTick >= 2) {
       updateCooldownUI();
+      updateGcdUI();
       lastUIUpdateTick = 0;
     }
     
@@ -3286,6 +3305,13 @@ export function useWeaponAbility(slot) {
     return;
   }
   
+  // Check GCD
+  if (isGcdActive()) {
+    const remaining = (getGcdRemaining() / 1000).toFixed(1);
+    logCombat(`GCD active (${remaining}s)`);
+    return;
+  }
+  
   const weapon = WEAPONS[currentWeapon];
   if (!weapon) {
     logCombat('No weapon equipped');
@@ -3298,7 +3324,7 @@ export function useWeaponAbility(slot) {
     return;
   }
   
-  // Check cooldown
+  // Check ability cooldown
   if (actionCooldowns[slot] > 0) {
     const remaining = (actionCooldowns[slot] / 1000).toFixed(1);
     logCombat(`${ability.name} on cooldown (${remaining}s)`);
@@ -3725,6 +3751,13 @@ export function useSenseAbility(slot) {
     return;
   }
   
+  // Check GCD
+  if (isGcdActive()) {
+    const remaining = (getGcdRemaining() / 1000).toFixed(1);
+    logCombat(`GCD active (${remaining}s)`);
+    return;
+  }
+  
   const ability = SENSE_ABILITIES[slot];
   if (!ability) {
     logCombat('Invalid sense ability');
@@ -3736,7 +3769,7 @@ export function useSenseAbility(slot) {
     return;
   }
   
-  // Check cooldown
+  // Check ability cooldown
   if (SENSE_COOLDOWNS[slot].current > 0) {
     const remaining = (SENSE_COOLDOWNS[slot].current / 1000).toFixed(1);
     logCombat(`${ability.name} on cooldown (${remaining}s)`);
@@ -3776,9 +3809,13 @@ export function useSenseAbility(slot) {
   updatePlayerSenseBar();
   
   // Set cooldown (always, regardless of enemies hit)
+  // Set ability cooldown
   SENSE_COOLDOWNS[slot].current = ability.cooldownMs;
   SENSE_COOLDOWNS[slot].max = ability.cooldownMs;
   updateSenseCooldownUI(slot);
+  
+  // Trigger GCD
+  triggerGcd();
   
   // Resume auto-attack if it was enabled and we have a valid target
   if (wasAutoAttackEnabled && previousTarget && previousTarget.hp > 0) {
@@ -5535,9 +5572,12 @@ function executeWeaponAbilityDirect(slot) {
       });
   }
   
-  // Set cooldown
+  // Set ability cooldown
   actionCooldowns[slot] = ability.cooldownMs || 6000;
   actionMaxCooldowns[slot] = ability.cooldownMs || 6000;
+  
+  // Trigger GCD
+  triggerGcd();
 }
 
 // Debug helpers
@@ -6938,6 +6978,30 @@ function updateCooldownUI() {
   
   // Update swing timer UI
   updateSwingTimerUI();
+}
+
+/**
+ * Update GCD UI - shows visual lockout on all ability slots
+ */
+function updateGcdUI() {
+  const gcdRemaining = getGcdRemaining();
+  const isActive = gcdRemaining > 0;
+  
+  // Update all weapon ability slots (1-3)
+  for (const slotNum of [1, 2, 3]) {
+    const slot = document.querySelector(`[data-slot="${slotNum}"][data-action-type="weapon"]`);
+    if (slot) {
+      slot.classList.toggle('gcd-active', isActive);
+    }
+  }
+  
+  // Update sense ability slots (4-5)
+  for (const slotNum of [4, 5]) {
+    const slot = document.querySelector(`[data-slot="${slotNum}"][data-action-type="sense"]`);
+    if (slot) {
+      slot.classList.toggle('gcd-active', isActive);
+    }
+  }
 }
 
 // Cache for SVG path length
