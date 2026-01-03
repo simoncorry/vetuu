@@ -983,7 +983,7 @@ function createPlayerTorch() {
     width: ${torchSize}px;
     height: ${torchSize}px;
     pointer-events: none;
-    opacity: 0;
+    opacity: var(--torch-opacity, 0);
     z-index: 16;
     transition: transform var(--move-duration, 200ms) linear, opacity 0.1s linear;
     will-change: transform, opacity;
@@ -1027,9 +1027,10 @@ function updatePlayerTorch(nightIntensity) {
   if (!cachedTorch) return;
   
   // Only update if opacity actually changed (avoid style recalc)
+  // Uses CSS custom property - CSS handles transition via opacity: var(--torch-opacity)
   const newOpacity = nightIntensity > 0.1 ? (nightIntensity * 0.8).toFixed(2) : '0';
   if (newOpacity !== lastTorchOpacity) {
-    cachedTorch.style.opacity = newOpacity;
+    cachedTorch.style.setProperty('--torch-opacity', newOpacity);
     lastTorchOpacity = newOpacity;
   }
 }
