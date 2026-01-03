@@ -1671,7 +1671,6 @@ function handleRetreatState(enemy, t) {
   if (!isExpired(enemy.moveCooldown, t)) return;
   
   // Store previous distance to track if we're making progress
-  const prevDist = enemy._retreatPrevDist ?? Infinity;
   enemy._retreatPrevDist = distToDest;
   
   // CRITICAL: Movement is EXACTLY 1 tile per step (dx and dy are -1, 0, or 1)
@@ -5964,7 +5963,6 @@ function checkTargetDistance() {
     const prevEl = getNpcEl(currentNpcTarget.id);
     if (prevEl) prevEl.classList.remove('targeted');
     currentNpcTarget = null;
-    updateNpcTargetUI();
   }
   
   // Check object target
