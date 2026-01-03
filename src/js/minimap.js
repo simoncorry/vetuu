@@ -41,7 +41,7 @@ const CONFIG = {
   pathMarkerSize: 2,  // Smaller than player for hierarchy
   
   // Camera smoothing
-  cameraSmoothing: 0.15, // Lerp factor (0-1, lower = smoother/slower)
+  cameraSmoothing: 0.35, // Lerp factor (0-1, higher = snappier)
   
   // Performance
   renderThrottle: 16, // ~60fps for smooth camera
@@ -186,9 +186,17 @@ function updateCamera() {
   // Calculate delta to target
   const dx = targetCameraX - cameraX;
   const dy = targetCameraY - cameraY;
+  const dist = Math.abs(dx) + Math.abs(dy);
   
-  // Both camera and player dot use SAME interpolation to stay perfectly in sync
-  if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+  // Snap immediately when very close, otherwise smooth interpolation
+  if (dist < 0.05) {
+    // Snap to target
+    cameraX = targetCameraX;
+    cameraY = targetCameraY;
+    playerDotX = targetX;
+    playerDotY = targetY;
+  } else {
+    // Both camera and player dot use identical interpolation
     const smoothX = dx * CONFIG.cameraSmoothing;
     const smoothY = dy * CONFIG.cameraSmoothing;
     
@@ -196,12 +204,6 @@ function updateCamera() {
     cameraY += smoothY;
     playerDotX += smoothX;
     playerDotY += smoothY;
-  } else {
-    // Snap to target when close enough
-    cameraX = targetCameraX;
-    cameraY = targetCameraY;
-    playerDotX = targetX;
-    playerDotY = targetY;
   }
 }
 
