@@ -349,7 +349,12 @@ function onLeftClick(e, forceDoubleClick = false) {
     return;
   }
   
-  console.log('[Input] No entity found at', x, y, '- pathing to empty tile');
+  // Debug: Show nearby enemies to understand why lookup failed
+  const nearbyEnemies = (state.runtime.activeEnemies || [])
+    .filter(e => e.hp > 0 && Math.abs(e.x - x) <= 3 && Math.abs(e.y - y) <= 3)
+    .map(e => `${e.name}@(${e.x},${e.y})`);
+  console.log('[Input] No entity found at', x, y, '- nearby enemies:', nearbyEnemies.length ? nearbyEnemies.join(', ') : 'none');
+  console.log('[Input] Pathing to empty tile');
 
   // Path to empty tile - cancel move-to-range pursuit, but keep auto-attack for kiting
   cancelCombatPursuit();
@@ -507,31 +512,59 @@ export function worldToScreen(worldX, worldY) {
 // ENTITY LOOKUPS
 // ============================================
 /**
- * Find an enemy at the given tile coordinates.
- * Also checks the tile below (y+1) because actor sprites are 32px tall on 24px tiles,
- * meaning the top 8px of a sprite extends into the tile above its logical position.
- * When users click on an actor's head, they're clicking the tile above.
+ * Find an enemy at or near the given tile coordinates.
+ * Uses a small search radius because:
+ * 1. Actor sprites are 32px tall on 24px tiles (8px extends into tile above)
+ * 2. Click precision can be imperfect
+ * Returns the closest enemy within range.
  */
 function findEnemyAt(state, x, y) {
+  let closest = null;
+  let closestDist = Infinity;
+  
   for (const enemy of state.runtime.activeEnemies || []) {
-    if (enemy.hp > 0) {
-      // Check exact tile or tile below (for 8px sprite offset)
-      if ((enemy.x === x && enemy.y === y) || (enemy.x === x && enemy.y === y + 1)) {
-        return enemy;
+    if (enemy.hp <= 0) continue;
+    
+    // Check within 1 tile radius (accounts for sprite offset + click imprecision)
+    const dx = Math.abs(enemy.x - x);
+    const dy = Math.abs(enemy.y - y);
+    
+    // Also check tile above click (y-1 maps to enemy.y) for sprite offset
+    const dyAbove = Math.abs(enemy.y - (y + 1));
+    
+    if (dx <= 1 && (dy <= 1 || dyAbove <= 1)) {
+      const dist = dx + Math.min(dy, dyAbove);
+      if (dist < closestDist) {
+        closest = enemy;
+        closestDist = dist;
       }
     }
   }
-  return null;
+  return closest;
 }
 
 /**
- * Find an NPC at the given tile coordinates.
- * Also checks the tile below (y+1) for sprite offset (see findEnemyAt).
+ * Find an NPC at or near the given tile coordinates.
+ * Uses same fuzzy matching as findEnemyAt.
  */
 function findNpcAt(state, x, y) {
-  return state.entities.npcs.find(n => 
-    (n.x === x && n.y === y) || (n.x === x && n.y === y + 1)
-  );
+  let closest = null;
+  let closestDist = Infinity;
+  
+  for (const npc of state.entities.npcs || []) {
+    const dx = Math.abs(npc.x - x);
+    const dy = Math.abs(npc.y - y);
+    const dyAbove = Math.abs(npc.y - (y + 1));
+    
+    if (dx <= 1 && (dy <= 1 || dyAbove <= 1)) {
+      const dist = dx + Math.min(dy, dyAbove);
+      if (dist < closestDist) {
+        closest = npc;
+        closestDist = dist;
+      }
+    }
+  }
+  return closest;
 }
 
 /**

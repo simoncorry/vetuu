@@ -110,11 +110,11 @@
 }
 
 /* Shadow has subtle "bounce" effect when moving (slight scale pulse) 
-   Uses the same --shadow-facing-offset variable so facing direction is preserved */
+   Uses the same --shadow-facing-offset variable so facing direction is preserved.
+   Note: CSS animations override transitions automatically, so no need to disable transition.
+   Keeping the transition allows smooth facing-direction changes while walking. */
 .actor.moving > .shadow {
   animation: shadow-pulse 0.2s ease-in-out infinite;
-  /* Override smooth transition during walk animation */
-  transition: none;
 }
 
 @keyframes walk-bob {
