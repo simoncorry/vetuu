@@ -18,12 +18,14 @@
   height: calc(var(--map-height) * var(--tile-size));
   background-color: var(--sand);
   transform-origin: top left;
-  /* Smooth camera following - linear to match player movement */
+  /* Smooth camera following - fixed duration for Safari stability */
   transition: transform var(--move-duration) linear;
-  /* GPU acceleration hint */
+  /* Safari GPU compositing hints */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
   will-change: transform;
-  /* Force GPU layer in Safari */
-  -webkit-transform: translateZ(0);
 }
 
 .layer {

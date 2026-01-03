@@ -410,13 +410,11 @@ export function updateCamera(state, duration = null) {
   const x = Math.max(0, Math.min(targetX, worldW - (vw / ZOOM_FACTOR)));
   const y = Math.max(0, Math.min(targetY, worldH - (vh / ZOOM_FACTOR)));
 
-  // Sync transition duration with player movement
-  if (duration !== null) {
-    world.style.transitionDuration = `${duration}ms`;
-  }
-
-  // Combined scale + translate transform
-  world.style.transform = `scale(${ZOOM_FACTOR}) translate3d(${-x}px, ${-y}px, 0)`;
+  // Use matrix3d for better Safari compatibility
+  // matrix3d(scaleX, 0, 0, 0, 0, scaleY, 0, 0, 0, 0, 1, 0, translateX, translateY, 0, 1)
+  const tx = -x * ZOOM_FACTOR;
+  const ty = -y * ZOOM_FACTOR;
+  world.style.transform = `matrix3d(${ZOOM_FACTOR},0,0,0,0,${ZOOM_FACTOR},0,0,0,0,1,0,${tx},${ty},0,1)`;
 }
 
 // ============================================
