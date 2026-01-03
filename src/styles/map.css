@@ -67,11 +67,13 @@
   width: var(--tile-size);
   height: var(--tile-size);
   background: rgba(13, 15, 17, 1);
-  transition: background 0.3s ease;
+  /* GPU-friendly: use opacity instead of background transition */
+  transition: opacity 0.3s ease;
+  will-change: opacity;
 }
 
 .fog-tile.revealed {
-  background: transparent;
+  opacity: 0;
   pointer-events: none;
 }
 

@@ -413,7 +413,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  /* GPU-friendly: only transition opacity, transform, and color-related properties */
+  transition: opacity 0.15s ease, transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .action-slot:hover:not(.on-cooldown) {
@@ -852,7 +853,8 @@
   font-size: 0.8rem;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  /* GPU-friendly: specific color transitions */
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1153,7 +1155,8 @@
   font-family: var(--font-display);
   font-size: 0.6rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  /* GPU-friendly: specific background transition */
+  transition: background-color 0.15s ease;
 }
 
 #reset-btn:hover {
