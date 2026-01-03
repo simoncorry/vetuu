@@ -24,13 +24,23 @@ const panelState = {
     docked: true,
     x: null, y: null,
     width: null, height: null
+  },
+  playerFrame: {
+    docked: true,
+    x: null, y: null
+  },
+  targetFrame: {
+    docked: true,
+    x: null, y: null
   }
 };
 
 // Default positions and sizes (will be set after init based on CSS)
 const defaultState = {
   minimap: { top: 16, right: 16, width: 220, height: 180 },
-  quests: { top: 220, right: 16, width: 220, height: null } // height auto
+  quests: { top: 220, right: 16, width: 220, height: null }, // height auto
+  playerFrame: { left: null, bottom: null }, // Calculated from action bar
+  targetFrame: { right: null, bottom: null } // Calculated from action bar
 };
 
 // Active drag/resize state
@@ -45,12 +55,22 @@ export function initUI() {
   initDraggablePanel('minimap-container', 'minimap');
   initDraggablePanel('quest-tracker', 'quests');
   
+  // Initialize draggable unit frames
+  initDraggableUnitFrame('player-frame', 'playerFrame');
+  initDraggableUnitFrame('target-frame', 'targetFrame');
+  
   // Initialize minimap zoom
   initMinimapZoom();
   
-  // Store default positions after layout
+  // Position unit frames relative to action bar after layout
   requestAnimationFrame(() => {
     cacheDefaultPositions();
+    positionUnitFrames();
+  });
+  
+  // Reposition on window resize
+  window.addEventListener('resize', () => {
+    if (panelState.playerFrame.docked) positionUnitFrames();
   });
   
   console.log('[UI] Module initialized');
@@ -71,6 +91,230 @@ function cacheDefaultPositions() {
     defaultState.quests.width = rect.width;
     defaultState.quests.height = rect.height;
   }
+  
+  // Cache unit frame default positions
+  cacheUnitFrameDefaults();
+}
+
+function cacheUnitFrameDefaults() {
+  const actionBar = document.getElementById('action-bar');
+  const playerFrame = document.getElementById('player-frame');
+  const targetFrame = document.getElementById('target-frame');
+  
+  if (!actionBar) return;
+  
+  const actionBarRect = actionBar.getBoundingClientRect();
+  const vh = window.innerHeight;
+  const gap = 16;
+  
+  // Player frame: left edge aligned with action bar left, above action bar
+  if (playerFrame) {
+    const pfRect = playerFrame.getBoundingClientRect();
+    defaultState.playerFrame = {
+      left: actionBarRect.left,
+      bottom: vh - actionBarRect.top + gap,
+      width: pfRect.width,
+      height: pfRect.height
+    };
+  }
+  
+  // Target frame: right edge aligned with action bar right, above action bar  
+  if (targetFrame) {
+    const tfRect = targetFrame.getBoundingClientRect();
+    defaultState.targetFrame = {
+      right: window.innerWidth - actionBarRect.right,
+      bottom: vh - actionBarRect.top + gap,
+      width: tfRect.width,
+      height: tfRect.height
+    };
+  }
+}
+
+/**
+ * Position unit frames above the action bar with 16px gap
+ */
+function positionUnitFrames() {
+  const actionBar = document.getElementById('action-bar');
+  const playerFrame = document.getElementById('player-frame');
+  const targetFrame = document.getElementById('target-frame');
+  
+  if (!actionBar) return;
+  
+  const actionBarRect = actionBar.getBoundingClientRect();
+  const vh = window.innerHeight;
+  const gap = 16;
+  const bottomPos = vh - actionBarRect.top + gap;
+  
+  // Position player frame (left side of action bar)
+  if (playerFrame && panelState.playerFrame.docked) {
+    playerFrame.style.bottom = `${bottomPos}px`;
+    playerFrame.style.left = `${actionBarRect.left}px`;
+    playerFrame.style.right = 'auto';
+    playerFrame.style.top = 'auto';
+  }
+  
+  // Position target frame (right side of action bar)
+  if (targetFrame && panelState.targetFrame.docked) {
+    targetFrame.style.bottom = `${bottomPos}px`;
+    targetFrame.style.right = `${window.innerWidth - actionBarRect.right}px`;
+    targetFrame.style.left = 'auto';
+    targetFrame.style.top = 'auto';
+  }
+}
+
+// ============================================
+// DRAGGABLE UNIT FRAMES
+// ============================================
+function initDraggableUnitFrame(elementId, panelKey) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  
+  // Find the drag handle (added in HTML)
+  const dragHandle = el.querySelector('.frame-drag-handle');
+  if (!dragHandle) return;
+  
+  // Drag handling
+  dragHandle.addEventListener('mousedown', (e) => startUnitFrameDrag(e, el, panelKey));
+  dragHandle.addEventListener('touchstart', (e) => startUnitFrameDrag(e, el, panelKey), { passive: false });
+}
+
+function startUnitFrameDrag(e, el, panelKey) {
+  e.preventDefault();
+  
+  const touch = e.touches?.[0];
+  const clientX = touch ? touch.clientX : e.clientX;
+  const clientY = touch ? touch.clientY : e.clientY;
+  
+  const rect = el.getBoundingClientRect();
+  
+  activeDrag = {
+    el,
+    panelKey,
+    isUnitFrame: true,
+    offsetX: clientX - rect.left,
+    offsetY: clientY - rect.top,
+    startX: rect.left,
+    startY: rect.top
+  };
+  
+  el.classList.add('dragging');
+  
+  // Add move/end listeners
+  document.addEventListener('mousemove', onUnitFrameDrag);
+  document.addEventListener('mouseup', endUnitFrameDrag);
+  document.addEventListener('touchmove', onUnitFrameDrag, { passive: false });
+  document.addEventListener('touchend', endUnitFrameDrag);
+}
+
+function onUnitFrameDrag(e) {
+  if (!activeDrag || !activeDrag.isUnitFrame) return;
+  e.preventDefault();
+  
+  const touch = e.touches?.[0];
+  const clientX = touch ? touch.clientX : e.clientX;
+  const clientY = touch ? touch.clientY : e.clientY;
+  
+  const { el, panelKey, offsetX, offsetY } = activeDrag;
+  
+  // Calculate new position
+  let newX = clientX - offsetX;
+  let newY = clientY - offsetY;
+  
+  // Clamp to viewport
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const rect = el.getBoundingClientRect();
+  
+  newX = Math.max(0, Math.min(newX, vw - rect.width));
+  newY = Math.max(0, Math.min(newY, vh - rect.height));
+  
+  // Apply position (use left/top for dragging)
+  el.style.left = `${newX}px`;
+  el.style.top = `${newY}px`;
+  el.style.right = 'auto';
+  el.style.bottom = 'auto';
+  
+  // Update state
+  panelState[panelKey].docked = false;
+  panelState[panelKey].x = newX;
+  panelState[panelKey].y = newY;
+  
+  el.classList.add('undocked');
+  
+  // Check if near dock position
+  const nearDock = isNearUnitFrameDockPosition(newX, newY, panelKey);
+  el.classList.toggle('near-dock', nearDock);
+}
+
+function endUnitFrameDrag() {
+  if (!activeDrag || !activeDrag.isUnitFrame) return;
+  
+  const { el, panelKey } = activeDrag;
+  
+  el.classList.remove('dragging');
+  
+  // Check if should dock
+  const rect = el.getBoundingClientRect();
+  if (isNearUnitFrameDockPosition(rect.left, rect.top, panelKey)) {
+    dockUnitFrame(el.id, panelKey);
+  }
+  
+  activeDrag = null;
+  
+  // Remove listeners
+  document.removeEventListener('mousemove', onUnitFrameDrag);
+  document.removeEventListener('mouseup', endUnitFrameDrag);
+  document.removeEventListener('touchmove', onUnitFrameDrag);
+  document.removeEventListener('touchend', endUnitFrameDrag);
+  
+  savePanelState();
+}
+
+function isNearUnitFrameDockPosition(x, y, panelKey) {
+  const threshold = 50;
+  const def = defaultState[panelKey];
+  
+  if (!def || def.left === null) return false;
+  
+  const vh = window.innerHeight;
+  
+  let defaultX, defaultY;
+  
+  if (panelKey === 'playerFrame') {
+    defaultX = def.left;
+    defaultY = vh - def.bottom - (def.height || 0);
+  } else {
+    // targetFrame uses right positioning
+    defaultX = window.innerWidth - def.right - (def.width || 0);
+    defaultY = vh - def.bottom - (def.height || 0);
+  }
+  
+  const dx = Math.abs(x - defaultX);
+  const dy = Math.abs(y - defaultY);
+  
+  return dx < threshold && dy < threshold;
+}
+
+function dockUnitFrame(elementId, panelKey) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  
+  // Reset position styles
+  el.style.left = '';
+  el.style.top = '';
+  el.style.right = '';
+  el.style.bottom = '';
+  
+  el.classList.remove('undocked', 'near-dock');
+  
+  panelState[panelKey].docked = true;
+  panelState[panelKey].x = null;
+  panelState[panelKey].y = null;
+  
+  // Reposition to docked location
+  positionUnitFrames();
+  
+  savePanelState();
 }
 
 // ============================================
@@ -600,6 +844,30 @@ function restorePanelPositions() {
       el.style.right = 'auto';
       if (panelState.quests.width) el.style.width = `${panelState.quests.width}px`;
       if (panelState.quests.height) el.style.height = `${panelState.quests.height}px`;
+      el.classList.add('undocked');
+    }
+  }
+  
+  // Restore player frame position if undocked
+  if (!panelState.playerFrame.docked && panelState.playerFrame.x !== null) {
+    const el = document.getElementById('player-frame');
+    if (el) {
+      el.style.left = `${panelState.playerFrame.x}px`;
+      el.style.top = `${panelState.playerFrame.y}px`;
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      el.classList.add('undocked');
+    }
+  }
+  
+  // Restore target frame position if undocked
+  if (!panelState.targetFrame.docked && panelState.targetFrame.x !== null) {
+    const el = document.getElementById('target-frame');
+    if (el) {
+      el.style.left = `${panelState.targetFrame.x}px`;
+      el.style.top = `${panelState.targetFrame.y}px`;
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
       el.classList.add('undocked');
     }
   }

@@ -389,10 +389,12 @@
 
 /* ============================================
    UNIT FRAMES (Player & Target)
+   Anchored above action bar, draggable with dock/redock
    ============================================ */
 .unit-frame {
   position: fixed;
-  bottom: 80px;
+  /* Anchored relative to action bar - JS will set exact bottom position */
+  bottom: 100px;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -402,13 +404,54 @@
   padding: 0.5rem;
   min-width: 200px;
   z-index: 1100;
+  /* GPU-accelerated for smooth drag */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.unit-frame.dragging {
+  cursor: grabbing;
+  z-index: 1200;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.unit-frame.undocked {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.unit-frame.near-dock .redock-indicator {
+  opacity: 1;
+}
+
+/* Drag handle for unit frames */
+.unit-frame .frame-drag-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  cursor: grab;
+  z-index: 1;
+}
+
+.unit-frame .frame-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Make interactive elements above drag handle */
+.unit-frame .frame-portrait,
+.unit-frame .frame-info {
+  position: relative;
+  z-index: 2;
 }
 
 #player-frame {
+  /* Left of action bar center */
   left: calc(50% - 320px);
 }
 
 #target-frame {
+  /* Right of action bar center */
   right: calc(50% - 320px);
   flex-direction: row-reverse;
 }
@@ -1406,9 +1449,6 @@
    RESPONSIVE
    ============================================ */
 @media (max-width: 900px) {
-  #player-frame { left: 1rem; }
-  #target-frame { right: 1rem; }
-  
   .unit-frame {
     min-width: 160px;
   }
