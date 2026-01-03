@@ -17,6 +17,7 @@ import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
 import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
 import { cssVar } from './utils.js';
+import './perf.js'; // Initialize perf monitoring (exposes VETUU_PERF() to console)
 
 // ============================================
 // GAME STATE

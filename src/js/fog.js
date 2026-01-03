@@ -1,13 +1,23 @@
 /**
  * VETUU — Fog of War Module
- * Canvas-based fog rendering for performance on large maps
+ * Viewport-based canvas rendering for performance on large maps
+ * 
+ * Instead of an 11,520×7,680 canvas (88M pixels), we use a viewport-sized
+ * canvas (~1500×1100 pixels) that repositions with the camera.
  */
 
+import { perfStart, perfEnd } from './perf.js';
+
 // Note: TILE_SIZE kept local to avoid circular import with render.js
-// (render.js imports isRevealed from this module)
 const TILE_SIZE = 24;
+const ZOOM_FACTOR = 1.5;
 const REVEAL_RADIUS = 8;
 const FOG_STORAGE_KEY = 'vetuu_fog_v2';
+
+// Buffer tiles around viewport (prevents constant re-renders during movement)
+const BUFFER_TILES = 10;
+// Threshold before repositioning canvas (when player moves this far from center)
+const REPOSITION_THRESHOLD = 6;
 
 let fogCanvas = null;
 let fogCtx = null;
@@ -15,26 +25,55 @@ let fogMask = null; // 2D array: true = revealed
 let mapWidth = 0;
 let mapHeight = 0;
 
+// Viewport canvas tracking
+let canvasOffsetX = 0; // Top-left tile X of canvas in world coords
+let canvasOffsetY = 0; // Top-left tile Y of canvas in world coords
+let canvasTilesW = 0;  // Canvas width in tiles
+let canvasTilesH = 0;  // Canvas height in tiles
+let lastCenterX = 0;   // Last camera center for threshold check
+let lastCenterY = 0;
+let lastUpdateX = -1;  // Last tile position for early-return optimization
+let lastUpdateY = -1;
+
+// Pre-rendered dither stamps (ImageData for fast blitting)
+let ditherStampFull = null;   // Full fog tile
+let ditherStampInner = null;  // Inner dither (threshold 8)
+let ditherStampOuter = null;  // Outer dither (threshold 12)
+
 // ============================================
 // INITIALIZATION
 // ============================================
 export function initFog(state) {
+  const viewport = document.getElementById('viewport');
   const fogLayer = document.getElementById('fog-layer');
   
   mapWidth = state.map.meta.width;
   mapHeight = state.map.meta.height;
   
-  // Create full-size fog canvas (in world coordinates)
+  // Calculate viewport size in tiles (at zoom scale) + buffer
+  const viewportW = viewport?.clientWidth || 1200;
+  const viewportH = viewport?.clientHeight || 800;
+  canvasTilesW = Math.ceil(viewportW / ZOOM_FACTOR / TILE_SIZE) + BUFFER_TILES * 2;
+  canvasTilesH = Math.ceil(viewportH / ZOOM_FACTOR / TILE_SIZE) + BUFFER_TILES * 2;
+  
+  // Clamp to map size (for small maps)
+  canvasTilesW = Math.min(canvasTilesW, mapWidth);
+  canvasTilesH = Math.min(canvasTilesH, mapHeight);
+  
+  // Create viewport-sized fog canvas (MUCH smaller than full map)
   fogCanvas = document.createElement('canvas');
   fogCanvas.id = 'fog-canvas';
-  fogCanvas.width = mapWidth * TILE_SIZE;
-  fogCanvas.height = mapHeight * TILE_SIZE;
-  fogCanvas.style.cssText = 'position: absolute; top: 0; left: 0; pointer-events: none;';
+  fogCanvas.width = canvasTilesW * TILE_SIZE;
+  fogCanvas.height = canvasTilesH * TILE_SIZE;
+  fogCanvas.style.cssText = 'position: absolute; top: 0; left: 0; pointer-events: none; will-change: transform;';
   
   fogLayer.innerHTML = '';
   fogLayer.appendChild(fogCanvas);
   
   fogCtx = fogCanvas.getContext('2d');
+
+  // Pre-render dither stamps for fast blitting
+  createDitherStamps();
 
   // Initialize revealed tiles set
   state.runtime.revealedTiles = new Set();
@@ -66,8 +105,12 @@ export function initFog(state) {
   // Reveal Drycross base region with buffer
   revealDrycrossBase(state);
 
-  // Initial render
-  renderFog(state);
+  // Position canvas at player and render
+  repositionFogCanvas(state.player.x, state.player.y);
+  renderFogViewport();
+  
+  console.log(`[Fog] Viewport canvas: ${fogCanvas.width}×${fogCanvas.height}px (${canvasTilesW}×${canvasTilesH} tiles)`);
+  console.log(`[Fog] vs full map would be: ${mapWidth * TILE_SIZE}×${mapHeight * TILE_SIZE}px`);
 }
 
 /**
@@ -143,6 +186,50 @@ function revealDrycrossBase(state) {
   }
   
   saveFogMask();
+}
+
+// ============================================
+// VIEWPORT CANVAS POSITIONING
+// ============================================
+
+/**
+ * Reposition the fog canvas to be centered around a world position.
+ * Called when camera moves beyond threshold.
+ */
+function repositionFogCanvas(centerX, centerY) {
+  // Calculate new canvas offset (top-left corner in tile coordinates)
+  const halfW = Math.floor(canvasTilesW / 2);
+  const halfH = Math.floor(canvasTilesH / 2);
+  
+  let newOffsetX = centerX - halfW;
+  let newOffsetY = centerY - halfH;
+  
+  // Clamp to map bounds
+  newOffsetX = Math.max(0, Math.min(newOffsetX, mapWidth - canvasTilesW));
+  newOffsetY = Math.max(0, Math.min(newOffsetY, mapHeight - canvasTilesH));
+  
+  canvasOffsetX = newOffsetX;
+  canvasOffsetY = newOffsetY;
+  lastCenterX = centerX;
+  lastCenterY = centerY;
+  
+  // Position the canvas in world coordinates (GPU-accelerated)
+  fogCanvas.style.transform = `translate3d(${canvasOffsetX * TILE_SIZE}px, ${canvasOffsetY * TILE_SIZE}px, 0)`;
+}
+
+/**
+ * Check if canvas needs repositioning based on camera center.
+ * Returns true if repositioned (caller should re-render).
+ */
+function checkRepositionNeeded(centerX, centerY) {
+  const dx = Math.abs(centerX - lastCenterX);
+  const dy = Math.abs(centerY - lastCenterY);
+  
+  if (dx > REPOSITION_THRESHOLD || dy > REPOSITION_THRESHOLD) {
+    repositionFogCanvas(centerX, centerY);
+    return true;
+  }
+  return false;
 }
 
 // ============================================
@@ -308,7 +395,7 @@ export function getFogMask() {
 }
 
 // ============================================
-// FOG RENDERING (Canvas-based)
+// FOG RENDERING (Viewport-based Canvas)
 // ============================================
 
 /**
@@ -348,106 +435,201 @@ const BAYER_4X4 = [
 ];
 
 /**
- * Draw a dithered fog tile using pixel-level Bayer dithering.
- * Threshold determines how many pixels are drawn (0-16 scale).
+ * Create pre-rendered dither stamp canvases for fast blitting.
+ * Called once during init. Replaces per-tile per-pixel dithering work.
  */
-function drawDitheredTile(x, y, threshold) {
-  drawDitheredTileAt(x * TILE_SIZE, y * TILE_SIZE, threshold);
-}
-
-/**
- * Draw dithered tile at screen coordinates (for viewport rendering).
- */
-function drawDitheredTileAt(px, py, threshold) {
-  // Calculate how many "dither cells" fit in a tile (6 cells = 4px each for 24px tile)
+function createDitherStamps() {
+  const fogColor = [10, 12, 14, 242]; // rgba(10, 12, 14, 0.95) = ~242/255 alpha
   const cellSize = 4;
   const cells = TILE_SIZE / cellSize;
   
-  for (let cy = 0; cy < cells; cy++) {
-    for (let cx = 0; cx < cells; cx++) {
-      const bayerValue = BAYER_4X4[cy % 4][cx % 4];
-      if (bayerValue < threshold) {
-        fogCtx.fillRect(
-          px + cx * cellSize,
-          py + cy * cellSize,
-          cellSize,
-          cellSize
-        );
+  // Helper to create a stamp canvas with given threshold
+  function createStamp(threshold) {
+    const canvas = document.createElement('canvas');
+    canvas.width = TILE_SIZE;
+    canvas.height = TILE_SIZE;
+    const ctx = canvas.getContext('2d');
+    
+    // Create ImageData for pixel-level control
+    const imageData = ctx.createImageData(TILE_SIZE, TILE_SIZE);
+    const data = imageData.data;
+    
+    for (let cy = 0; cy < cells; cy++) {
+      for (let cx = 0; cx < cells; cx++) {
+        const bayerValue = BAYER_4X4[cy % 4][cx % 4];
+        if (bayerValue < threshold) {
+          // Fill this 4x4 cell
+          for (let py = 0; py < cellSize; py++) {
+            for (let px = 0; px < cellSize; px++) {
+              const x = cx * cellSize + px;
+              const y = cy * cellSize + py;
+              const i = (y * TILE_SIZE + x) * 4;
+              data[i] = fogColor[0];     // R
+              data[i + 1] = fogColor[1]; // G
+              data[i + 2] = fogColor[2]; // B
+              data[i + 3] = fogColor[3]; // A
+            }
+          }
+        }
       }
     }
+    
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  }
+  
+  // Full fog (threshold 16 = all pixels)
+  ditherStampFull = createStamp(16);
+  // Inner dither (threshold 8 = sparse)
+  ditherStampInner = createStamp(8);
+  // Outer dither (threshold 12 = dense)
+  ditherStampOuter = createStamp(12);
+}
+
+/**
+ * Draw a fog tile using pre-rendered stamps (fast drawImage).
+ * @param {number} canvasX - X position on canvas (pixels)
+ * @param {number} canvasY - Y position on canvas (pixels)
+ * @param {'full'|'inner'|'outer'} type - Which dither pattern to use
+ */
+function drawFogTile(canvasX, canvasY, type) {
+  const stamp = type === 'full' ? ditherStampFull :
+                type === 'inner' ? ditherStampInner : ditherStampOuter;
+  if (stamp) {
+    fogCtx.drawImage(stamp, canvasX, canvasY);
   }
 }
 
-export function renderFog(_state) {
+/**
+ * Render fog for the current viewport canvas area.
+ * Only draws tiles within the canvas bounds (canvasOffset → canvasOffset + canvasTiles).
+ */
+function renderFogViewport() {
   if (!fogCtx || !fogMask) return;
+  
+  perfStart('fog:renderViewport');
 
   // Clear canvas
   fogCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
   
-  // Fog color
-  fogCtx.fillStyle = 'rgba(10, 12, 14, 0.95)';
+  // Calculate visible tile range (in world coordinates)
+  const endX = Math.min(canvasOffsetX + canvasTilesW, mapWidth);
+  const endY = Math.min(canvasOffsetY + canvasTilesH, mapHeight);
   
-  // Render unrevealed tiles with dithering at edges
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      if (!fogMask[y][x]) {
-        const distToRevealed = getDistanceToRevealed(x, y, 2);
+  // Render unrevealed tiles with dithering at edges (using pre-rendered stamps)
+  for (let worldY = canvasOffsetY; worldY < endY; worldY++) {
+    for (let worldX = canvasOffsetX; worldX < endX; worldX++) {
+      if (!fogMask[worldY][worldX]) {
+        // Convert world coords to canvas-local coords
+        const canvasX = (worldX - canvasOffsetX) * TILE_SIZE;
+        const canvasY = (worldY - canvasOffsetY) * TILE_SIZE;
+        
+        const distToRevealed = getDistanceToRevealed(worldX, worldY, 2);
         
         if (distToRevealed === 1) {
-          // Innermost fog ring - sparse dither (8/16 pixels)
-          drawDitheredTile(x, y, 8);
+          // Innermost fog ring - sparse dither
+          drawFogTile(canvasX, canvasY, 'inner');
         } else if (distToRevealed === 2) {
-          // Second ring - denser dither (12/16 pixels)
-          drawDitheredTile(x, y, 12);
+          // Second ring - denser dither
+          drawFogTile(canvasX, canvasY, 'outer');
         } else {
-          // Full fog for all other tiles
-          fogCtx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          // Full fog
+          drawFogTile(canvasX, canvasY, 'full');
         }
       }
     }
   }
+  
+  perfEnd('fog:renderViewport');
 }
 
-// Keep this export for compatibility but it just calls renderFog
-export function renderFogViewport(state, _playerX, _playerY) {
-  renderFog(state);
+/**
+ * Full fog render - repositions canvas and redraws.
+ * Called on init and major state changes.
+ */
+export function renderFog(state) {
+  if (!fogCtx || !fogMask) return;
+  
+  perfStart('fog:render');
+  
+  // Reposition around player if state provided
+  if (state?.player) {
+    repositionFogCanvas(state.player.x, state.player.y);
+  }
+  
+  renderFogViewport();
+  
+  perfEnd('fog:render');
 }
 
-// Optimized: only redraw affected area
+/**
+ * Update fog for a local area (after revealing tiles).
+ * Checks if canvas needs repositioning, then redraws affected tiles.
+ */
 export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
-  if (!fogCtx) return;
+  if (!fogCtx || !fogMask) return;
   
-  // Expand area by 2 tiles to handle dither edge recalculation
+  // Early-return if player tile hasn't changed (prevents redundant redraws)
+  if (centerX === lastUpdateX && centerY === lastUpdateY) {
+    return;
+  }
+  lastUpdateX = centerX;
+  lastUpdateY = centerY;
+  
+  perfStart('fog:update');
+  
+  // Check if we need to reposition the canvas
+  const repositioned = checkRepositionNeeded(centerX, centerY);
+  
+  if (repositioned) {
+    // Full redraw after repositioning
+    renderFogViewport();
+    perfEnd('fog:update');
+    return;
+  }
+  
+  // Partial update - only redraw affected area
   const ditherMargin = 2;
-  const startX = Math.max(0, centerX - radius - ditherMargin);
-  const startY = Math.max(0, centerY - radius - ditherMargin);
-  const endX = Math.min(mapWidth, centerX + radius + 1 + ditherMargin);
-  const endY = Math.min(mapHeight, centerY + radius + 1 + ditherMargin);
+  const startX = Math.max(canvasOffsetX, centerX - radius - ditherMargin);
+  const startY = Math.max(canvasOffsetY, centerY - radius - ditherMargin);
+  const endX = Math.min(canvasOffsetX + canvasTilesW, centerX + radius + 1 + ditherMargin);
+  const endY = Math.min(canvasOffsetY + canvasTilesH, centerY + radius + 1 + ditherMargin);
   
-  // Clear and redraw just this area
-  fogCtx.clearRect(
-    startX * TILE_SIZE, 
-    startY * TILE_SIZE, 
-    (endX - startX) * TILE_SIZE, 
-    (endY - startY) * TILE_SIZE
-  );
+  // Skip if area is entirely outside canvas
+  if (startX >= endX || startY >= endY) {
+    perfEnd('fog:update');
+    return;
+  }
   
-  fogCtx.fillStyle = 'rgba(10, 12, 14, 0.95)';
-  for (let y = startY; y < endY; y++) {
-    for (let x = startX; x < endX; x++) {
-      if (!fogMask[y][x]) {
-        const distToRevealed = getDistanceToRevealed(x, y, 2);
+  // Convert to canvas-local coordinates for clearRect
+  const clearX = (startX - canvasOffsetX) * TILE_SIZE;
+  const clearY = (startY - canvasOffsetY) * TILE_SIZE;
+  const clearW = (endX - startX) * TILE_SIZE;
+  const clearH = (endY - startY) * TILE_SIZE;
+  
+  // Clear and redraw just this area (using pre-rendered stamps)
+  fogCtx.clearRect(clearX, clearY, clearW, clearH);
+  
+  for (let worldY = startY; worldY < endY; worldY++) {
+    for (let worldX = startX; worldX < endX; worldX++) {
+      if (!fogMask[worldY][worldX]) {
+        const canvasX = (worldX - canvasOffsetX) * TILE_SIZE;
+        const canvasY = (worldY - canvasOffsetY) * TILE_SIZE;
+        
+        const distToRevealed = getDistanceToRevealed(worldX, worldY, 2);
         
         if (distToRevealed === 1) {
-          drawDitheredTile(x, y, 8);
+          drawFogTile(canvasX, canvasY, 'inner');
         } else if (distToRevealed === 2) {
-          drawDitheredTile(x, y, 12);
+          drawFogTile(canvasX, canvasY, 'outer');
         } else {
-          fogCtx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          drawFogTile(canvasX, canvasY, 'full');
         }
       }
     }
   }
+  
+  perfEnd('fog:update');
 }
 
 // ============================================
@@ -566,3 +748,5 @@ export async function checkPOIDiscovery(state, x, y) {
 
   return null;
 }
+
+

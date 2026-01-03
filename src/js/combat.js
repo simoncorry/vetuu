@@ -35,6 +35,7 @@ import {
 } from './aiUtils.js';
 import { actorTransform, isActorVisible, TILE_SIZE } from './render.js';
 import { SPRITES } from './sprites.js';
+import { perfStart, perfEnd } from './perf.js';
 
 // Enemy type configurations (Simplified - no weakness/resistance)
 // All enemies are either melee (range 2) or ranged (range 6)
@@ -115,6 +116,16 @@ const CRIT_MULT = 1.5;        // Crits deal 150% damage
 // Damage variance
 const VAR_MIN = 0.95;
 const VAR_MAX = 1.05;
+
+// ============================================
+// DOM CACHE - Avoid repeated querySelector calls
+// ============================================
+// Map of enemyId -> DOM element (cleared on renderEnemies, updated incrementally)
+const enemyEls = new Map();
+
+// Previous visual state cache for dirty-flag optimization
+// Map of enemyId -> { retreating, engaged, spawnImmune, passive }
+const enemyVisualState = new Map();
 
 // ============================================
 // COLORS - Cached from CSS variables
@@ -951,6 +962,8 @@ function startCombatTick() {
 
   combatTickInterval = setInterval(() => {
     if (!currentState) return;
+    
+    perfStart('combat:tick');
 
     // Use performance.now() for all simulation timing
     const now = nowMs();
@@ -977,10 +990,12 @@ function startCombatTick() {
     processRegeneration(now);
 
     // Process each active enemy
+    perfStart('combat:enemyAI');
     for (const enemy of currentState.runtime.activeEnemies) {
       if (enemy.hp <= 0) continue;
       processEnemyAI(enemy, now);
     }
+    perfEnd('combat:enemyAI');
 
     // Check guard intercepts
     checkGuardIntercept();
@@ -989,6 +1004,8 @@ function startCombatTick() {
     tickAllEnemyEffects();
 
     // Respawning is handled by spawnDirector.js
+    
+    perfEnd('combat:tick');
 
   }, 100);
 }
@@ -2013,60 +2030,71 @@ function executeCombatAI(enemy, weapon, dPlayer, hasLOS, t, config) {
 /**
  * Update enemy visuals (health bars, retreat indicators, passive state)
  * This is the authoritative visual update function.
+ * 
+ * OPTIMIZATION: Uses cached DOM refs and dirty-flags to avoid redundant DOM writes.
  */
 function updateEnemyVisuals() {
   if (!currentState?.runtime?.activeEnemies) return;
+  
+  perfStart('enemy:updateVisuals');
   
   const t = nowMs();
   
   for (const enemy of currentState.runtime.activeEnemies) {
     if (enemy.hp <= 0) continue;
     
-    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+    // Use cached DOM reference instead of querySelector
+    let el = enemyEls.get(enemy.id);
+    if (!el) {
+      // Fallback to querySelector if not in cache (shouldn't happen often)
+      el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+      if (el) enemyEls.set(enemy.id, el);
+    }
     if (!el) continue;
     
-    // Retreating visual
-    if (enemy.isRetreating) {
-      el.classList.add('retreating');
-    } else {
-      el.classList.remove('retreating');
-    }
-    
-    // Engaged/in-combat visual (red tint for testing)
-    if (enemy.isEngaged || enemy.state === 'ENGAGED') {
-      el.classList.add('engaged');
-    } else {
-      el.classList.remove('engaged');
-    }
-    
-    // Spawn immunity visual
+    // Calculate current visual state
+    const retreating = !!enemy.isRetreating;
+    const engaged = !!(enemy.isEngaged || enemy.state === 'ENGAGED');
     const immuneRemaining = getSpawnImmunityRemaining(enemy, t);
-    if (immuneRemaining > 0) {
-      el.classList.add('spawn-immune');
-    } else {
-      el.classList.remove('spawn-immune');
+    const spawnImmune = immuneRemaining > 0;
+    const passive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
+    
+    // Get previous state (for dirty-flag comparison)
+    const prev = enemyVisualState.get(enemy.id);
+    
+    // Only update DOM if state changed
+    if (!prev || prev.retreating !== retreating) {
+      el.classList.toggle('retreating', retreating);
     }
     
-    // Passive state visual - CSS handles the color via .passive class
-    const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
-    if (isPassive) {
-      el.classList.add('passive');
-      el.dataset.passive = 'true';
-    } else {
-      el.classList.remove('passive');
-      delete el.dataset.passive;
+    if (!prev || prev.engaged !== engaged) {
+      el.classList.toggle('engaged', engaged);
     }
     
-    // Update badge if present
-    const badge = el.querySelector('.enemy-level-badge');
-    if (badge) {
-      if (isPassive) {
-        badge.classList.add('passive-badge');
+    if (!prev || prev.spawnImmune !== spawnImmune) {
+      el.classList.toggle('spawn-immune', spawnImmune);
+    }
+    
+    if (!prev || prev.passive !== passive) {
+      el.classList.toggle('passive', passive);
+      if (passive) {
+        el.dataset.passive = 'true';
       } else {
-        badge.classList.remove('passive-badge');
+        delete el.dataset.passive;
+      }
+      
+      // Update badge if present (only when passive state changes)
+      const badge = el.querySelector('.enemy-level-badge');
+      if (badge) {
+        badge.classList.toggle('passive-badge', passive);
       }
     }
+    
+    // Store current state for next comparison
+    enemyVisualState.set(enemy.id, { retreating, engaged, spawnImmune, passive });
   }
+  
+  perfEnd('enemy:updateVisuals');
 }
 
 // Idle behavior - small random patrol movements
@@ -5946,116 +5974,182 @@ export function getCorpseLocation() {
 // ============================================
 // ENEMY RENDERING
 // ============================================
+/**
+ * Full re-render of all enemies. Clears DOM cache and rebuilds.
+ * Should only be called on init, load, or major state changes (respawn).
+ * For incremental spawns, use createEnemyElement() instead.
+ */
 export function renderEnemies(state) {
+  perfStart('enemy:render');
+  
   const actorLayer = document.getElementById('actor-layer');
-  if (!actorLayer) return;
+  if (!actorLayer) {
+    perfEnd('enemy:render');
+    return;
+  }
 
+  // Clear DOM cache and visual state cache (full rebuild)
+  enemyEls.clear();
+  enemyVisualState.clear();
+  
   actorLayer.querySelectorAll('.enemy').forEach(el => el.remove());
 
   const playerLevel = state.player.level;
 
   for (const enemy of state.runtime.activeEnemies || []) {
     if (enemy.hp <= 0) continue;
-
-    const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.nomad;
-    const weapon = ENEMY_WEAPONS[config.weapon];
-    const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
-
-    const el = document.createElement('div');
     
-    // Build class list including status effects
-    const classes = ['actor', 'enemy'];
-    if (enemy.isBoss) classes.push('boss');
-    if (enemy.isAlpha) classes.push('alpha');
-    if (isPassive) classes.push('passive');
-    if (isStunned(enemy)) classes.push('is-stunned');
-    if (isRooted(enemy)) classes.push('is-rooted');
-    if (isSlowed(enemy)) classes.push('is-slowed');
-    if (isVulnerable(enemy)) classes.push('is-vulnerable');
-    if (isImmune(enemy)) classes.push('is-immune');
-    
-    el.className = classes.join(' ');
-    el.dataset.enemyId = enemy.id;
-    if (enemy.isAlpha) el.dataset.alpha = 'true';
-    if (isPassive) el.dataset.passive = 'true';
-    
-    const moveSpeed = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
-    
-    // Set CSS variables for enemy-specific values
-    el.style.setProperty('--enemy-move-speed', `${moveSpeed}ms`);
-    el.style.setProperty('--sprite-idle', `url('${SPRITES.actor.idle}')`);
-    
-    // Shadow and sprite elements
-    const shadow = document.createElement('div');
-    shadow.className = 'shadow';
-    el.appendChild(shadow);
-    
-    const sprite = document.createElement('div');
-    sprite.className = 'sprite';
-    el.appendChild(sprite);
-    
-    // Initial position without transition
-    el.style.transition = 'none';
-    el.style.transform = actorTransform(enemy.x, enemy.y);
-    
-    el.dataset.moveSpeed = moveSpeed;
-
-    const levelDiff = enemy.level - playerLevel;
-    let levelClass = 'normal';
-    let levelIcon = enemy.level;
-
-    if (levelDiff >= 10) {
-      levelClass = 'impossible';
-      levelIcon = '💀';
-    } else if (levelDiff >= 5) {
-      levelClass = 'very-hard';
-    } else if (levelDiff >= 2) {
-      levelClass = 'hard';
-    } else if (levelDiff <= -5) {
-      levelClass = 'trivial';
-    } else if (levelDiff <= -2) {
-      levelClass = 'easy';
-    }
-
-    const badge = document.createElement('div');
-    badge.className = `enemy-level-badge ${levelClass} ${enemy.isAlpha ? 'alpha-badge' : ''} ${isPassive ? 'passive-badge' : ''}`;
-    badge.textContent = enemy.isAlpha ? `α${enemy.level}` : levelIcon;
-    badge.title = `Level ${enemy.level} ${enemy.name}${enemy.isAlpha ? ' (Alpha)' : ''}${isPassive ? ' (Passive)' : ''}`;
-    el.appendChild(badge);
-
-    const hpBar = document.createElement('div');
-    hpBar.className = 'enemy-hp-bar';
-    const hpFill = document.createElement('span');
-    hpFill.className = 'enemy-hp-fill';
-    hpFill.style.setProperty('--hp-pct', getHPPercent(enemy));
-    hpBar.appendChild(hpFill);
-    el.appendChild(hpBar);
-
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      selectTarget(enemy);
-    });
-
-    if (currentTarget?.id === enemy.id) {
-      el.classList.add('targeted');
-    }
-
+    const el = createEnemyElement(enemy, playerLevel);
     actorLayer.appendChild(el);
+    
+    // Cache the DOM reference
+    enemyEls.set(enemy.id, el);
   }
   
   // Re-enable transitions after initial placement (CSS uses --enemy-move-speed variable)
   requestAnimationFrame(() => {
-    actorLayer.querySelectorAll('.enemy').forEach(el => {
+    for (const el of enemyEls.values()) {
       el.style.transition = '';
-    });
+    }
   });
+  
+  perfEnd('enemy:render');
+}
+
+/**
+ * Create a single enemy DOM element. Used by both renderEnemies and incremental spawn.
+ * @param {object} enemy - Enemy data
+ * @param {number} playerLevel - Current player level (for badge color)
+ * @returns {HTMLElement} The enemy element
+ */
+export function createEnemyElement(enemy, playerLevel) {
+  const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.nomad;
+  const weapon = ENEMY_WEAPONS[config.weapon];
+  const isPassive = isEnemyPassive(enemy) && !provokedEnemies.has(enemy.id);
+
+  const el = document.createElement('div');
+  
+  // Build class list including status effects
+  const classes = ['actor', 'enemy'];
+  if (enemy.isBoss) classes.push('boss');
+  if (enemy.isAlpha) classes.push('alpha');
+  if (isPassive) classes.push('passive');
+  if (isStunned(enemy)) classes.push('is-stunned');
+  if (isRooted(enemy)) classes.push('is-rooted');
+  if (isSlowed(enemy)) classes.push('is-slowed');
+  if (isVulnerable(enemy)) classes.push('is-vulnerable');
+  if (isImmune(enemy)) classes.push('is-immune');
+  
+  el.className = classes.join(' ');
+  el.dataset.enemyId = enemy.id;
+  if (enemy.isAlpha) el.dataset.alpha = 'true';
+  if (isPassive) el.dataset.passive = 'true';
+  
+  const moveSpeed = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
+  
+  // Set CSS variables for enemy-specific values
+  el.style.setProperty('--enemy-move-speed', `${moveSpeed}ms`);
+  el.style.setProperty('--sprite-idle', `url('${SPRITES.actor.idle}')`);
+  
+  // Shadow and sprite elements
+  const shadow = document.createElement('div');
+  shadow.className = 'shadow';
+  el.appendChild(shadow);
+  
+  const sprite = document.createElement('div');
+  sprite.className = 'sprite';
+  el.appendChild(sprite);
+  
+  // Initial position without transition
+  el.style.transition = 'none';
+  el.style.transform = actorTransform(enemy.x, enemy.y);
+  
+  el.dataset.moveSpeed = moveSpeed;
+
+  const levelDiff = enemy.level - playerLevel;
+  let levelClass = 'normal';
+  let levelIcon = enemy.level;
+
+  if (levelDiff >= 10) {
+    levelClass = 'impossible';
+    levelIcon = '💀';
+  } else if (levelDiff >= 5) {
+    levelClass = 'very-hard';
+  } else if (levelDiff >= 2) {
+    levelClass = 'hard';
+  } else if (levelDiff <= -5) {
+    levelClass = 'trivial';
+  } else if (levelDiff <= -2) {
+    levelClass = 'easy';
+  }
+
+  const badge = document.createElement('div');
+  badge.className = `enemy-level-badge ${levelClass} ${enemy.isAlpha ? 'alpha-badge' : ''} ${isPassive ? 'passive-badge' : ''}`;
+  badge.textContent = enemy.isAlpha ? `α${enemy.level}` : levelIcon;
+  badge.title = `Level ${enemy.level} ${enemy.name}${enemy.isAlpha ? ' (Alpha)' : ''}${isPassive ? ' (Passive)' : ''}`;
+  el.appendChild(badge);
+
+  const hpBar = document.createElement('div');
+  hpBar.className = 'enemy-hp-bar';
+  const hpFill = document.createElement('span');
+  hpFill.className = 'enemy-hp-fill';
+  hpFill.style.setProperty('--hp-pct', getHPPercent(enemy));
+  hpBar.appendChild(hpFill);
+  el.appendChild(hpBar);
+
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectTarget(enemy);
+  });
+
+  if (currentTarget?.id === enemy.id) {
+    el.classList.add('targeted');
+  }
+
+  return el;
+}
+
+/**
+ * Add a single enemy to the DOM (incremental spawn).
+ * More efficient than calling renderEnemies() for each spawn.
+ * @param {object} enemy - Enemy to add
+ * @param {number} playerLevel - Current player level
+ */
+export function addEnemyElement(enemy, playerLevel) {
+  const actorLayer = document.getElementById('actor-layer');
+  if (!actorLayer) return;
+  
+  const el = createEnemyElement(enemy, playerLevel);
+  actorLayer.appendChild(el);
+  
+  // Cache the reference
+  enemyEls.set(enemy.id, el);
+  
+  // Enable transition after placement
+  requestAnimationFrame(() => {
+    el.style.transition = '';
+  });
+}
+
+/**
+ * Remove an enemy element from DOM (on death/despawn).
+ * @param {string} enemyId - ID of enemy to remove
+ */
+export function removeEnemyElement(enemyId) {
+  const el = enemyEls.get(enemyId);
+  if (el) {
+    el.remove();
+    enemyEls.delete(enemyId);
+    enemyVisualState.delete(enemyId);
+  }
 }
 
 // Note: updateEnemyVisuals() is defined earlier in the file with comprehensive logic
 
 function updateEnemyHealthBar(enemy) {
-  // Update the health bar on the enemy sprite
-  const fill = document.querySelector(`[data-enemy-id="${enemy.id}"] .enemy-hp-fill`);
+  // Use cached DOM reference
+  const el = enemyEls.get(enemy.id);
+  const fill = el?.querySelector('.enemy-hp-fill');
   if (fill) {
     fill.style.setProperty('--hp-pct', getHPPercent(enemy));
   }

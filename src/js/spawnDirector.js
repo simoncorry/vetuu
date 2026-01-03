@@ -15,7 +15,8 @@ import { distCoords, randomRange, cssVar } from './utils.js';
 import { AI } from './aiConstants.js';
 import { nowMs } from './time.js';
 import { normalizeHealthKeys, clampHP } from './entityCompat.js';
-import { renderEnemies } from './combat.js';
+import { addEnemyElement } from './combat.js';
+import { perfStart, perfEnd } from './perf.js';
 
 // ============================================
 // CONSTANTS - DISTANCE RINGS
@@ -1034,6 +1035,9 @@ function spawnEnemyInSlot(spawner, slot, now, options = {}) {
   // Add to active enemies
   currentState.runtime.activeEnemies.push(enemy);
   
+  // Track for incremental DOM update
+  newlySpawnedEnemies.push(enemy);
+  
   return enemy;
 }
 
@@ -1132,19 +1136,28 @@ function createEnemyFromSlot(spawner, slot, rosterEntry, t) {
 // ============================================
 // MAIN SPAWN TICK (Slot-Timer Based)
 // ============================================
+// Track newly spawned enemies for incremental DOM updates
+let newlySpawnedEnemies = [];
+
 function spawnDirectorTick() {
   if (!currentState) return;
+  
+  perfStart('spawn:tick');
   
   const now = nowMs();
   const player = currentState.player;
   
   // Don't spawn while ghost running
-  if (document.getElementById('player')?.classList.contains('ghost')) return;
+  if (document.getElementById('player')?.classList.contains('ghost')) {
+    perfEnd('spawn:tick');
+    return;
+  }
+  
+  // Clear pending spawns from last tick
+  newlySpawnedEnemies = [];
   
   // Get spawners in loaded regions
   const loadedSpawners = spawners.filter(s => isSpawnerInLoadedRegion(s));
-  
-  let anySpawned = false;
   
   // Check each spawner's slots for respawn
   for (const spawner of loadedSpawners) {
@@ -1158,23 +1171,26 @@ function spawnDirectorTick() {
       
       const firstSlot = spawner.slots[0];
       if (firstSlot && now >= firstSlot.nextRespawnAt) {
-        const filled = fillPackSlots(spawner, now, false);
-        if (filled > 0) anySpawned = true;
+        fillPackSlots(spawner, now, false);
       }
     } else {
       // For strays: check individual slot
       const slot = spawner.slots[0];
       if (slot && !slot.aliveEnemyId && now >= slot.nextRespawnAt) {
-        const filled = fillStraySlot(spawner, now, false);
-        if (filled > 0) anySpawned = true;
+        fillStraySlot(spawner, now, false);
       }
     }
   }
   
-  // Render new enemies if any spawned
-  if (anySpawned) {
-    renderEnemies(currentState);
+  // Add new enemy elements incrementally (instead of full re-render)
+  if (newlySpawnedEnemies.length > 0) {
+    const playerLevel = currentState.player.level;
+    for (const enemy of newlySpawnedEnemies) {
+      addEnemyElement(enemy, playerLevel);
+    }
   }
+  
+  perfEnd('spawn:tick');
 }
 
 // ============================================
@@ -1808,14 +1824,22 @@ function executeSpawnRequests(requests) {
       const enemy = createEnemy(rosterEntry, position, request);
       currentState.runtime.activeEnemies.push(enemy);
       
+      // Track for incremental DOM update
+      newlySpawnedEnemies.push(enemy);
+      
       // Update spawner alive count
       const spawner = spawners.find(s => s.id === request.spawnerId);
       if (spawner) spawner.aliveCount++;
     }
   }
   
-  // Render the new enemies
-  renderEnemies(currentState);
+  // Add new enemy elements incrementally
+  if (newlySpawnedEnemies.length > 0) {
+    const playerLevel = currentState.player.level;
+    for (const enemy of newlySpawnedEnemies) {
+      addEnemyElement(enemy, playerLevel);
+    }
+  }
 }
 
 /**
