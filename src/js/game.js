@@ -991,7 +991,7 @@ export function isPositionIlluminated(x, y) {
   if (torchEnabled && state?.player) {
     const playerPx = (state.player.x + 0.5) * lightingTileSize;
     const playerPy = (state.player.y + 0.5) * lightingTileSize;
-    const torchRadius = 7.2 * lightingTileSize * 1.15; // Mid layer radius
+    const torchRadius = 5.5 * lightingTileSize * 1.15; // Mid layer radius (matches stamp)
     const distToPlayer = Math.hypot(px - playerPx, py - playerPy);
     if (distToPlayer <= torchRadius) {
       return true;
@@ -1087,7 +1087,7 @@ function initLightingCanvas(gameState) {
   torchAnim.targetY = torchAnim.currentY;
   
   // Pre-create light stamps for all unique radii (performance optimization)
-  const torchBaseRadius = 7.2 * lightingTileSize;
+  const torchBaseRadius = 5.5 * lightingTileSize; // Reduced from 7.2 for subtler torch
   torchStamp = createLightStamp(torchBaseRadius);
   
   // Pre-create stamps for static lights
@@ -1258,9 +1258,9 @@ function updateLighting() {
     const playerY = torchAnim.currentY;
     const now = Date.now();
     
-    // Torch intensity with subtle hum
+    // Torch intensity with subtle hum (reduced from 1.2 multiplier)
     const hum = Math.sin(now * 0.004) * 0.05;
-    const torchIntensity = Math.min(1, nightIntensity * 1.2 * (1 + hum));
+    const torchIntensity = Math.min(1, nightIntensity * 0.95 * (1 + hum));
     
     const halfSize = torchStamp.size / 2;
     lightCtx.globalAlpha = torchIntensity;
