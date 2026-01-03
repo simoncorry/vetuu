@@ -464,42 +464,63 @@ function onMinimapClick(e) {
   createPathTo(worldX, worldY, false);
 }
 
+// Cached minimap elements and state
+let cachedMinimapPlayer = null;
+let cachedMinimapFogCanvas = null;
+let cachedMinimapFogCtx = null;
+let minimapRevealedCount = 0; // Track how many tiles we've already drawn
+
 function updateMinimap() {
-  const playerDot = document.getElementById('minimap-player');
-  const canvas = document.getElementById('minimap-canvas');
-  if (!playerDot || !canvas) return;
+  if (!cachedMinimapPlayer) {
+    cachedMinimapPlayer = document.getElementById('minimap-player');
+  }
+  if (!cachedMinimapPlayer) return;
 
   const x = state.player.x * minimapScale;
   const y = state.player.y * minimapScale;
 
   // Use transform for GPU-accelerated positioning (includes -50% centering)
-  playerDot.style.transform = `translate3d(calc(${x}px - 50%), calc(${y}px - 50%), 0)`;
+  cachedMinimapPlayer.style.transform = `translate3d(calc(${x}px - 50%), calc(${y}px - 50%), 0)`;
 
   updateMinimapFog();
 }
 
 function updateMinimapFog() {
-  const fogCanvas = document.getElementById('minimap-fog');
-  if (!fogCanvas) return;
-
-  const fogCtx = fogCanvas.getContext('2d');
-  const revealed = state.runtime.revealedTiles || new Set();
-
-  // Clear revealed areas
-  fogCtx.globalCompositeOperation = 'destination-out';
-  
-  for (const key of revealed) {
-    const [x, y] = key.split(',').map(Number);
-    fogCtx.fillStyle = 'rgba(255, 255, 255, 1)';
-    fogCtx.fillRect(
-      x * minimapScale - 0.5,
-      y * minimapScale - 0.5,
-      Math.ceil(minimapScale) + 1,
-      Math.ceil(minimapScale) + 1
-    );
+  if (!cachedMinimapFogCanvas) {
+    cachedMinimapFogCanvas = document.getElementById('minimap-fog');
+    if (cachedMinimapFogCanvas) {
+      cachedMinimapFogCtx = cachedMinimapFogCanvas.getContext('2d');
+    }
   }
+  if (!cachedMinimapFogCtx) return;
 
-  fogCtx.globalCompositeOperation = 'source-over';
+  const revealed = state.runtime.revealedTiles || new Set();
+  const currentCount = revealed.size;
+  
+  // Early exit if no new tiles revealed
+  if (currentCount === minimapRevealedCount) return;
+  
+  // Only draw if new tiles were revealed
+  if (currentCount > minimapRevealedCount) {
+    cachedMinimapFogCtx.globalCompositeOperation = 'destination-out';
+    cachedMinimapFogCtx.fillStyle = 'rgba(255, 255, 255, 1)';
+    
+    // Draw all tiles (we can't easily track "new" tiles without more state)
+    // But the fillRect on already-cleared pixels is very cheap
+    for (const key of revealed) {
+      const [x, y] = key.split(',').map(Number);
+      cachedMinimapFogCtx.fillRect(
+        x * minimapScale - 0.5,
+        y * minimapScale - 0.5,
+        Math.ceil(minimapScale) + 1,
+        Math.ceil(minimapScale) + 1
+      );
+    }
+
+    cachedMinimapFogCtx.globalCompositeOperation = 'source-over';
+  }
+  
+  minimapRevealedCount = currentCount;
 }
 
 // Corpse marker on minimap

@@ -4589,11 +4589,34 @@ function getAdjacentEnemies(x, y) {
 // ============================================
 // VISUAL EFFECTS
 // ============================================
-function showProjectile(fromX, fromY, toX, toY, color, isEnhanced = false) {
-  const world = document.getElementById('world');
-  if (!world) return;
+// Object pools for combat effects
+const projectilePool = [];
+const swipePool = [];
+const EFFECT_POOL_SIZE = 10;
 
-  const projectile = document.createElement('div');
+function getPooledElement(pool, className) {
+  const pooled = pool.pop();
+  if (pooled) return pooled;
+  
+  const el = document.createElement('div');
+  el.className = className;
+  return el;
+}
+
+function recycleElement(pool, el, baseClass) {
+  el.className = baseClass;
+  if (pool.length < EFFECT_POOL_SIZE) {
+    pool.push(el);
+  }
+}
+
+function showProjectile(fromX, fromY, toX, toY, color, isEnhanced = false) {
+  if (!cachedWorld) {
+    cachedWorld = document.getElementById('world');
+  }
+  if (!cachedWorld) return;
+
+  const projectile = getPooledElement(projectilePool, 'projectile');
   projectile.className = `projectile ${isEnhanced ? 'enhanced' : ''}`;
   projectile.style.setProperty('--color', color);
   projectile.style.setProperty('--pos-x', `${fromX * 24 + 12}px`);
@@ -4607,15 +4630,20 @@ function showProjectile(fromX, fromY, toX, toY, color, isEnhanced = false) {
   projectile.style.setProperty('--dy', `${dy}px`);
   projectile.style.setProperty('--angle', `${angle}deg`);
 
-  world.appendChild(projectile);
-  projectile.addEventListener('animationend', () => projectile.remove(), { once: true });
+  cachedWorld.appendChild(projectile);
+  projectile.addEventListener('animationend', () => {
+    projectile.remove();
+    recycleElement(projectilePool, projectile, 'projectile');
+  }, { once: true });
 }
 
 function showMeleeSwipe(fromX, fromY, toX, toY, color, isEnhanced = false) {
-  const world = document.getElementById('world');
-  if (!world) return;
+  if (!cachedWorld) {
+    cachedWorld = document.getElementById('world');
+  }
+  if (!cachedWorld) return;
 
-  const swipe = document.createElement('div');
+  const swipe = getPooledElement(swipePool, 'melee-swipe');
   swipe.className = `melee-swipe ${isEnhanced ? 'enhanced' : ''}`;
   swipe.style.setProperty('--color', color);
   swipe.style.setProperty('--pos-x', `${toX * 24}px`);
@@ -4626,8 +4654,11 @@ function showMeleeSwipe(fromX, fromY, toX, toY, color, isEnhanced = false) {
   const angle = Math.atan2(dy, dx) * (180 / Math.PI);
   swipe.style.setProperty('--angle', `${angle}deg`);
 
-  world.appendChild(swipe);
-  swipe.addEventListener('animationend', () => swipe.remove(), { once: true });
+  cachedWorld.appendChild(swipe);
+  swipe.addEventListener('animationend', () => {
+    swipe.remove();
+    recycleElement(swipePool, swipe, 'melee-swipe');
+  }, { once: true });
 }
 
 function showCleaveEffect(x, y) {
@@ -6698,18 +6729,52 @@ function logCombat(msg) {
   }
 }
 
-function showDamageNumber(x, y, damage, isCrit, isPlayer = false) {
-  const world = document.getElementById('world');
-  if (!world) return;
+// Object pool for damage numbers (avoids DOM churn during combat)
+const damageNumberPool = [];
+const DAMAGE_POOL_SIZE = 20;
+let cachedWorld = null;
 
+function getDamageNumberElement() {
+  // Try to get from pool
+  const pooled = damageNumberPool.pop();
+  if (pooled) return pooled;
+  
+  // Create new element
   const el = document.createElement('div');
+  el.className = 'damage-number';
+  return el;
+}
+
+function recycleDamageNumber(el) {
+  // Reset for reuse
+  el.className = 'damage-number';
+  el.textContent = '';
+  
+  // Only pool up to max size
+  if (damageNumberPool.length < DAMAGE_POOL_SIZE) {
+    damageNumberPool.push(el);
+  }
+}
+
+function showDamageNumber(x, y, damage, isCrit, isPlayer = false) {
+  if (!cachedWorld) {
+    cachedWorld = document.getElementById('world');
+  }
+  if (!cachedWorld) return;
+
+  const el = getDamageNumberElement();
   el.className = `damage-number ${isCrit ? 'crit' : ''} ${isPlayer ? 'player-damage' : ''}`;
   el.textContent = damage;
   el.style.setProperty('--pos-x', `${x * 24 + 12}px`);
   el.style.setProperty('--pos-y', `${y * 24}px`);
 
-  world.appendChild(el);
-  el.addEventListener('animationend', () => el.remove(), { once: true });
+  cachedWorld.appendChild(el);
+  
+  // Recycle after animation completes
+  el.addEventListener('animationend', () => {
+    el.remove();
+    recycleDamageNumber(el);
+  }, { once: true });
 }
 
 export function isCombatActive() {
