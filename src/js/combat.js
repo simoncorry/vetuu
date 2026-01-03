@@ -6204,9 +6204,32 @@ export function createEnemyElement(enemy, playerLevel) {
   hpBar.appendChild(hpFill);
   el.appendChild(hpBar);
 
+  // Track for double-click detection
+  let lastClickTime = 0;
   el.addEventListener('click', (e) => {
     e.stopPropagation();
-    selectTarget(enemy);
+    
+    const now = Date.now();
+    const isDoubleClick = (now - lastClickTime) < 400;
+    lastClickTime = now;
+    
+    if (isDoubleClick) {
+      // Double-click: select and auto-attack
+      console.log('[Combat] Enemy double-clicked:', enemy.name);
+      selectTarget(enemy);
+      if (currentTarget && currentTarget.hp > 0) {
+        const result = setAutoAttackIntent(currentTarget);
+        if (result.success) {
+          autoAttackEnabled = true;
+          inCombat = true;
+          tryExecuteCombatIntent();
+        }
+      }
+    } else {
+      // Single click: just select
+      console.log('[Combat] Enemy single-clicked:', enemy.name);
+      selectTarget(enemy);
+    }
   });
 
   if (currentTarget?.id === enemy.id) {
