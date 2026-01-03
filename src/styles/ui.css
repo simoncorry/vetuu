@@ -839,27 +839,54 @@
   align-items: center;
 }
 
-/* Weapon slot wrapper (contains button + SVG timer) */
-.weapon-slot-wrapper {
+/* Auto-attack slot wrapper (contains button + SVG timer) */
+.auto-attack-slot-wrapper {
   position: relative;
   display: inline-block;
 }
 
-/* Weapon toggle slot */
-.weapon-slot {
+/* Auto-attack toggle slot */
+.auto-slot {
   position: relative;
   border-color: var(--frame-border);
   background: rgba(105, 210, 214, 0.05);
 }
 
-.weapon-slot:hover {
+.auto-slot:hover {
   border-color: var(--accent);
   background: rgba(105, 210, 214, 0.15);
   box-shadow: 0 0 8px var(--accent-dim);
 }
 
-.weapon-slot .slot-icon {
+.auto-slot .slot-icon {
   font-size: 1.4rem;
+}
+
+/* Auto-attack active state */
+.auto-slot.active {
+  border-color: var(--success);
+  background: rgba(105, 210, 214, 0.15);
+  box-shadow: 0 0 8px var(--success);
+}
+
+/* Melee ability slots */
+.melee-slot {
+  border-color: var(--hp-color);
+}
+
+.melee-slot:hover {
+  border-color: var(--hp-color);
+  background: rgba(207, 102, 121, 0.15);
+}
+
+/* Ranged ability slots */
+.ranged-slot {
+  border-color: var(--accent);
+}
+
+.ranged-slot:hover {
+  border-color: var(--accent);
+  background: rgba(105, 210, 214, 0.15);
 }
 
 /* ============================================
@@ -880,7 +907,8 @@
 }
 
 /* Show when auto-attacking */
-.weapon-slot.auto-attacking + .swing-timer-border {
+.auto-slot.active + .swing-timer-border,
+.auto-slot.auto-attacking + .swing-timer-border {
   opacity: 1;
 }
 
@@ -908,12 +936,12 @@
 }
 
 /* Cooldown state: accent color */
-.weapon-slot.swing-cooldown + .swing-timer-border .swing-timer-fill {
+.auto-slot.swing-cooldown + .swing-timer-border .swing-timer-fill {
   --swing-color: var(--accent);
 }
 
 /* Ready state: green with glow */
-.weapon-slot.swing-ready + .swing-timer-border .swing-timer-fill {
+.auto-slot.swing-ready + .swing-timer-border .swing-timer-fill {
   --swing-color: var(--success);
   filter: drop-shadow(0 0 6px var(--success));
 }

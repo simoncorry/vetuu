@@ -21,9 +21,9 @@ import {
 let targetCallback = null;
 let interactCallback = null;
 
-// Debounce for weapon toggle (prevents double-fire from multiple event paths)
-let lastWeaponToggleAt = 0;
-const WEAPON_TOGGLE_DEBOUNCE_MS = 150;
+// Debounce for auto attack toggle (prevents double-fire from multiple event paths)
+let lastAutoAttackToggleAt = 0;
+const AUTO_ATTACK_TOGGLE_DEBOUNCE_MS = 150;
 
 // Double-click detection
 let lastClickTime = 0;
@@ -61,36 +61,36 @@ export function initInput(onInteract, onTarget, _onSecondary) {
 // ACTION BAR CLICK HANDLERS
 // ============================================
 function initActionBarClicks() {
-  // Weapon toggle slot - with debounce to prevent double-fire
-  const weaponToggle = document.getElementById('weapon-toggle-slot');
-  if (weaponToggle) {
-    weaponToggle.addEventListener('click', (e) => {
+  // Slot 1: Auto Attack toggle - with debounce
+  const autoAttackSlot = document.querySelector('[data-slot="1"][data-action-type="auto"]');
+  if (autoAttackSlot) {
+    autoAttackSlot.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       
       // Debounce check using performance.now() as authoritative clock
       const now = performance.now();
-      if (now - lastWeaponToggleAt < WEAPON_TOGGLE_DEBOUNCE_MS) {
+      if (now - lastAutoAttackToggleAt < AUTO_ATTACK_TOGGLE_DEBOUNCE_MS) {
         return; // Ignore rapid duplicate clicks
       }
-      lastWeaponToggleAt = now;
+      lastAutoAttackToggleAt = now;
       
-      targetCallback('cycleWeapon');
+      targetCallback('autoAttack');
     });
   }
 
-  // Weapon ability slots (1-3)
-  document.querySelectorAll('[data-action-type="weapon"]').forEach(slot => {
+  // Combat ability slots (2-5: Leap, Flurry, Burst, Charged)
+  document.querySelectorAll('[data-action-type="ability"]').forEach(slot => {
     slot.addEventListener('click', (e) => {
       e.preventDefault();
       const slotNum = parseInt(slot.dataset.slot, 10);
       if (!isNaN(slotNum)) {
-        targetCallback('weaponAbility', slotNum);
+        targetCallback('ability', slotNum);
       }
     });
   });
 
-  // Sense ability slots (4-6)
+  // Sense ability slots (6-7: Pull, Push)
   document.querySelectorAll('[data-action-type="sense"]').forEach(slot => {
     slot.addEventListener('click', (e) => {
       e.preventDefault();
@@ -132,58 +132,59 @@ function onKeyDown(e) {
   }
 
   // ============================================
-  // WEAPON TOGGLE (~ or Space) - with debounce
+  // SLOT 1: AUTO ATTACK TOGGLE (1 or Space) - with debounce
   // ============================================
-  if (code === 'Backquote' || code === 'Space') {
+  if (code === 'Digit1' || code === 'Space') {
     e.preventDefault();
     if (!dialogueOpen) {
       // Debounce check using performance.now() as authoritative clock
       const now = performance.now();
-      if (now - lastWeaponToggleAt < WEAPON_TOGGLE_DEBOUNCE_MS) {
+      if (now - lastAutoAttackToggleAt < AUTO_ATTACK_TOGGLE_DEBOUNCE_MS) {
         return; // Ignore rapid duplicate triggers
       }
-      lastWeaponToggleAt = now;
+      lastAutoAttackToggleAt = now;
       
-      targetCallback('cycleWeapon');
+      targetCallback('autoAttack');
     }
     return;
   }
 
   // ============================================
-  // WEAPON ABILITIES (1, 2, 3) - no Sense cost
+  // COMBAT ABILITIES (2-5: Leap, Flurry, Burst, Charged)
+  // All trigger GCD, have individual cooldowns
   // ============================================
-  if (code === 'Digit1') { 
-    e.preventDefault(); 
-    if (!dialogueOpen) targetCallback('weaponAbility', 1); 
-    return; 
-  }
   if (code === 'Digit2') { 
     e.preventDefault(); 
-    if (!dialogueOpen) targetCallback('weaponAbility', 2); 
+    if (!dialogueOpen) targetCallback('ability', 2); // Leap (melee)
     return; 
   }
   if (code === 'Digit3') { 
     e.preventDefault(); 
-    if (!dialogueOpen) targetCallback('weaponAbility', 3); 
+    if (!dialogueOpen) targetCallback('ability', 3); // Blade Flurry (melee)
     return; 
   }
-
-  // ============================================
-  // SENSE ABILITIES (4, 5, 6) - spends Sense
-  // ============================================
   if (code === 'Digit4') { 
     e.preventDefault(); 
-    if (!dialogueOpen) targetCallback('senseAbility', 4); // Push
+    if (!dialogueOpen) targetCallback('ability', 4); // Burst (ranged)
     return; 
   }
   if (code === 'Digit5') { 
     e.preventDefault(); 
-    if (!dialogueOpen) targetCallback('senseAbility', 5); // Pull
+    if (!dialogueOpen) targetCallback('ability', 5); // Charged Shot (ranged)
     return; 
   }
+
+  // ============================================
+  // SENSE ABILITIES (6-7: Pull, Push) - spends Sense + triggers GCD
+  // ============================================
   if (code === 'Digit6') { 
     e.preventDefault(); 
-    if (!dialogueOpen) targetCallback('senseAbility', 6); // Locked until Act 3
+    if (!dialogueOpen) targetCallback('senseAbility', 6); // Pull
+    return; 
+  }
+  if (code === 'Digit7') { 
+    e.preventDefault(); 
+    if (!dialogueOpen) targetCallback('senseAbility', 7); // Push
     return; 
   }
 

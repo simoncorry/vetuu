@@ -17,6 +17,13 @@ import { saveGame } from './save.js';
 import { hasLineOfSight, canMoveTo, canMoveToIgnoreEnemies } from './collision.js';
 import { WEAPONS, ENEMY_WEAPONS, BASIC_ATTACK_CD_MS } from './weapons.js';
 import { 
+  BASIC_ATTACKS,
+  getAbility, 
+  isAbilityUnlocked, 
+  getUnlockRequirements,
+  calculateAbilityDamage
+} from './abilities.js';
+import { 
   distCoords, shuffleArray, applyEffect, tickEffects,
   isSlowed, isVulnerable, isBurning, cssVar
 } from './utils.js';
@@ -593,8 +600,9 @@ let currentTarget = null; // Enemy target
 let currentNpcTarget = null; // Friendly NPC target (can't attack)
 let currentObjectTarget = null; // Interactive object target
 let currentWeapon = 'laser_rifle';
-let actionCooldowns = { 1: 0, 2: 0, 3: 0 };
-let actionMaxCooldowns = { 1: 1500, 2: 5000, 3: 20000 };
+// Ability cooldowns (slots 2-7)
+let actionCooldowns = { 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+let actionMaxCooldowns = { 2: 8000, 3: 8000, 4: 4000, 5: 10000, 6: 8000, 7: 8000 };
 let combatTickInterval = null;
 
 // Combat state tracking
@@ -2973,6 +2981,71 @@ export function playerAttack() {
   tryExecuteCombatIntent();
 }
 
+// ============================================
+// UNIFIED ACTION BAR - AUTO ATTACK TOGGLE (Slot 1)
+// Independent of GCD - has its own 1.5s swing timer
+// ============================================
+function toggleAutoAttack() {
+  if (isGhostMode) {
+    logCombat('You are a spirit... find your corpse to revive.');
+    return;
+  }
+  
+  if (playerImmunityActive) {
+    logCombat('Recovering... actions disabled during immunity.');
+    return;
+  }
+  
+  // If already auto-attacking, toggle it off
+  if (autoAttackEnabled && currentTarget) {
+    autoAttackEnabled = false;
+    logCombat('Auto-attack disabled.');
+    updateAutoAttackUI(false);
+    return;
+  }
+  
+  // If no target, find nearest enemy
+  if (!currentTarget || currentTarget.hp <= 0) {
+    const nearbyEnemy = findNearestEnemy();
+    if (nearbyEnemy) {
+      selectTarget(nearbyEnemy);
+      logCombat(`Targeting ${nearbyEnemy.name}`);
+    } else {
+      logCombat('No enemies nearby');
+      return;
+    }
+  }
+  
+  // Start auto-attacking current target
+  const result = setAutoAttackIntent(currentTarget);
+  if (!result.success) {
+    if (result.reason === 'retreating') {
+      logCombat('Target is retreating.');
+    } else if (result.reason === 'dead') {
+      logCombat('Target is dead.');
+    } else {
+      logCombat('Invalid target.');
+    }
+    clearTarget();
+    return;
+  }
+  
+  autoAttackEnabled = true;
+  inCombat = true;
+  updateAutoAttackUI(true);
+  tryExecuteCombatIntent();
+}
+
+/**
+ * Update the auto-attack slot UI to show active/inactive state
+ */
+function updateAutoAttackUI(active) {
+  const slot = document.getElementById('auto-attack-slot');
+  if (slot) {
+    slot.classList.toggle('active', active);
+  }
+}
+
 async function moveToAttackRange(target, range, actionType) {
   logCombat(`Moving to range...`);
   pendingAttack = { target, range, actionType };
@@ -3066,8 +3139,18 @@ export function checkPendingAttack() {
       setAutoAttackIntent(currentTarget);
       tryExecuteCombatIntent();
     }
+  } else if (actionType.startsWith('ability_')) {
+    // New unified ability system (slots 2-5)
+    const slot = parseInt(actionType.split('_')[1], 10);
+    if (!isNaN(slot) && actionCooldowns[slot] <= 0 && !isGcdActive()) {
+      executeAbilityDirect(slot);
+      // Resume auto-attack after ability
+      if (autoAttackEnabled && currentTarget?.hp > 0) {
+        setAutoAttackIntent(currentTarget);
+      }
+    }
   } else if (actionType.startsWith('weaponAbility_')) {
-    // Weapon ability from intent system - execute directly
+    // Legacy weapon ability from old intent system - execute directly
     const slot = parseInt(actionType.split('_')[1], 10);
     if (!isNaN(slot) && actionCooldowns[slot] <= 0) {
       executeWeaponAbilityDirect(slot);
@@ -3402,6 +3485,561 @@ export function useWeaponAbility(slot) {
 }
 
 // ============================================
+// UNIFIED ABILITY SYSTEM (Combat Overhaul)
+// Slots 2-5: Combat abilities (Leap, Flurry, Burst, Charged)
+// All trigger GCD, have individual cooldowns
+// ============================================
+function useAbility(slot) {
+  if (isGhostMode) {
+    logCombat('You are a spirit... find your corpse to revive.');
+    return;
+  }
+  
+  if (playerImmunityActive) {
+    logCombat('Recovering... actions disabled during immunity.');
+    return;
+  }
+  
+  // Get ability definition
+  const ability = getAbility(slot);
+  if (!ability) {
+    logCombat(`Unknown ability slot: ${slot}`);
+    return;
+  }
+  
+  // Check if ability is unlocked (level + MSQ requirements)
+  const player = currentState.player;
+  const flags = window.__vetuuFlags || {};
+  
+  if (!isAbilityUnlocked(slot, player, flags)) {
+    const requirements = getUnlockRequirements(slot);
+    if (requirements) {
+      logCombat(`${ability.name} is locked. ${requirements}`);
+    } else {
+      logCombat(`${ability.name} is not yet available.`);
+    }
+    return;
+  }
+  
+  // Check GCD (abilities 2-7 all trigger/respect GCD)
+  if (isGcdActive()) {
+    const remaining = (getGcdRemaining() / 1000).toFixed(1);
+    logCombat(`GCD active (${remaining}s)`);
+    return;
+  }
+  
+  // Check ability cooldown
+  if (actionCooldowns[slot] > 0) {
+    const remaining = (actionCooldowns[slot] / 1000).toFixed(1);
+    logCombat(`${ability.name} on cooldown (${remaining}s)`);
+    return;
+  }
+  
+  // Get ability range and LOS requirements
+  const abilityRange = ability.range;
+  const needsLOS = ability.type === 'ranged';
+  
+  // If no target, auto-acquire nearest enemy within ability range
+  if (!currentTarget || currentTarget.hp <= 0) {
+    const candidate = acquireClosestEnemyInRange({
+      maxRange: abilityRange,
+      requireLOS: needsLOS
+    });
+    
+    if (candidate) {
+      selectTarget(candidate);
+      logCombat(`Targeting ${candidate.name}`);
+    } else {
+      logCombat('No enemies in range.');
+      return;
+    }
+  }
+  
+  const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
+  const hasLOS = !needsLOS || hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y);
+  
+  // If out of range or no LOS, set intent and move (unless it's a gap closer)
+  if ((dist > abilityRange || !hasLOS) && !ability.isGapCloser) {
+    // Enable combat flags (we're engaging)
+    autoAttackEnabled = true;
+    inCombat = true;
+    
+    // Set ability intent - will handle move-then-cast
+    const result = setAbilityIntent(slot, currentTarget);
+    if (!result.success) {
+      if (result.reason === 'retreating') {
+        logCombat('Target is retreating.');
+      } else if (result.reason === 'dead') {
+        logCombat('Target is dead.');
+      } else {
+        logCombat('Invalid target.');
+      }
+      clearTarget();
+      return;
+    }
+    tryExecuteCombatIntent();
+    return;
+  }
+  
+  // Gap closers (like Leap) can execute from extended range
+  if (ability.isGapCloser && dist > abilityRange) {
+    logCombat(`${ability.name}: Target out of range (${abilityRange} tiles)`);
+    return;
+  }
+  
+  // In range and LOS - check target validity
+  const check = isInvalidCombatTarget(currentTarget);
+  if (check.invalid) {
+    if (check.reason === 'retreating') {
+      logCombat('Target is retreating.');
+    } else if (check.reason === 'dead') {
+      logCombat('Target is dead.');
+    } else {
+      logCombat('Invalid target.');
+    }
+    clearTarget();
+    return;
+  }
+  
+  // Execute the ability
+  autoAttackEnabled = true;
+  inCombat = true;
+  provokeEnemy(currentTarget);
+  executeAbilityDirect(slot);
+}
+
+/**
+ * Execute an ability directly (player is in range and LOS)
+ */
+function executeAbilityDirect(slot) {
+  const ability = getAbility(slot);
+  if (!ability) return;
+  
+  // Trigger GCD for all abilities
+  triggerGcd();
+  
+  // Start cooldown
+  actionCooldowns[slot] = ability.cooldownMs;
+  actionMaxCooldowns[slot] = ability.cooldownMs;
+  
+  // Dispatch to specific ability implementation
+  switch (ability.id) {
+    case 'leap':
+      executeLeap(ability);
+      break;
+    case 'blade_flurry':
+      executeBladeFlurry(ability);
+      break;
+    case 'burst':
+      executeBurst(ability);
+      break;
+    case 'charged_shot':
+      executeChargedShot(ability);
+      break;
+    default:
+      logCombat(`Ability ${ability.name} not yet implemented.`);
+      break;
+  }
+}
+
+/**
+ * Set intent to use an ability after moving into range
+ */
+function setAbilityIntent(slot, target) {
+  const check = isInvalidCombatTarget(target);
+  if (check.invalid) {
+    return { success: false, reason: check.reason };
+  }
+  
+  const ability = getAbility(slot);
+  if (!ability) {
+    return { success: false, reason: 'invalid_ability' };
+  }
+  
+  combatIntent = {
+    type: 'ability',
+    slot,
+    target,
+    targetId: target.id,
+    range: ability.range,
+    requiresLOS: ability.type === 'ranged'
+  };
+  
+  return { success: true };
+}
+
+// ============================================
+// ABILITY IMPLEMENTATIONS (Combat Overhaul)
+// ============================================
+
+/**
+ * SLOT 2: LEAP - Gap closer + damage
+ * Instantly dash to target, dealing 150% melee damage
+ */
+function executeLeap(ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const target = currentTarget;
+  
+  // Calculate dash destination (adjacent to target)
+  const dx = target.x - player.x;
+  const dy = target.y - player.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  if (dist <= 0) return;
+  
+  // Normalize and move to 1 tile away from target
+  const destX = target.x - Math.round(dx / dist);
+  const destY = target.y - Math.round(dy / dist);
+  
+  // Validate destination is walkable
+  if (!canMoveTo(currentState, destX, destY)) {
+    // Try adjacent tiles
+    const alternatives = [
+      { x: target.x - 1, y: target.y },
+      { x: target.x + 1, y: target.y },
+      { x: target.x, y: target.y - 1 },
+      { x: target.x, y: target.y + 1 }
+    ].filter(p => canMoveTo(currentState, p.x, p.y));
+    
+    if (alternatives.length === 0) {
+      logCombat('Cannot leap - path blocked.');
+      // Refund cooldown
+      actionCooldowns[ability.slot] = 0;
+      return;
+    }
+    
+    // Pick closest alternative
+    const closest = alternatives.reduce((best, alt) => {
+      const altDist = Math.abs(alt.x - player.x) + Math.abs(alt.y - player.y);
+      const bestDist = Math.abs(best.x - player.x) + Math.abs(best.y - player.y);
+      return altDist < bestDist ? alt : best;
+    });
+    
+    player.x = closest.x;
+    player.y = closest.y;
+  } else {
+    player.x = destX;
+    player.y = destY;
+  }
+  
+  // Calculate damage (150% of melee basic)
+  const damage = calculateAbilityDamage(ability.slot, 'melee');
+  
+  // Deal damage
+  target.hp -= damage;
+  markCombatEvent();
+  showDamageNumber(target.x, target.y, damage, false);
+  
+  logCombat(`Leap! ${damage} damage`);
+  
+  updateEnemyHealthBar(target);
+  updateTargetFrame();
+  
+  if (target.hp <= 0) {
+    handleEnemyDeath(target);
+  }
+}
+
+/**
+ * SLOT 3: BLADE FLURRY - Channeled 4-hit combo
+ * 2.0s channel, 4 hits (0.75x each = 3.0x total), final hit may freeze
+ * Movement cancels and refunds cooldown
+ */
+let bladeFlurryState = null;
+
+function executeBladeFlurry(ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const target = currentTarget;
+  const targetId = target.id;
+  
+  // Cancel any existing flurry
+  if (bladeFlurryState) {
+    cancelBladeFlurry(false); // Don't refund, we're starting a new one
+  }
+  
+  // Start channel
+  bladeFlurryState = {
+    ability,
+    target,
+    targetId,
+    hitCount: 0,
+    maxHits: ability.hits,
+    intervalMs: ability.hitIntervalMs,
+    startTime: performance.now(),
+    timerId: null
+  };
+  
+  // Lock movement during channel
+  player.channeling = true;
+  
+  logCombat('Blade Flurry!');
+  
+  // Schedule hits
+  scheduleFlurryHit();
+}
+
+function scheduleFlurryHit() {
+  if (!bladeFlurryState) return;
+  
+  bladeFlurryState.timerId = setTimeout(() => {
+    if (!bladeFlurryState) return;
+    
+    const { ability, target, targetId, maxHits } = bladeFlurryState;
+    
+    // Guard: target dead or swapped
+    if (!target || target.hp <= 0 || !currentTarget || currentTarget.id !== targetId) {
+      cancelBladeFlurry(true);
+      return;
+    }
+    
+    // Deal damage (0.75x melee basic per hit)
+    const damage = Math.floor(BASIC_ATTACKS.melee.damage * ability.damageMultiplier);
+    target.hp -= damage;
+    markCombatEvent();
+    showDamageNumber(target.x, target.y, damage, false);
+    
+    bladeFlurryState.hitCount++;
+    
+    // Check if final hit
+    if (bladeFlurryState.hitCount >= maxHits) {
+      // 50% chance to freeze on final hit
+      if (ability.finalHitEffect && Math.random() < ability.finalHitEffect.chance) {
+        applyEffect(target, {
+          type: ability.finalHitEffect.type,
+          duration: ability.finalHitEffect.durationMs
+        });
+        logCombat('Final hit freezes!');
+      }
+      
+      // Channel complete
+      endBladeFlurry();
+    } else {
+      // Schedule next hit
+      scheduleFlurryHit();
+    }
+    
+    updateEnemyHealthBar(target);
+    updateTargetFrame();
+    
+    if (target.hp <= 0) {
+      handleEnemyDeath(target);
+      endBladeFlurry();
+    }
+  }, bladeFlurryState.intervalMs);
+}
+
+function cancelBladeFlurry(refund = true) {
+  if (!bladeFlurryState) return;
+  
+  const { ability, timerId } = bladeFlurryState;
+  
+  if (timerId) {
+    clearTimeout(timerId);
+  }
+  
+  // Unlock movement
+  const player = currentState?.player;
+  if (player) {
+    player.channeling = false;
+  }
+  
+  // Refund cooldown if cancelled by movement
+  if (refund && ability) {
+    actionCooldowns[ability.slot] = 0;
+    logCombat('Blade Flurry cancelled - cooldown refunded.');
+  }
+  
+  bladeFlurryState = null;
+}
+
+function endBladeFlurry() {
+  if (!bladeFlurryState) return;
+  
+  // Unlock movement
+  const player = currentState?.player;
+  if (player) {
+    player.channeling = false;
+  }
+  
+  bladeFlurryState = null;
+}
+
+/**
+ * SLOT 4: BURST - 3 rapid rifle shots
+ * 1.5x total damage (0.5x per shot), 4s cooldown
+ */
+function executeBurst(ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const target = currentTarget;
+  const targetId = target.id;
+  const shots = ability.shots || 3;
+  
+  // Clear any existing burst timers for this target
+  clearBurstTimers(targetId);
+  
+  // Fire rapid shots
+  for (let i = 0; i < shots; i++) {
+    const timeoutId = setTimeout(() => {
+      activeBurstTimers = activeBurstTimers.filter(t => t.timeoutId !== timeoutId);
+      
+      // Guard: target dead or swapped
+      if (!target || target.hp <= 0 || target._deathHandled) return;
+      if (!currentTarget || currentTarget.id !== targetId) return;
+      
+      // Calculate damage (0.5x ranged basic per shot)
+      const damage = Math.floor(BASIC_ATTACKS.ranged.damage * ability.damageMultiplier);
+      
+      showProjectile(player.x, player.y, target.x, target.y, getColors().projectilePlayer);
+      
+      target.hp -= damage;
+      markCombatEvent();
+      showDamageNumber(target.x, target.y, damage, false);
+      
+      updateEnemyHealthBar(target);
+      updateTargetFrame();
+      
+      if (target.hp <= 0) {
+        handleEnemyDeath(target);
+      }
+    }, i * (ability.shotIntervalMs || 150));
+    
+    activeBurstTimers.push({ timeoutId, targetId });
+  }
+  
+  logCombat(`Burst: ${shots} shots fired!`);
+}
+
+/**
+ * SLOT 5: CHARGED SHOT - Powerful cast-time attack
+ * 3.0s cast, 300% ranged damage, movement cancels with refund
+ */
+let chargedShotState = null;
+
+function executeChargedShot(ability) {
+  if (!currentTarget || currentTarget.hp <= 0) return;
+  
+  const player = currentState.player;
+  const target = currentTarget;
+  const targetId = target.id;
+  
+  // Cancel any existing charge
+  if (chargedShotState) {
+    cancelChargedShot(false);
+  }
+  
+  // Start cast
+  chargedShotState = {
+    ability,
+    target,
+    targetId,
+    startTime: performance.now(),
+    castTimeMs: ability.castTimeMs,
+    timerId: null
+  };
+  
+  // Lock movement during cast
+  player.casting = true;
+  
+  logCombat('Charging shot...');
+  
+  // Start cast timer
+  chargedShotState.timerId = setTimeout(() => {
+    if (!chargedShotState) return;
+    
+    const { target: castTarget, targetId: castTargetId } = chargedShotState;
+    
+    // Guard: target dead or swapped
+    if (!castTarget || castTarget.hp <= 0 || !currentTarget || currentTarget.id !== castTargetId) {
+      cancelChargedShot(true);
+      return;
+    }
+    
+    // Check LOS (could have been blocked during cast)
+    if (!hasLineOfSight(currentState, player.x, player.y, castTarget.x, castTarget.y)) {
+      cancelChargedShot(true);
+      logCombat('Target not in line of sight.');
+      return;
+    }
+    
+    // Calculate damage (300% ranged basic)
+    const damage = calculateAbilityDamage(ability.slot, 'ranged');
+    
+    // Big projectile
+    showProjectile(player.x, player.y, castTarget.x, castTarget.y, getColors().projectileSpecial, true);
+    
+    castTarget.hp -= damage;
+    markCombatEvent();
+    showDamageNumber(castTarget.x, castTarget.y, damage, false);
+    
+    logCombat(`Charged Shot! ${damage} damage`);
+    
+    updateEnemyHealthBar(castTarget);
+    updateTargetFrame();
+    
+    if (castTarget.hp <= 0) {
+      handleEnemyDeath(castTarget);
+    }
+    
+    endChargedShot();
+  }, ability.castTimeMs);
+}
+
+function cancelChargedShot(refund = true) {
+  if (!chargedShotState) return;
+  
+  const { ability, timerId } = chargedShotState;
+  
+  if (timerId) {
+    clearTimeout(timerId);
+  }
+  
+  // Unlock movement
+  const player = currentState?.player;
+  if (player) {
+    player.casting = false;
+  }
+  
+  // Refund cooldown if cancelled by movement
+  if (refund && ability) {
+    actionCooldowns[ability.slot] = 0;
+    logCombat('Charged Shot cancelled - cooldown refunded.');
+  }
+  
+  chargedShotState = null;
+}
+
+function endChargedShot() {
+  if (!chargedShotState) return;
+  
+  // Unlock movement
+  const player = currentState?.player;
+  if (player) {
+    player.casting = false;
+  }
+  
+  chargedShotState = null;
+}
+
+/**
+ * Check and cancel channeled abilities on player movement
+ * Called from movement.js when player starts moving
+ */
+export function cancelChanneledAbilities() {
+  if (bladeFlurryState) {
+    cancelBladeFlurry(true);
+  }
+  if (chargedShotState) {
+    cancelChargedShot(true);
+  }
+}
+
+// ============================================
 // BURST TIMER MANAGEMENT
 // ============================================
 
@@ -3700,10 +4338,10 @@ function executeSwordShockwave(weapon, ability) {
 }
 
 // ============================================
-// SENSE ABILITIES (slots 4-6) - Spends Sense resource
+// SENSE ABILITIES (slots 6-7) - Spends Sense resource + triggers GCD
 // ============================================
 const SENSE_ABILITIES = {
-  4: {
+  6: {
     id: 'pull',
     name: 'Pull',
     senseCost: 10,       // 50% of base maxSense (20) - allows chaining
@@ -3711,10 +4349,9 @@ const SENSE_ABILITIES = {
     radius: 8,           // Affects enemies within 8 tiles
     pullToDistance: 2,   // Pull them to within 2 tiles
     freezeDurationMs: 4000, // 4 second freeze (stun)
-    switchToMelee: true,    // Switch to melee weapon on use
     autoAttackClosest: true // Auto-attack closest after pull
   },
-  5: {
+  7: {
     id: 'push',
     name: 'Push',
     senseCost: 10,       // 50% of base maxSense (20) - allows chaining
@@ -3723,20 +4360,13 @@ const SENSE_ABILITIES = {
     // Push distance varies by starting distance:
     // 1 tile away = pushed 8 tiles, 8 tiles away = pushed 1 tile
     burnDurationMs: 4000, // 4 second burn
-    burnDamagePercent: 10, // 10% of max HP over duration
-    switchToRanged: true   // Switch to ranged weapon on use
-  },
-  6: {
-    id: 'locked',
-    name: 'Locked',
-    locked: true
+    burnDamagePercent: 10 // 10% of max HP over duration
   }
 };
 
 const SENSE_COOLDOWNS = {
-  4: { current: 0, max: 8000 },
-  5: { current: 0, max: 8000 },
-  6: { current: 0, max: 0 }
+  6: { current: 0, max: 8000 },
+  7: { current: 0, max: 8000 }
 };
 
 export function useSenseAbility(slot) {
@@ -3792,11 +4422,11 @@ export function useSenseAbility(slot) {
   
   // Execute ability (handles its own enemy detection)
   switch (ability.id) {
-    case 'push':
-      executePush(ability);
-      break;
     case 'pull':
       executePull(ability);
+      break;
+    case 'push':
+      executePush(ability);
       break;
     default:
       logCombat('Unknown sense ability');
@@ -3831,12 +4461,6 @@ function executePush(ability) {
   const player = currentState.player;
   const enemies = currentState.runtime.activeEnemies || [];
   const affected = [];
-  
-  // Switch to ranged weapon if not already
-  if (ability.switchToRanged && currentWeapon !== 'laser_rifle') {
-    setWeapon('laser_rifle');
-    logCombat('Switched to ranged weapon.');
-  }
   
   // Find enemies within push radius, storing their starting distance
   for (const enemy of enemies) {
@@ -3931,12 +4555,6 @@ function executePull(ability) {
   const player = currentState.player;
   const enemies = currentState.runtime.activeEnemies || [];
   const affected = [];
-  
-  // Switch to melee weapon if not already
-  if (ability.switchToMelee && currentWeapon !== 'vibro_sword') {
-    setWeapon('vibro_sword');
-    logCombat('Switched to melee weapon.');
-  }
   
   // Find enemies within pull radius (but not already close)
   for (const enemy of enemies) {
@@ -5271,6 +5889,9 @@ export function tryExecuteCombatIntent() {
     case 'weaponAbility':
       executeWeaponAbilityIntent(now);
       break;
+    case 'ability':
+      executeAbilityIntent(now);
+      break;
     // NOTE: senseAbility intents are not used - sense abilities execute immediately
   }
 }
@@ -5525,6 +6146,98 @@ function executeWeaponAbilityIntent(now) {
 }
 
 /**
+ * Execute unified ability intent (slots 2-5)
+ * Handles move-to-range and execution
+ */
+function executeAbilityIntent(_now) {
+  let target = getIntentTarget();
+  
+  // Target invalid - try to acquire nearest
+  if (!target || target.hp <= 0) {
+    const nearestEnemy = findNearestEnemy();
+    if (nearestEnemy) {
+      combatIntent.targetId = nearestEnemy.id;
+      target = nearestEnemy;
+      selectTarget(target);
+    } else {
+      logCombat('No enemies nearby');
+      clearCombatIntent();
+      return;
+    }
+  }
+  
+  // Ensure target is selected
+  if (currentTarget?.id !== target.id) {
+    selectTarget(target);
+  }
+  
+  // Check spawn immunity - schedule retry
+  if (hasSpawnImmunity(target)) {
+    combatIntent.retryAt = _now + 200;
+    return;
+  }
+  
+  const slot = combatIntent.slot;
+  const ability = getAbility(slot);
+  if (!ability) {
+    clearCombatIntent();
+    return;
+  }
+  
+  // Check if ability is locked
+  const player = currentState.player;
+  const flags = window.__vetuuFlags || {};
+  if (!isAbilityUnlocked(slot, player, flags)) {
+    logCombat(`${ability.name} is locked.`);
+    clearCombatIntent();
+    return;
+  }
+  
+  // Check cooldown
+  if (actionCooldowns[slot] > 0) {
+    combatIntent.retryAt = _now + 100;
+    return;
+  }
+  
+  // Check GCD
+  if (isGcdActive()) {
+    combatIntent.retryAt = _now + 100;
+    return;
+  }
+  
+  const dist = distCoords(player.x, player.y, target.x, target.y);
+  
+  // Out of range - move to attack range (unless gap closer)
+  if (dist > combatIntent.range && !ability.isGapCloser) {
+    if (!pendingAttack) {
+      moveToAttackRange(target, combatIntent.range, `ability_${slot}`);
+    }
+    return;
+  }
+  
+  // No LOS - move to attack range (for ranged abilities)
+  if (combatIntent.requiresLOS && !hasLineOfSight(currentState, player.x, player.y, target.x, target.y)) {
+    if (!pendingAttack) {
+      moveToAttackRange(target, combatIntent.range, `ability_${slot}`);
+    }
+    return;
+  }
+  
+  // Ready to execute ability - clear intent FIRST (one-shot)
+  const intentSlot = slot;
+  const wasAutoAttackEnabled = autoAttackEnabled;
+  clearCombatIntent();
+  
+  // Execute the ability
+  executeAbilityDirect(intentSlot);
+  
+  // Resume auto-attack after ability
+  if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
+    setAutoAttackIntent(currentTarget);
+  }
+}
+
+/**
  * Direct execution of weapon ability (bypasses intent system)
  * Used by intent system after move-to-range completes
  */
@@ -5717,7 +6430,6 @@ export function handleTargeting(action, data) {
       }
       break;
     case 'special': playerSpecial(); break;
-    case 'cycleWeapon': cycleWeapon(); break;
     
     // Move to and interact with NPC/object
     case 'interactWith': 
@@ -5729,20 +6441,23 @@ export function handleTargeting(action, data) {
       handleInteractWithCurrentTarget();
       break;
     
-    // Legacy action handler (still works with old format)
-    case 'action': useAction(data); break;
-    
-    // NEW: Weapon abilities (slots 1-3, no Sense cost)
-    case 'weaponAbility': 
-      useWeaponAbility(data); 
+    // UNIFIED ACTION BAR (Combat Overhaul)
+    // Slot 1: Auto attack toggle (independent of GCD)
+    case 'autoAttack':
+      toggleAutoAttack();
       break;
     
-    // NEW: Sense abilities (slots 4-6, spends Sense)
+    // Slots 2-5: Combat abilities (Leap, Flurry, Burst, Charged)
+    case 'ability': 
+      useAbility(data); 
+      break;
+    
+    // Slots 6-7: Sense abilities (Pull, Push)
     case 'senseAbility':
       useSenseAbility(data);
       break;
     
-    // NEW: Utility abilities (sprint, heal)
+    // Utility abilities (sprint, heal)
     case 'utility':
       useUtilityAbility(data);
       break;
@@ -6923,78 +7638,107 @@ function updateActionBarState() {
 // Cached slot elements for cooldown UI (avoids querySelector every tick)
 const cachedSlots = new Map(); // slotNum -> { slot, overlay, timer }
 
-function getCachedSlot(slotNum) {
-  if (!cachedSlots.has(slotNum)) {
-    const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="weapon"]`);
+function getCachedSlot(slotNum, actionType = 'ability') {
+  const key = `${slotNum}-${actionType}`;
+  if (!cachedSlots.has(key)) {
+    const slot = document.querySelector(`.action-slot[data-slot="${slotNum}"][data-action-type="${actionType}"]`);
     if (slot) {
-      cachedSlots.set(slotNum, { slot, overlay: null, timer: null });
+      cachedSlots.set(key, { slot, overlay: null, timer: null });
     }
   }
-  return cachedSlots.get(slotNum);
+  return cachedSlots.get(key);
 }
 
 function updateCooldownUI() {
-  const weapon = WEAPONS[currentWeapon];
-  if (!weapon) return;
-
-  // Update weapon ability cooldowns (slots 1-3) using cached elements
-  for (const slotNum of [1, 2, 3]) {
-    const cached = getCachedSlot(slotNum);
-    if (!cached) continue;
-    
-    const { slot } = cached;
-    const cooldown = actionCooldowns[slotNum];
-    const maxCooldown = actionMaxCooldowns[slotNum] || 1500;
-    const isOnCooldown = cooldown > 0;
-
-    slot.classList.toggle('on-cooldown', isOnCooldown);
-
-    if (isOnCooldown) {
-      // Create overlay/timer if needed
-      if (!cached.overlay) {
-        cached.overlay = document.createElement('div');
-        cached.overlay.className = 'cooldown-overlay';
-        slot.appendChild(cached.overlay);
-      }
-      if (!cached.timer) {
-        cached.timer = document.createElement('div');
-        cached.timer.className = 'cooldown-timer';
-        slot.appendChild(cached.timer);
-      }
-
-      const pct = (cooldown / maxCooldown) * 100;
-      cached.overlay.style.setProperty('--cooldown-pct', pct);
-      cached.timer.textContent = (cooldown / 1000).toFixed(1);
-    } else if (cached.overlay) {
-      // Remove overlay/timer when cooldown ends
-      cached.overlay.remove();
-      cached.timer?.remove();
-      cached.overlay = null;
-      cached.timer = null;
-    }
+  // Update combat ability cooldowns (slots 2-5)
+  for (const slotNum of [2, 3, 4, 5]) {
+    updateSlotCooldown(slotNum, 'ability');
+  }
+  
+  // Update sense ability cooldowns (slots 6-7)
+  for (const slotNum of [6, 7]) {
+    updateSlotCooldown(slotNum, 'sense');
   }
   
   // Update swing timer UI
   updateSwingTimerUI();
 }
 
+function updateSlotCooldown(slotNum, actionType) {
+  const cached = getCachedSlot(slotNum, actionType);
+  if (!cached) return;
+  
+  const { slot } = cached;
+  
+  // Get cooldown from appropriate source
+  let cooldown = 0;
+  let maxCooldown = 8000;
+  
+  if (actionType === 'sense') {
+    cooldown = SENSE_COOLDOWNS[slotNum]?.current || 0;
+    maxCooldown = SENSE_COOLDOWNS[slotNum]?.max || 8000;
+  } else {
+    cooldown = actionCooldowns[slotNum] || 0;
+    maxCooldown = actionMaxCooldowns[slotNum] || 8000;
+  }
+  
+  const isOnCooldown = cooldown > 0;
+  
+  // Check if ability is locked (for visual feedback)
+  const player = currentState?.player;
+  const flags = window.__vetuuFlags || {};
+  const ability = getAbility(slotNum);
+  const isLocked = ability && player && !isAbilityUnlocked(slotNum, player, flags);
+  
+  slot.classList.toggle('on-cooldown', isOnCooldown);
+  slot.classList.toggle('locked-slot', isLocked);
+
+  if (isOnCooldown) {
+    // Create overlay/timer if needed
+    if (!cached.overlay) {
+      cached.overlay = slot.querySelector('.cooldown-overlay') || document.createElement('div');
+      if (!cached.overlay.parentElement) {
+        cached.overlay.className = 'cooldown-overlay';
+        slot.appendChild(cached.overlay);
+      }
+    }
+    if (!cached.timer) {
+      cached.timer = slot.querySelector('.cooldown-timer') || document.createElement('span');
+      if (!cached.timer.parentElement) {
+        cached.timer.className = 'cooldown-timer';
+        slot.appendChild(cached.timer);
+      }
+    }
+
+    const pct = (cooldown / maxCooldown) * 100;
+    cached.overlay.style.setProperty('--cooldown-pct', pct);
+    cached.timer.textContent = (cooldown / 1000).toFixed(1);
+  } else if (cached.overlay) {
+    // Clear cooldown display
+    cached.overlay.style.setProperty('--cooldown-pct', 0);
+    if (cached.timer) cached.timer.textContent = '';
+  }
+}
+
 /**
  * Update GCD UI - shows visual lockout on all ability slots
+ * Slot 1 (auto attack) is NOT affected by GCD
+ * Slots 2-7 are affected by GCD
  */
 function updateGcdUI() {
   const gcdRemaining = getGcdRemaining();
   const isActive = gcdRemaining > 0;
   
-  // Update all weapon ability slots (1-3)
-  for (const slotNum of [1, 2, 3]) {
-    const slot = document.querySelector(`[data-slot="${slotNum}"][data-action-type="weapon"]`);
+  // Update combat ability slots (2-5: Leap, Flurry, Burst, Charged)
+  for (const slotNum of [2, 3, 4, 5]) {
+    const slot = document.querySelector(`[data-slot="${slotNum}"][data-action-type="ability"]`);
     if (slot) {
       slot.classList.toggle('gcd-active', isActive);
     }
   }
   
-  // Update sense ability slots (4-5)
-  for (const slotNum of [4, 5]) {
+  // Update sense ability slots (6-7: Pull, Push)
+  for (const slotNum of [6, 7]) {
     const slot = document.querySelector(`[data-slot="${slotNum}"][data-action-type="sense"]`);
     if (slot) {
       slot.classList.toggle('gcd-active', isActive);

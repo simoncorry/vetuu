@@ -115,12 +115,12 @@
 
     <!-- Action Bar (center bottom) -->
     <nav id="action-bar" aria-label="Actions">
-      <!-- Weapon Toggle Slot (with swing timer border) -->
-      <div class="weapon-slot-wrapper">
-        <button id="weapon-toggle-slot" class="action-slot weapon-slot" title="Toggle weapon (~, Space)">
-          <span id="weapon-slot-icon" class="slot-icon">🔫</span>
-          <span id="weapon-slot-label" class="slot-label">Rifle</span>
-          <span class="slot-key">~</span>
+      <!-- Slot 1: Auto Attack (with swing timer border) -->
+      <div class="auto-attack-slot-wrapper">
+        <button id="auto-attack-slot" class="action-slot auto-slot" data-slot="1" data-action-type="auto" title="Auto Attack (1, Space)">
+          <span id="auto-attack-icon" class="slot-icon">⚔️</span>
+          <span id="auto-attack-label" class="slot-label">Attack</span>
+          <span class="slot-key">1</span>
         </button>
         <!-- SVG stroke border for swing timer (GPU accelerated) -->
         <svg id="swing-timer-svg" class="swing-timer-border" viewBox="0 0 48 48">
@@ -130,28 +130,35 @@
         </svg>
       </div>
       
-      <div class="bar-divider"></div>
-      
-      <!-- Weapon Abilities (1-3, no Sense cost) -->
-      <div id="weapon-abilities" class="action-group">
-        <button class="action-slot" data-slot="1" data-action-type="weapon" title="Weapon ability 1">
-          <span class="slot-icon">💥</span>
-          <span class="slot-label">Burst</span>
-          <span class="slot-key">1</span>
-          <div class="cooldown-overlay"></div>
-          <span class="cooldown-timer"></span>
-        </button>
-        <button class="action-slot" data-slot="2" data-action-type="weapon" title="Weapon ability 2">
-          <span class="slot-icon">🎯</span>
-          <span class="slot-label">Suppress</span>
+      <!-- Combat Abilities (2-5: melee + ranged, all share GCD) -->
+      <div id="combat-abilities" class="action-group">
+        <!-- Melee Skills (Slots 2-3) -->
+        <button class="action-slot melee-slot" data-slot="2" data-action-type="ability" title="Leap - dash to target (8s CD)">
+          <span class="slot-icon">🦘</span>
+          <span class="slot-label">Leap</span>
           <span class="slot-key">2</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
-        <button class="action-slot" data-slot="3" data-action-type="weapon" title="Weapon ability 3">
-          <span class="slot-icon">⚡</span>
-          <span class="slot-label">Overcharge</span>
+        <button class="action-slot melee-slot" data-slot="3" data-action-type="ability" title="Blade Flurry - 4 rapid strikes (8s CD)">
+          <span class="slot-icon">⚔️</span>
+          <span class="slot-label">Flurry</span>
           <span class="slot-key">3</span>
+          <div class="cooldown-overlay"></div>
+          <span class="cooldown-timer"></span>
+        </button>
+        <!-- Ranged Skills (Slots 4-5) -->
+        <button class="action-slot ranged-slot" data-slot="4" data-action-type="ability" title="Burst - 3 rapid shots (4s CD)">
+          <span class="slot-icon">💥</span>
+          <span class="slot-label">Burst</span>
+          <span class="slot-key">4</span>
+          <div class="cooldown-overlay"></div>
+          <span class="cooldown-timer"></span>
+        </button>
+        <button class="action-slot ranged-slot" data-slot="5" data-action-type="ability" title="Charged Shot - powerful charge attack (10s CD)">
+          <span class="slot-icon">🎯</span>
+          <span class="slot-label">Charged</span>
+          <span class="slot-key">5</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
@@ -159,26 +166,21 @@
       
       <div class="slot-divider"></div>
       
-      <!-- Sense Abilities (4-6, spends Sense) -->
+      <!-- Sense Abilities (6-7, spends Sense + triggers GCD) -->
       <div id="sense-abilities" class="action-group">
-        <button class="action-slot sense-slot" data-slot="4" data-action-type="sense" title="Pull (spends Sense)">
+        <button class="action-slot sense-slot" data-slot="6" data-action-type="sense" title="Pull - draw enemies toward you (6)">
           <span class="slot-icon">🧲</span>
           <span class="slot-label">Pull</span>
-          <span class="slot-key">4</span>
+          <span class="slot-key">6</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
-        <button class="action-slot sense-slot" data-slot="5" data-action-type="sense" title="Push (spends Sense)">
+        <button class="action-slot sense-slot" data-slot="7" data-action-type="sense" title="Push - repel enemies away (7)">
           <span class="slot-icon">💨</span>
           <span class="slot-label">Push</span>
-          <span class="slot-key">5</span>
+          <span class="slot-key">7</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
-        </button>
-        <button class="action-slot sense-slot locked-slot" data-slot="6" data-action-type="sense" title="Locked until Act 3" disabled>
-          <span class="slot-icon">🔒</span>
-          <span class="slot-label">Locked</span>
-          <span class="slot-key">6</span>
         </button>
       </div>
       
@@ -186,9 +188,9 @@
       
       <!-- Utility Abilities -->
       <div id="utility-abilities" class="action-group">
-        <!-- Sprint slot with duration timer (like weapon slot) -->
+        <!-- Sprint slot with duration timer -->
         <div class="sprint-slot-wrapper">
-          <button class="action-slot utility-slot" data-slot="sprint" data-action-type="utility" title="Sprint (9, R)">
+          <button class="action-slot utility-slot" data-slot="sprint" data-action-type="utility" title="Sprint (R)">
             <span class="slot-icon">🏃</span>
             <span class="slot-label">Sprint</span>
             <span class="slot-key">R</span>
@@ -201,10 +203,10 @@
             <path class="sprint-timer-fill" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
           </svg>
         </div>
-        <button class="action-slot utility-slot" data-slot="heal" data-action-type="utility" title="Heal (0, Q)">
+        <button class="action-slot utility-slot" data-slot="heal" data-action-type="utility" title="Heal (Q)">
           <span class="slot-icon">💚</span>
           <span class="slot-label">Heal</span>
-          <span class="slot-key">0</span>
+          <span class="slot-key">Q</span>
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
