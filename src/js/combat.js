@@ -4465,15 +4465,18 @@ function executeDash(weapon, action) {
       player.x = newX;
       player.y = newY;
       
-      // Update visual position
+      // Update visual position (instant teleport, no transition)
       const playerEl = document.getElementById('player');
       if (playerEl) {
+        playerEl.style.transition = 'none';
         playerEl.style.transform = actorTransform(newX, newY);
+        playerEl.offsetHeight; // Force reflow
+        playerEl.style.transition = '';
       }
       
-      // Update camera
-      import('./game.js').then(({ updateCamera }) => {
-        if (typeof updateCamera === 'function') updateCamera(currentState);
+      // Update camera (instant snap)
+      import('./render.js').then(({ updateCamera }) => {
+        if (typeof updateCamera === 'function') updateCamera(currentState, 0);
       });
     }
   }
@@ -5856,8 +5859,8 @@ async function handlePlayerDeath() {
     playerEl.style.transition = '';
   }
 
-  // Update camera and fog for new position
-  updateCamera(currentState);
+  // Update camera and fog for new position (instant snap, no transition)
+  updateCamera(currentState, 0);
   revealAround(currentState, spawnX, spawnY);
   renderFog(currentState);
   updateHUD();
@@ -5904,7 +5907,7 @@ export async function reviveAtBase() {
     playerEl.style.transition = '';
     }
 
-    updateCamera(currentState);
+    updateCamera(currentState, 0); // Instant snap, no transition
   revealAround(currentState, spawnX, spawnY);
     renderFog(currentState);
     renderEnemies(currentState);
@@ -5983,7 +5986,7 @@ async function reviveAtCorpse() {
   
   corpseLocation = null;
 
-  updateCamera(currentState);
+  updateCamera(currentState, 0); // Instant snap, no transition
   updateHUD();
   updatePlayerHealthBar();
 

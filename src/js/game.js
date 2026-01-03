@@ -1450,7 +1450,7 @@ async function init() {
     window.__vetuuSpawnDebug = getSpawnDebugInfo;
 
     renderEnemies(state);
-    updateCamera(state);
+    updateCamera(state, 0); // Instant on initial load
     revealAround(state, state.player.x, state.player.y);
     renderFog(state);
     

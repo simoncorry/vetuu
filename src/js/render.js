@@ -410,6 +410,13 @@ export function updateCamera(state, duration = null) {
   const x = Math.max(0, Math.min(targetX, worldW - (vw / ZOOM_FACTOR)));
   const y = Math.max(0, Math.min(targetY, worldH - (vh / ZOOM_FACTOR)));
 
+  // Sync camera transition duration with player movement
+  // This ensures camera follows player at the exact same speed
+  // duration=0 means instant (teleport/respawn), duration=null uses CSS default
+  if (duration !== null) {
+    world.style.transitionDuration = duration === 0 ? '0ms' : `${duration}ms`;
+  }
+
   // Use scale3d + translate3d for consistent 3D transform handling in Safari
   world.style.transform = `scale3d(${ZOOM_FACTOR}, ${ZOOM_FACTOR}, 1) translate3d(${-x}px, ${-y}px, 0)`;
 }
