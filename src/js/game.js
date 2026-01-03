@@ -15,7 +15,7 @@ import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
-import { initDayCycle, updateDayCycle, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
+import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
 import { cssVar } from './utils.js';
 
 // ============================================
@@ -1234,6 +1234,7 @@ function gameLoop() {
   
   // Update day/night cycle
   updateDayCycle();
+  updateShadowCSS(); // Update shadow direction based on sun position
   
   // Update canvas lighting every frame for smooth torch movement
   updateLighting();

@@ -58,10 +58,12 @@
 }
 
 /* Dynamic silhouette shadow - projects the sprite shape as a shadow
-   Uses CSS custom properties for future directional support:
-   --shadow-skew: skewX angle (0 for straight down, negative for left, positive for right)
-   --shadow-scale-y: vertical flatten amount (0.35 default)
-   --shadow-scale-x: horizontal stretch (1.1 default)
+   CSS custom properties are set by time.js based on sun position:
+   --shadow-skew: skewX angle (0 for overhead sun, +/- for east/west)
+   --shadow-scale-y: vertical flatten (shorter at noon, longer at dawn/dusk)
+   --shadow-scale-x: horizontal stretch (wider at low sun angles)
+   --shadow-opacity: intensity (stronger at noon, fainter at night)
+   --shadow-blur: sharpness (sharper at noon, softer at dawn/dusk/night)
 */
 .actor > .shadow {
   position: absolute;
@@ -76,25 +78,38 @@
   background-size: 100% 100%;
   background-repeat: no-repeat;
   image-rendering: pixelated;
-  /* Transform to create projected shadow effect */
-  --shadow-skew: 0deg;
-  --shadow-scale-y: 0.35;
-  --shadow-scale-x: 1.1;
+  /* Transform to create projected shadow effect - values from :root (set by time.js) */
   transform-origin: center bottom;
   transform: 
-    scaleY(var(--shadow-scale-y)) 
-    scaleX(var(--shadow-scale-x)) 
-    skewX(var(--shadow-skew))
+    scaleY(var(--shadow-scale-y, 0.35)) 
+    scaleX(var(--shadow-scale-x, 1.1)) 
+    skewX(var(--shadow-skew, 0deg))
     translateY(2px);
-  /* Make it a shadow: black, semi-transparent, slightly blurred */
-  filter: brightness(0) blur(1px);
-  opacity: 0.15;
+  /* Make it a shadow: black, dynamic opacity/blur from sun position */
+  filter: brightness(0) blur(var(--shadow-blur, 1px));
+  opacity: var(--shadow-opacity, 0.15);
   pointer-events: none;
+  /* Smooth transition as sun moves (subtle, not jarring) */
+  transition: transform 30s linear, opacity 30s linear, filter 30s linear;
 }
 
-/* Directional shadow variants (for future use with directional sprites) */
-.actor.facing-left > .shadow { --shadow-skew: 15deg; }
-.actor.facing-right > .shadow { --shadow-skew: -15deg; }
+/* Directional offsets for character facing (adds to sun-based skew) */
+.actor.facing-left > .shadow { 
+  --shadow-skew-offset: 15deg; 
+  transform: 
+    scaleY(var(--shadow-scale-y, 0.35)) 
+    scaleX(var(--shadow-scale-x, 1.1)) 
+    skewX(calc(var(--shadow-skew, 0deg) + 15deg))
+    translateY(2px);
+}
+.actor.facing-right > .shadow { 
+  --shadow-skew-offset: -15deg;
+  transform: 
+    scaleY(var(--shadow-scale-y, 0.35)) 
+    scaleX(var(--shadow-scale-x, 1.1)) 
+    skewX(calc(var(--shadow-skew, 0deg) - 15deg))
+    translateY(2px);
+}
 
 /* Walk bob for all moving actors - sprite bobs, shadow stays planted */
 .actor.moving > .sprite {
@@ -104,6 +119,8 @@
 /* Shadow has subtle "bounce" effect when moving (slight scale pulse) */
 .actor.moving > .shadow {
   animation: shadow-pulse 0.2s ease-in-out infinite;
+  /* Override smooth transition during walk animation */
+  transition: none;
 }
 
 @keyframes walk-bob {
@@ -111,12 +128,22 @@
   50% { transform: scaleY(0.969); } /* ~1px head movement on 32px sprite */
 }
 
+/* Shadow pulse uses dynamic values from sun position */
 @keyframes shadow-pulse {
   0%, 100% { 
-    transform: scaleY(0.35) scaleX(1.1) skewX(var(--shadow-skew, 0deg)) translateY(2px); 
+    transform: 
+      scaleY(var(--shadow-scale-y, 0.35)) 
+      scaleX(var(--shadow-scale-x, 1.1)) 
+      skewX(var(--shadow-skew, 0deg)) 
+      translateY(2px); 
   }
   50% { 
-    transform: scaleY(0.32) scaleX(1.15) skewX(var(--shadow-skew, 0deg)) translateY(2px); /* Slight squash on footfall */
+    /* Slight squash on footfall - 10% reduction from current scale */
+    transform: 
+      scaleY(calc(var(--shadow-scale-y, 0.35) * 0.9)) 
+      scaleX(calc(var(--shadow-scale-x, 1.1) * 1.05)) 
+      skewX(var(--shadow-skew, 0deg)) 
+      translateY(2px);
   }
 }
 

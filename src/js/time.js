@@ -346,6 +346,100 @@ export function getDayPhase() {
   return 'dusk';
 }
 
+// ============================================
+// SUN POSITION & SHADOW SYSTEM
+// ============================================
+
+/**
+ * Get sun angle based on time of day.
+ * 0° = sunrise (6 AM, east)
+ * 90° = noon (overhead)
+ * 180° = sunset (6 PM, west)
+ * Returns null during night (no sun)
+ * 
+ * @returns {number|null} Sun angle in degrees, or null if nighttime
+ */
+export function getSunAngle() {
+  const hour = timeOfDay * 24;
+  
+  // Night: no sun (0:00 - 6:00)
+  if (hour < 6) return null;
+  
+  // Day: sun travels 0° to 180° from 6 AM to 6 PM
+  if (hour < 18) {
+    // Map 6-18 hours to 0-180 degrees
+    return ((hour - 6) / 12) * 180;
+  }
+  
+  // Night: no sun (18:00 - 24:00)
+  return null;
+}
+
+/**
+ * Get shadow parameters based on current sun position.
+ * Returns CSS-ready values for shadow transforms.
+ * 
+ * @returns {{
+ *   skewX: number,      // Skew angle in degrees (-30 to +30)
+ *   scaleY: number,     // Vertical scale (0.2 to 0.5)
+ *   scaleX: number,     // Horizontal scale (1.0 to 1.2)
+ *   opacity: number,    // Shadow opacity (0 to 0.2)
+ *   blur: number        // Blur amount in px (1 to 2)
+ * }}
+ */
+export function getShadowParams() {
+  const sunAngle = getSunAngle();
+  
+  // Night: very faint, diffuse shadows (moonlight/ambient)
+  if (sunAngle === null) {
+    return {
+      skewX: 0,
+      scaleY: 0.3,
+      scaleX: 1.0,
+      opacity: 0.05,
+      blur: 2
+    };
+  }
+  
+  // Day: dynamic shadows based on sun position
+  // skewX: sun at 0° (east) = shadow points west (+30°)
+  //        sun at 90° (overhead) = straight down (0°)
+  //        sun at 180° (west) = shadow points east (-30°)
+  const skewX = (90 - sunAngle) * 0.33; // Range: +30° to -30°
+  
+  // scaleY: shorter at noon (sun overhead), longer at dawn/dusk
+  // At 90° (noon): scaleY = 0.2 (shortest)
+  // At 0°/180°: scaleY = 0.5 (longest)
+  const angleFromNoon = Math.abs(sunAngle - 90);
+  const scaleY = 0.2 + (angleFromNoon / 90) * 0.3; // Range: 0.2 to 0.5
+  
+  // scaleX: slightly wider at low sun angles
+  const scaleX = 1.0 + (angleFromNoon / 90) * 0.15; // Range: 1.0 to 1.15
+  
+  // opacity: stronger at noon, softer at dawn/dusk
+  const opacity = 0.1 + (1 - angleFromNoon / 90) * 0.1; // Range: 0.1 to 0.2
+  
+  // blur: sharper at noon, softer at dawn/dusk
+  const blur = 1 + (angleFromNoon / 90) * 1; // Range: 1px to 2px
+  
+  return { skewX, scaleY, scaleX, opacity, blur };
+}
+
+/**
+ * Update CSS custom properties for shadows based on current time.
+ * Call this in the game loop (e.g., after updateDayCycle).
+ */
+export function updateShadowCSS() {
+  const params = getShadowParams();
+  const root = document.documentElement;
+  
+  root.style.setProperty('--shadow-skew', `${params.skewX.toFixed(1)}deg`);
+  root.style.setProperty('--shadow-scale-y', params.scaleY.toFixed(3));
+  root.style.setProperty('--shadow-scale-x', params.scaleX.toFixed(3));
+  root.style.setProperty('--shadow-opacity', params.opacity.toFixed(3));
+  root.style.setProperty('--shadow-blur', `${params.blur.toFixed(1)}px`);
+}
+
 // Expose debug tools
 if (typeof window !== 'undefined') {
   /**
@@ -387,12 +481,34 @@ if (typeof window !== 'undefined') {
   
   window.VETUU_SET_HOUR = (hour) => {
     setTimeOfDay(hour / 24);
-    return `Set to ${formatTimeOfDay()} (${getDayPhase()})`;
+    updateShadowCSS(); // Immediately update shadows
+    const params = getShadowParams();
+    return `Set to ${formatTimeOfDay()} (${getDayPhase()}) — Shadow: skew=${params.skewX.toFixed(1)}°, scaleY=${params.scaleY.toFixed(2)}, opacity=${params.opacity.toFixed(2)}`;
   };
   
   window.VETUU_TIME_SPEED = (scale) => {
     setTimeScale(scale);
     return `Time scale set to ${timeScale}x`;
+  };
+  
+  // Debug helper: preview shadow at specific hours
+  window.VETUU_SHADOW_PREVIEW = () => {
+    const hours = [0, 6, 9, 12, 15, 18, 21];
+    console.table(hours.map(h => {
+      const originalTime = timeOfDay;
+      setTimeOfDay(h / 24);
+      const params = getShadowParams();
+      setTimeOfDay(originalTime); // Restore
+      return {
+        hour: h,
+        sunAngle: getSunAngle()?.toFixed(0) ?? 'null',
+        skewX: params.skewX.toFixed(1),
+        scaleY: params.scaleY.toFixed(2),
+        opacity: params.opacity.toFixed(2),
+        blur: params.blur.toFixed(1)
+      };
+    }));
+    return 'Shadow parameters at key hours (current time unchanged)';
   };
 }
 
