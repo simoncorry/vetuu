@@ -194,6 +194,20 @@
   filter: brightness(1.1);
 }
 
+/* Dashing visual effect for Leap and similar abilities */
+#player.dashing {
+  filter: brightness(1.2) saturate(1.2);
+}
+
+#player.dashing > .sprite {
+  animation: dash-stretch 0.15s ease-out infinite;
+}
+
+@keyframes dash-stretch {
+  0%, 100% { transform: scale3d(1, 1, 1); }
+  50% { transform: scale3d(1.05, 0.95, 1); }
+}
+
 #player.healing {
   animation: heal-glow 0.5s ease-out forwards;
 }

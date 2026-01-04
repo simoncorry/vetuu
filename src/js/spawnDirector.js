@@ -274,7 +274,7 @@ export function releaseEnemyBlock(enemy) {
 // ENEMY TYPE DEFINITIONS (Simplified Combat)
 // ============================================
 // All enemies are either melee or ranged
-// - Melee: range = 2, faster movement (320-380ms)
+// - Melee: range = 1 (adjacent), faster movement (320-380ms)
 // - Ranged: range = 6, slower movement (420-480ms)
 //
 // Colors reference CSS variables (resolved at spawn time)
