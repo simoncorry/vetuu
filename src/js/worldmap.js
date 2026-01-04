@@ -279,6 +279,9 @@ function setupEventListeners() {
   // Zoom with wheel
   viewport.addEventListener('wheel', onWheel, { passive: false });
   
+  // Left-click to create path (if not dragging)
+  viewport.addEventListener('click', onClickToPath);
+  
   // Right-click for waypoints
   viewport.addEventListener('contextmenu', onContextMenu);
   
@@ -425,6 +428,10 @@ function onCursorMove(e) {
 // ============================================
 function onMouseDown(e) {
   if (e.button !== 0) return;  // Left click only
+  
+  // Track click start for click-to-path detection
+  clickStartX = e.clientX;
+  clickStartY = e.clientY;
   
   isDragging = true;
   dragStartX = e.clientX;
@@ -576,6 +583,48 @@ function updateZoomDisplay() {
     const zoomLevel = CONFIG.defaultViewRadius / viewRadius;
     zoomEl.textContent = `${zoomLevel.toFixed(1)}x`;
   }
+}
+
+// ============================================
+// CLICK-TO-PATH (LEFT-CLICK)
+// ============================================
+// Track if mouse moved during click (to distinguish drag from click)
+let clickStartX = 0;
+let clickStartY = 0;
+const CLICK_THRESHOLD = 5; // Pixels of movement allowed for a "click"
+
+function onClickToPath(e) {
+  if (!isOpen || !gameState) return;
+  
+  // Check if this was a drag (mouse moved significantly)
+  const dx = Math.abs(e.clientX - clickStartX);
+  const dy = Math.abs(e.clientY - clickStartY);
+  if (dx > CLICK_THRESHOLD || dy > CLICK_THRESHOLD) {
+    return; // Was a drag, not a click
+  }
+  
+  // Convert screen position to tile coordinates
+  const tilePos = screenToTile(e.clientX, e.clientY);
+  if (!tilePos) return;
+  
+  const { x, y } = tilePos;
+  
+  // Check map bounds
+  if (x < 0 || y < 0 || x >= gameState.map.meta.width || y >= gameState.map.meta.height) {
+    return;
+  }
+  
+  // Check if tile is revealed (can only path to explored areas)
+  if (!fogIsRevealed(Math.floor(x), Math.floor(y))) {
+    return;
+  }
+  
+  // Create path to clicked location
+  import('./movement.js').then(({ createPathTo }) => {
+    createPathTo(Math.floor(x), Math.floor(y), false);
+    // Close the map after setting path
+    closeWorldMap();
+  });
 }
 
 // ============================================

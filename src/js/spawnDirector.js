@@ -924,8 +924,8 @@ function generateDefaultSpawners() {
   // ============================================
   // FRONTIER RING: SCAVS (Mix solo + packs, Level 4-12)
   // ============================================
-  // 12 frontier strays
-  const frontierStrayPos = placeInRing(12, 35, 52, RADIUS.frontier);
+  // 11 frontier strays (-10%)
+  const frontierStrayPos = placeInRing(11, 35, 52, RADIUS.frontier);
   frontierStrayPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_frontier_stray_${id++}`,
@@ -943,8 +943,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 10 frontier packs
-  const frontierPackPos = placeInRing(10, 48, 62, RADIUS.frontier, Math.PI / 10);
+  // 9 frontier packs (-10%)
+  const frontierPackPos = placeInRing(9, 48, 62, RADIUS.frontier, Math.PI / 9);
   frontierPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_frontier_pack_${id++}`,
@@ -970,8 +970,8 @@ function generateDefaultSpawners() {
   // WILDERNESS RING: TROGS (Mix, Level 12-25)
   // More spawners with non-overlapping radii
   // ============================================
-  // 16 wilderness strays (including solo alphas)
-  const wildStrayPos = placeInRing(16, 70, 115, RADIUS.wilderness);
+  // 14 wilderness strays (-10%, including solo alphas)
+  const wildStrayPos = placeInRing(14, 70, 115, RADIUS.wilderness);
   wildStrayPos.forEach((pos, i) => {
     const isAlpha = i < 4; // First 4 are solo alphas
     result.push(createSpawner({
@@ -992,8 +992,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 14 wilderness packs
-  const wildPackPos = placeInRing(14, 85, 125, RADIUS.wilderness, Math.PI / 14);
+  // 13 wilderness packs (-10%)
+  const wildPackPos = placeInRing(13, 85, 125, RADIUS.wilderness, Math.PI / 13);
   wildPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_wild_pack_${id++}`,
@@ -1019,8 +1019,8 @@ function generateDefaultSpawners() {
   // DANGER RING: KARTH (Mix, Level 25-40)
   // Many spawners spread across large area
   // ============================================
-  // 20 danger strays (including solo alphas)
-  const dangerStrayPos = placeInRing(20, 135, 185, RADIUS.danger);
+  // 18 danger strays (-10%, including solo alphas)
+  const dangerStrayPos = placeInRing(18, 135, 185, RADIUS.danger);
   dangerStrayPos.forEach((pos, i) => {
     const isAlpha = i < 5; // First 5 are solo alphas
     result.push(createSpawner({
@@ -1041,8 +1041,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 20 danger packs
-  const dangerPackPos = placeInRing(20, 145, 188, RADIUS.danger, Math.PI / 20);
+  // 18 danger packs (-10%)
+  const dangerPackPos = placeInRing(18, 145, 188, RADIUS.danger, Math.PI / 18);
   dangerPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_danger_pack_${id++}`,
@@ -1068,8 +1068,8 @@ function generateDefaultSpawners() {
   // DEEP RING: ENDGAME (Mix, Level 40-50)
   // Extends into corners
   // ============================================
-  // 18 deep strays (including solo alphas)
-  const deepStrayPos = placeInRing(18, 200, 245, RADIUS.deep);
+  // 16 deep strays (-10%, including solo alphas)
+  const deepStrayPos = placeInRing(16, 200, 245, RADIUS.deep);
   deepStrayPos.forEach((pos, i) => {
     const isAlpha = i < 6; // First 6 are solo alphas
     result.push(createSpawner({
@@ -1090,8 +1090,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 18 deep packs in ring
-  const deepPackPos = placeInRing(18, 205, 248, RADIUS.deep, Math.PI / 18);
+  // 16 deep packs in ring (-10%)
+  const deepPackPos = placeInRing(16, 205, 248, RADIUS.deep, Math.PI / 16);
   deepPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_deep_pack_${id++}`,
