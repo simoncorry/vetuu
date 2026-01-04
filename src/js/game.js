@@ -735,8 +735,8 @@ let lightingTileSize = 24;
 let cachedViewport = null; // Cached viewport element for lighting
 
 // Viewport-based canvas tracking (like fog system)
-const LIGHT_BUFFER_TILES = 8;           // Extra tiles around viewport
-const LIGHT_REPOSITION_THRESHOLD = 5;   // Tiles moved before repositioning canvas
+const LIGHT_BUFFER_TILES = 20;          // Extra tiles around viewport (larger = less repositioning)
+const LIGHT_REPOSITION_THRESHOLD = 15;  // Tiles moved before repositioning canvas
 let lightCanvasOffsetX = 0;             // Canvas position in world pixels
 let lightCanvasOffsetY = 0;
 let lightCanvasWidth = 0;               // Canvas dimensions in pixels
