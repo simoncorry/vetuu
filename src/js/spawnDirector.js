@@ -689,7 +689,7 @@ function bootstrapSpawns() {
 // DEFAULT SPAWNER GENERATION
 // ============================================
 // Ring-based spawn distribution for level 50 progression:
-// Map is 480x320 (expanded from 200x140), base at ~(196, 128)
+// Map is 512x512 (expanded from 128x128), base at (256, 256)
 // Max vertical reach: ~128 tiles, Max horizontal reach: ~196 tiles
 // - SAFE (0-28): Solo nomads, levels 1-3, NPE zone
 // - FRONTIER (29-55): Solo critters + scav packs, levels 4-12

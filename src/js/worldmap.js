@@ -1420,7 +1420,7 @@ function renderRings(vp) {
   
   const offset = mapConfig.offset;
   
-  // Draw ORIGINAL MAP footprint (the 200x140 source map area)
+  // Draw ORIGINAL MAP footprint (the 128x128 source map area)
   const origMapMin = tileToScreen(offset.x, offset.y);
   const origMapMax = tileToScreen(offset.x + mapConfig.originalWidth, offset.y + mapConfig.originalHeight);
   

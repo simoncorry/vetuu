@@ -678,7 +678,7 @@ function drawRingOverlay() {
   
   const offset = mapConfig.offset;
   
-  // Draw ORIGINAL MAP footprint (the 200x140 source map area)
+  // Draw ORIGINAL MAP footprint (the 128x128 source map area)
   const originalMap = {
     minX: offset.x * TILE_SIZE,
     maxX: (offset.x + mapConfig.originalWidth) * TILE_SIZE,
@@ -706,8 +706,8 @@ function drawRingOverlay() {
   ringOverlayCtx.fillStyle = '#ffa500';
   ringOverlayCtx.strokeStyle = '#000';
   ringOverlayCtx.lineWidth = 2;
-  ringOverlayCtx.strokeText('ORIGINAL MAP (200x140)', originalMap.minX + 10, originalMap.minY - 10);
-  ringOverlayCtx.fillText('ORIGINAL MAP (200x140)', originalMap.minX + 10, originalMap.minY - 10);
+  ringOverlayCtx.strokeText('ORIGINAL MAP (128x128)', originalMap.minX + 10, originalMap.minY - 10);
+  ringOverlayCtx.fillText('ORIGINAL MAP (128x128)', originalMap.minX + 10, originalMap.minY - 10);
   
   // Draw BASE WALLS footprint (inner walled area)
   // Original wall coords: x 43-93, y 49-87 (after crop)
