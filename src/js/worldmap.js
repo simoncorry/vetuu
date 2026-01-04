@@ -121,10 +121,6 @@ let isOpen = false;
 let coordsEl = null;
 let lastCoordsText = '';
 
-// Zoom smoothing (trackpad/wheel accumulator)
-let zoomWheelAccum = 0;
-const ZOOM_THRESH = 100;  // Higher = less sensitive (tune 100-140)
-
 // Waypoints
 let waypoints = [];
 
@@ -491,25 +487,16 @@ function onWheel(e) {
   const tileBeforeX = mapCamX + (cursorX - vp.canvasW / 2) / vp.pixelsPerTile;
   const tileBeforeY = mapCamY + (cursorY - vp.canvasH / 2) / vp.pixelsPerTile;
   
-  // Normalize wheel delta: trackpads emit many small deltas, mouse wheels emit bigger ticks.
-  // Clamp prevents large deltas from skipping multiple zoom levels.
-  const raw = e.deltaY;
-  const delta = Math.max(-120, Math.min(120, raw));
-  
-  // Accumulate until threshold crossed, then apply discrete zoom steps.
-  zoomWheelAccum += delta;
+  // Continuous zoom: use multiplicative scaling for smooth feel on both
+  // trackpads (many small deltas) and mouse wheels (fewer large deltas).
+  // Sensitivity tuned so ~100px of scroll = ~2x zoom change.
+  const ZOOM_SENSITIVITY = 0.003;
+  const factor = Math.exp(e.deltaY * ZOOM_SENSITIVITY);
   
   const oldRadius = viewRadius;
-  while (zoomWheelAccum >= ZOOM_THRESH) {
-    zoomWheelAccum -= ZOOM_THRESH;
-    viewRadius = Math.min(CONFIG.maxViewRadius, viewRadius + CONFIG.zoomStep);
-  }
-  while (zoomWheelAccum <= -ZOOM_THRESH) {
-    zoomWheelAccum += ZOOM_THRESH;
-    viewRadius = Math.max(CONFIG.minViewRadius, viewRadius - CONFIG.zoomStep);
-  }
+  viewRadius = Math.max(CONFIG.minViewRadius, Math.min(CONFIG.maxViewRadius, viewRadius * factor));
   
-  if (viewRadius !== oldRadius) {
+  if (Math.abs(viewRadius - oldRadius) > 0.01) {
     // Recalculate pixelsPerTile with new zoom
     const newPixelsPerTile = Math.min(vp.canvasW, vp.canvasH) / (viewRadius * 2);
     
@@ -846,18 +833,16 @@ function onTouchMove(e) {
     
     scheduleRender();
   } else if (e.touches.length === 2 && lastTouchDist !== null) {
-    // Pinch zoom
+    // Pinch zoom - continuous scaling
     const dist = getTouchDistance(e.touches);
     const scale = dist / lastTouchDist;
     
-    if (scale > 1.05) {
-      viewRadius = Math.max(CONFIG.minViewRadius, viewRadius - CONFIG.zoomStep);
-      lastTouchDist = dist;
-      updateZoomDisplay();
-      scheduleRender();
-    } else if (scale < 0.95) {
-      viewRadius = Math.min(CONFIG.maxViewRadius, viewRadius + CONFIG.zoomStep);
-      lastTouchDist = dist;
+    // Apply continuous zoom: pinch out (scale > 1) = zoom in = smaller radius
+    const oldRadius = viewRadius;
+    viewRadius = Math.max(CONFIG.minViewRadius, Math.min(CONFIG.maxViewRadius, viewRadius / scale));
+    lastTouchDist = dist;
+    
+    if (Math.abs(viewRadius - oldRadius) > 0.01) {
       updateZoomDisplay();
       scheduleRender();
     }

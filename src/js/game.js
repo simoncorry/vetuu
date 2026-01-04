@@ -41,7 +41,7 @@ export const state = {
     luck: 1,
     level: 1,
     xp: 0,
-    xpToNext: 100,
+    xpToNext: 106, // XP_TABLE[1] = 80 + 1*6 + 1*20 = 106
     inventory: [],
     equipment: { weapon: 'laser_rifle', armor: null, accessory: null }
   },
@@ -207,8 +207,8 @@ function levelUp() {
   state.player.level++;
   const newLevel = state.player.level;
   
-  // Update XP threshold
-  state.player.xpToNext = XP_TABLE[newLevel + 1] || XP_TABLE[LEVEL_CAP];
+  // Update XP threshold (XP_TABLE[level] = cumulative XP to reach level+1)
+  state.player.xpToNext = XP_TABLE[newLevel] || XP_TABLE[LEVEL_CAP];
 
   // HP: +6 per level
   const newMaxHP = getMaxHP(state.player) + 6;
@@ -1303,6 +1303,10 @@ async function init() {
 
     const savedFlags = loadFlags();
     Object.assign(state.flags, savedFlags);
+
+    // Fix xpToNext for saves affected by the off-by-one bug
+    // Correct value: XP_TABLE[level] = cumulative XP to reach level+1
+    state.player.xpToNext = XP_TABLE[state.player.level] || XP_TABLE[LEVEL_CAP];
 
     // Normalize player health keys (maxHP/maxHp consistency)
     normalizeHealthKeys(state.player);
