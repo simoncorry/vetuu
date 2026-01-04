@@ -4294,7 +4294,14 @@ function useAbility(slot) {
   // Execute the ability
   autoAttackEnabled = true;
   inCombat = true;
-  provokeEnemy(currentTarget);
+  
+  // Only provoke immediately for instant abilities
+  // Cast/channel abilities provoke when damage is dealt (not on cast start)
+  const ability = getAbility(slot);
+  if (ability && ability.castType === 'instant') {
+    provokeEnemy(currentTarget);
+  }
+  
   executeAbilityDirect(slot);
 }
 
@@ -4540,6 +4547,11 @@ function scheduleFlurryHit() {
       return;
     }
     
+    // Provoke on first hit (not on channel start) - enemy reacts to being struck
+    if (bladeFlurryState.hitCount === 0) {
+      provokeEnemy(target);
+    }
+    
     // Deal damage (0.75x melee basic per hit)
     const damage = Math.floor(BASIC_ATTACKS.melee.damage * ability.damageMultiplier);
     target.hp -= damage;
@@ -4761,6 +4773,9 @@ function executeChargedShot(ability) {
       const castDuration = performance.now() - chargedShotState.startTime;
       console.log('[CHARGED] Cast complete after', Math.round(castDuration), 'ms, dealing', damage, 'damage');
     }
+    
+    // Provoke on cast completion (not on cast start) - enemy reacts to the shot
+    provokeEnemy(castTarget);
     
     // Big projectile
     showProjectile(player.x, player.y, castTarget.x, castTarget.y, getColors().projectileSpecial, true);
