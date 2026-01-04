@@ -813,39 +813,73 @@ function generateDefaultSpawners() {
     return positions;
   }
   
-  // Helper to place spawners in map corners - wrapping around corner arcs naturally
-  function placeInCorners(radius, spawnersPerCorner = 5) {
+  // Helper to place spawners in map corners - the area BEYOND the deep ring
+  // Uses proper geometry to calculate available corner space
+  function placeInCorners(radius, spawnersPerCorner = 4) {
     const positions = [];
     
-    // Corner definitions with angle ranges for natural arc distribution
-    // Angles point INWARD from corner toward map center
+    // Deep ring ends at ~248 tiles from center
+    // Map corners are at sqrt(256^2 + 256^2) ≈ 362 tiles from center
+    // Corner space is the ~114 tile gap between ring edge and map corner
+    const deepRingRadius = 248;
+    const margin = 15; // Stay away from map edges
+    
+    // Four corners with their angle ranges (from center, pointing outward)
+    // Each corner spans 90° arc
     const corners = [
-      { x: 0, y: 0, angleStart: 0, angleEnd: Math.PI / 2 },                    // Top-left: 0° to 90°
-      { x: mapSize, y: 0, angleStart: Math.PI / 2, angleEnd: Math.PI },        // Top-right: 90° to 180°
-      { x: mapSize, y: mapSize, angleStart: Math.PI, angleEnd: Math.PI * 1.5 }, // Bottom-right: 180° to 270°
-      { x: 0, y: mapSize, angleStart: Math.PI * 1.5, angleEnd: Math.PI * 2 },  // Bottom-left: 270° to 360°
+      { angleStart: Math.PI * 1.25, angleEnd: Math.PI * 1.5 },   // Top-left (225° to 270°)
+      { angleStart: Math.PI * 1.5, angleEnd: Math.PI * 1.75 },   // Top-right (270° to 315°)
+      { angleStart: Math.PI * 0.25, angleEnd: Math.PI * 0.5 },   // Bottom-right (45° to 90°)
+      { angleStart: Math.PI * 0.75, angleEnd: Math.PI * 1.0 },   // Bottom-left (135° to 180°)
     ];
     
     for (const corner of corners) {
-      // Place spawners along an arc from corner, varying distance and angle
+      const angleRange = corner.angleEnd - corner.angleStart;
+      
+      // Calculate how many spawners can fit with proper spacing
+      // Minimum separation = 2 * radius + buffer
+      const minSeparation = radius * 2 + 4;
+      
       for (let i = 0; i < spawnersPerCorner; i++) {
-        // Distribute angles across the corner's arc range with some randomness
-        const angleRange = corner.angleEnd - corner.angleStart;
-        const baseAngle = corner.angleStart + (i / spawnersPerCorner) * angleRange;
-        const angle = baseAngle + (Math.random() - 0.5) * (angleRange / spawnersPerCorner) * 0.6;
+        // Distribute angles evenly across corner arc with slight randomization
+        const angleProgress = (i + 0.5) / spawnersPerCorner;
+        const baseAngle = corner.angleStart + angleProgress * angleRange;
+        const angle = baseAngle + (Math.random() - 0.5) * (angleRange / spawnersPerCorner) * 0.3;
         
-        // Vary distance from corner (30-70 tiles inward)
-        const dist = 35 + Math.random() * 40 + (i % 2) * 15;
+        // Calculate max distance to map edge at this angle
+        // For angle θ from center (256,256), find where ray hits map boundary
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
         
-        const targetX = corner.x + Math.cos(angle) * dist;
-        const targetY = corner.y + Math.sin(angle) * dist;
+        // Distance to each edge from center
+        const distToRight = cosA > 0 ? (mapSize - margin - center.x) / cosA : Infinity;
+        const distToLeft = cosA < 0 ? (margin - center.x) / cosA : Infinity;
+        const distToBottom = sinA > 0 ? (mapSize - margin - center.y) / sinA : Infinity;
+        const distToTop = sinA < 0 ? (margin - center.y) / sinA : Infinity;
         
-        // Clamp to map bounds with margin
-        const clampedX = Math.max(15, Math.min(mapSize - 15, targetX));
-        const clampedY = Math.max(15, Math.min(mapSize - 15, targetY));
+        const maxDist = Math.min(
+          Math.abs(distToRight), 
+          Math.abs(distToLeft), 
+          Math.abs(distToBottom), 
+          Math.abs(distToTop)
+        );
+        
+        // Place spawner between deep ring edge and map edge
+        // Distribute across available depth with alternating pattern
+        const minDist = deepRingRadius + radius + 5;
+        const availableDepth = maxDist - minDist;
+        
+        if (availableDepth < minSeparation) continue; // Not enough space
+        
+        // Stagger distances to avoid radial lines
+        const depthProgress = (i % 2 === 0) ? 0.3 : 0.7;
+        const dist = minDist + availableDepth * depthProgress + (Math.random() - 0.5) * availableDepth * 0.3;
+        
+        const targetX = center.x + Math.cos(angle) * dist;
+        const targetY = center.y + Math.sin(angle) * dist;
         
         // Find valid position (avoids roads AND overlaps)
-        const finalPos = findValidPosition(clampedX, clampedY, radius);
+        const finalPos = findValidPosition(targetX, targetY, radius);
         if (finalPos) {
           positions.push(finalPos);
         }
@@ -1081,8 +1115,9 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // Corner spawners - naturally distributed along corner arcs (5 per corner = 20 total)
-  const cornerPos = placeInCorners(RADIUS.corner, 5);
+  // Corner spawners - fill space beyond deep ring (4 per corner = 16 total)
+  // Properly calculated to avoid overlap using available corner geometry
+  const cornerPos = placeInCorners(RADIUS.corner, 4);
   cornerPos.forEach((pos, i) => {
     const isPack = i % 2 === 0; // Alternate pack/stray
     if (isPack) {
