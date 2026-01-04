@@ -1562,5 +1562,37 @@
       "y": 72,
       "solid": true
     }
+  ],
+  "regions": [
+    {
+      "id": "region_drycross",
+      "name": "Drycross",
+      "bounds": {
+        "x0": 3,
+        "y0": 19,
+        "x1": 53,
+        "y1": 57
+      }
+    },
+    {
+      "id": "region_ritual_flats",
+      "name": "Ritual Flats",
+      "bounds": {
+        "x0": 62,
+        "y0": 62,
+        "x1": 90,
+        "y1": 79
+      }
+    },
+    {
+      "id": "region_dust_veil",
+      "name": "Dust Veil",
+      "bounds": {
+        "x0": 31,
+        "y0": 20,
+        "x1": 53,
+        "y1": 36
+      }
+    }
   ]
 }
