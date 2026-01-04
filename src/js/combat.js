@@ -2948,15 +2948,15 @@ function aiGrenadierBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfi
   
   // Currently telegraphing grenade?
   if (enemy.grenadeTelegraphUntil > t && enemy.grenadeTarget) {
-    // Show telegraph at target location
-    updateGrenadeTelegraph(enemy, true);
+    // Show telegraph at target location (uses stored radius)
+    updateGrenadeTelegraph(enemy, true, enemy.grenadeRadius);
     return true;
   }
   
   // Telegraph just completed?
   if (enemy.grenadeTarget && enemy.grenadeTelegraphUntil <= t && enemy.grenadeTelegraphUntil > 0) {
     // Explode at target location
-    executeGrenadeExplosion(enemy, enemy.grenadeTarget, grenadeRadius, weapon, t);
+    executeGrenadeExplosion(enemy, enemy.grenadeTarget, enemy.grenadeRadius || grenadeRadius, weapon, t);
     enemy.grenadeTarget = null;
     enemy.grenadeTelegraphUntil = 0;
     enemy.grenadeCooldownUntil = t + grenadeCdMs;
@@ -2979,9 +2979,10 @@ function aiGrenadierBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfi
     // Start grenade telegraph
     const player = currentState.player;
     enemy.grenadeTarget = { x: player.x, y: player.y }; // Lock target position
+    enemy.grenadeRadius = grenadeRadius;  // Store for telegraph updates
     enemy.grenadeTelegraphUntil = t + grenadeMs;
     recordPackGrenade(enemy.packId, t);
-    updateGrenadeTelegraph(enemy, true);
+    updateGrenadeTelegraph(enemy, true, grenadeRadius);
     return true;
   }
   
@@ -2990,8 +2991,12 @@ function aiGrenadierBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfi
 
 /**
  * Update grenade telegraph visual (circle on ground)
+ * Position set via CSS custom properties, styling in effects.css
+ * @param {object} enemy - Enemy entity with grenadeTarget
+ * @param {boolean} show - Whether to show or hide
+ * @param {number} radius - Blast radius in tiles (default 2)
  */
-function updateGrenadeTelegraph(enemy, show) {
+function updateGrenadeTelegraph(enemy, show, radius = 2) {
   // Remove existing telegraph
   const existingTelegraph = document.querySelector(`[data-grenade-owner="${enemy.id}"]`);
   if (existingTelegraph) {
@@ -3001,22 +3006,14 @@ function updateGrenadeTelegraph(enemy, show) {
   if (show && enemy.grenadeTarget) {
     const actorLayer = document.getElementById('actor-layer');
     if (actorLayer) {
+      const diameter = radius * 2 + 1;  // e.g., radius 2 → 5 tiles
       const telegraph = document.createElement('div');
       telegraph.className = 'grenade-telegraph';
       telegraph.setAttribute('data-grenade-owner', enemy.id);
-      telegraph.style.cssText = `
-        position: absolute;
-        left: ${(enemy.grenadeTarget.x - 2) * TILE_SIZE}px;
-        top: ${(enemy.grenadeTarget.y - 2) * TILE_SIZE}px;
-        width: ${5 * TILE_SIZE}px;
-        height: ${5 * TILE_SIZE}px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(255, 100, 0, 0.4) 0%, rgba(255, 50, 0, 0.2) 70%, transparent 100%);
-        border: 2px solid rgba(255, 100, 0, 0.8);
-        pointer-events: none;
-        z-index: 15;
-        animation: grenade-pulse 0.3s ease-in-out infinite alternate;
-      `;
+      // Position via CSS custom properties, appearance via CSS class
+      telegraph.style.setProperty('--pos-x', `${(enemy.grenadeTarget.x - radius) * TILE_SIZE}px`);
+      telegraph.style.setProperty('--pos-y', `${(enemy.grenadeTarget.y - radius) * TILE_SIZE}px`);
+      telegraph.style.setProperty('--size', `${diameter * TILE_SIZE}px`);
       actorLayer.appendChild(telegraph);
     }
   }
@@ -3025,7 +3022,7 @@ function updateGrenadeTelegraph(enemy, show) {
 /**
  * Execute grenade explosion - damage all enemies in radius
  */
-function executeGrenadeExplosion(enemy, target, radius, weapon, t) {
+function executeGrenadeExplosion(enemy, target, radius, weapon, _t) {
   const player = currentState.player;
   const dist = distCoords(player.x, player.y, target.x, target.y);
   
@@ -3068,6 +3065,7 @@ function executeGrenadeExplosion(enemy, target, radius, weapon, t) {
 
 /**
  * Show explosion visual effect
+ * Position/size via CSS custom properties, styling in effects.css
  */
 function showExplosionEffect(x, y, radius) {
   const actorLayer = document.getElementById('actor-layer');
@@ -3075,18 +3073,9 @@ function showExplosionEffect(x, y, radius) {
   
   const explosion = document.createElement('div');
   explosion.className = 'grenade-explosion';
-  explosion.style.cssText = `
-    position: absolute;
-    left: ${(x - radius) * TILE_SIZE}px;
-    top: ${(y - radius) * TILE_SIZE}px;
-    width: ${(radius * 2 + 1) * TILE_SIZE}px;
-    height: ${(radius * 2 + 1) * TILE_SIZE}px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 200, 50, 0.9) 0%, rgba(255, 100, 0, 0.6) 50%, transparent 100%);
-    pointer-events: none;
-    z-index: 20;
-    animation: explosion-burst 0.4s ease-out forwards;
-  `;
+  explosion.style.setProperty('--pos-x', `${(x - radius) * TILE_SIZE}px`);
+  explosion.style.setProperty('--pos-y', `${(y - radius) * TILE_SIZE}px`);
+  explosion.style.setProperty('--size', `${(radius * 2 + 1) * TILE_SIZE}px`);
   actorLayer.appendChild(explosion);
   
   // Remove after animation
@@ -3481,8 +3470,8 @@ function enemyAttack(enemy, weapon, t = nowMs()) {
   // Set cooldown using perf time
   enemy.cooldownUntil = t + weapon.cooldown;
 
-  // Renew attacker lease (successful attack)
-  acquireAttackerSlot(enemy, t);
+  // Renew attacker lease (successful attack) - preserve role-based priority
+  acquireAttackerSlot(enemy, t, getEngageMeta(enemy));
 
   if (!currentTarget || currentTarget.hp <= 0) {
     autoTargetClosestAttacker();

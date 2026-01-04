@@ -200,9 +200,6 @@ function startMove(targetX, targetY) {
   const prevX = state.player.x;
   const prevY = state.player.y;
   
-  // Check for opportunity swipes from melee enemies (anti-kite mechanic)
-  checkOpportunitySwipes(prevX, prevY);
-  
   // Check if this is a diagonal move
   const dx = targetX - state.player.x;
   const dy = targetY - state.player.y;
@@ -231,6 +228,10 @@ function startMove(targetX, targetY) {
   // Update logical position immediately
   state.player.x = targetX;
   state.player.y = targetY;
+  
+  // Check for opportunity swipes from melee enemies AFTER position update
+  // This detects when player moves away from adjacent melee enemies
+  checkOpportunitySwipes(prevX, prevY);
   
   // Setup animation - disable CSS transition, we'll animate manually
   if (playerEl) {
