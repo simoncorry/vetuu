@@ -493,3 +493,122 @@ export function renderPath(path) {
 export function clearPath() {
   actorLayer.querySelectorAll('.path-marker').forEach(el => el.remove());
 }
+
+// ============================================
+// DEBUG RING OVERLAY
+// ============================================
+let ringOverlayCanvas = null;
+let ringOverlayCtx = null;
+let ringOverlayVisible = false;
+
+/**
+ * Toggle debug ring overlay showing spawn zone boundaries.
+ * Call from console: VETUU_RINGS()
+ */
+window.VETUU_RINGS = function() {
+  ringOverlayVisible = !ringOverlayVisible;
+  
+  if (!ringOverlayCanvas) {
+    createRingOverlay();
+  }
+  
+  if (ringOverlayVisible) {
+    drawRingOverlay();
+    ringOverlayCanvas.style.display = 'block';
+    console.log('[Debug] Ring overlay ON - showing spawn zone boundaries');
+  } else {
+    ringOverlayCanvas.style.display = 'none';
+    console.log('[Debug] Ring overlay OFF');
+  }
+  
+  return ringOverlayVisible;
+};
+
+function createRingOverlay() {
+  const groundLayer = document.getElementById('ground-layer');
+  if (!groundLayer) return;
+  
+  ringOverlayCanvas = document.createElement('canvas');
+  ringOverlayCanvas.id = 'ring-debug-overlay';
+  ringOverlayCanvas.width = mapWidth * TILE_SIZE;
+  ringOverlayCanvas.height = mapHeight * TILE_SIZE;
+  ringOverlayCanvas.style.cssText = 'position: absolute; top: 0; left: 0; pointer-events: none; z-index: 10;';
+  ringOverlayCanvas.style.display = 'none';
+  
+  groundLayer.appendChild(ringOverlayCanvas);
+  ringOverlayCtx = ringOverlayCanvas.getContext('2d');
+}
+
+function drawRingOverlay() {
+  if (!ringOverlayCtx || !currentState) return;
+  
+  // Get base center from map offset
+  const ox = currentState.map.meta.originalOffset?.x || 44;
+  const oy = currentState.map.meta.originalOffset?.y || 32;
+  const baseCenterX = (56 + ox) * TILE_SIZE;
+  const baseCenterY = (38 + oy) * TILE_SIZE;
+  
+  // Ring boundaries (in tiles) - must match spawnDirector.js RINGS
+  const rings = [
+    { name: 'SAFE', max: 24, color: '#00ff00' },      // Green
+    { name: 'FRONTIER', max: 42, color: '#ffff00' },  // Yellow
+    { name: 'WILDERNESS', max: 58, color: '#ff8800' }, // Orange
+    { name: 'DANGER', max: 68, color: '#ff0000' },    // Red
+    { name: 'DEEP', max: 80, color: '#ff00ff' }       // Magenta (map edge)
+  ];
+  
+  // Clear canvas
+  ringOverlayCtx.clearRect(0, 0, ringOverlayCanvas.width, ringOverlayCanvas.height);
+  
+  // Draw each ring boundary
+  for (const ring of rings) {
+    const radiusPx = ring.max * TILE_SIZE;
+    
+    // Draw circle
+    ringOverlayCtx.beginPath();
+    ringOverlayCtx.arc(baseCenterX, baseCenterY, radiusPx, 0, Math.PI * 2);
+    ringOverlayCtx.strokeStyle = ring.color;
+    ringOverlayCtx.lineWidth = 2;
+    ringOverlayCtx.setLineDash([10, 10]);
+    ringOverlayCtx.stroke();
+    
+    // Draw label
+    ringOverlayCtx.setLineDash([]);
+    ringOverlayCtx.font = 'bold 14px monospace';
+    ringOverlayCtx.fillStyle = ring.color;
+    ringOverlayCtx.strokeStyle = '#000';
+    ringOverlayCtx.lineWidth = 3;
+    
+    // Position label at top of circle
+    const labelX = baseCenterX;
+    const labelY = baseCenterY - radiusPx + 20;
+    
+    ringOverlayCtx.strokeText(ring.name, labelX - 30, labelY);
+    ringOverlayCtx.fillText(ring.name, labelX - 30, labelY);
+    
+    // Distance label
+    const distLabel = `${ring.max} tiles`;
+    ringOverlayCtx.strokeText(distLabel, labelX - 25, labelY + 14);
+    ringOverlayCtx.fillText(distLabel, labelX - 25, labelY + 14);
+  }
+  
+  // Draw base center marker
+  ringOverlayCtx.beginPath();
+  ringOverlayCtx.arc(baseCenterX, baseCenterY, 8, 0, Math.PI * 2);
+  ringOverlayCtx.fillStyle = '#ffffff';
+  ringOverlayCtx.fill();
+  ringOverlayCtx.strokeStyle = '#000';
+  ringOverlayCtx.lineWidth = 2;
+  ringOverlayCtx.setLineDash([]);
+  ringOverlayCtx.stroke();
+  
+  // Cross-hair at center
+  ringOverlayCtx.beginPath();
+  ringOverlayCtx.moveTo(baseCenterX - 15, baseCenterY);
+  ringOverlayCtx.lineTo(baseCenterX + 15, baseCenterY);
+  ringOverlayCtx.moveTo(baseCenterX, baseCenterY - 15);
+  ringOverlayCtx.lineTo(baseCenterX, baseCenterY + 15);
+  ringOverlayCtx.strokeStyle = '#ff0000';
+  ringOverlayCtx.lineWidth = 2;
+  ringOverlayCtx.stroke();
+}
