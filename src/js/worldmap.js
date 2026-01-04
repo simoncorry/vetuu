@@ -128,6 +128,7 @@ let lastPlayerY = 0;
 // Render state
 let needsRender = true;
 let isOpen = false;
+let renderLoopId = null;  // For continuous updates while map is open
 
 // UI elements
 let coordsEl = null;
@@ -347,7 +348,10 @@ export function openWorldMap() {
   // Populate waypoint list
   populateWaypointList();
   
-  // Render
+  // Start render loop for live updates
+  startRenderLoop();
+  
+  // Initial render
   scheduleRender();
   
   console.log('[WorldMap] Opened');
@@ -359,10 +363,50 @@ export function closeWorldMap() {
   isOpen = false;
   overlay.classList.remove('open');
   
+  // Stop render loop
+  stopRenderLoop();
+  
   // Stop momentum
   stopMomentum();
   
   console.log('[WorldMap] Closed');
+}
+
+// ============================================
+// RENDER LOOP (for live player/path updates)
+// ============================================
+function startRenderLoop() {
+  if (renderLoopId) return;
+  
+  function loop() {
+    if (!isOpen) {
+      renderLoopId = null;
+      return;
+    }
+    
+    // Check if player moved
+    if (gameState?.player) {
+      const playerMoved = 
+        Math.abs(gameState.player.x - lastPlayerX) > 0.01 ||
+        Math.abs(gameState.player.y - lastPlayerY) > 0.01;
+      
+      if (playerMoved) {
+        updatePlayerPosition();
+        scheduleRender();
+      }
+    }
+    
+    renderLoopId = requestAnimationFrame(loop);
+  }
+  
+  renderLoopId = requestAnimationFrame(loop);
+}
+
+function stopRenderLoop() {
+  if (renderLoopId) {
+    cancelAnimationFrame(renderLoopId);
+    renderLoopId = null;
+  }
 }
 
 export function toggleWorldMap() {

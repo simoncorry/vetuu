@@ -47,7 +47,6 @@
   position: absolute;
   width: var(--tile-size);
   height: var(--tile-size);
-  background-color: var(--tile-color, var(--sand));
 }
 
 /* ---------- Objects - GPU accelerated via transform ---------- */

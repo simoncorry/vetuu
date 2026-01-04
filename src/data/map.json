@@ -20,47 +20,47 @@
       },
       "1": {
         "name": "dune",
-        "color": "#C9A870",
+        "color": "transparent",
         "walkable": true
       },
       "2": {
         "name": "rock",
-        "color": "#6E6659",
+        "color": "transparent",
         "walkable": true
       },
       "3": {
         "name": "road",
-        "color": "#A8895F",
+        "color": "transparent",
         "walkable": true
       },
       "4": {
         "name": "scrapTown",
-        "color": "#52504B",
+        "color": "transparent",
         "walkable": true
       },
       "5": {
         "name": "planks",
-        "color": "#8A5F3D",
+        "color": "transparent",
         "walkable": true
       },
       "6": {
         "name": "ash",
-        "color": "#8A7858",
+        "color": "transparent",
         "walkable": true
       },
       "7": {
         "name": "salt",
-        "color": "#D5CFC0",
+        "color": "transparent",
         "walkable": true
       },
       "8": {
         "name": "drySand",
-        "color": "#B08A5C",
+        "color": "transparent",
         "walkable": true
       },
       "9": {
         "name": "landingPad",
-        "color": "#5A5854",
+        "color": "transparent",
         "walkable": true
       },
       "a": {
@@ -85,12 +85,12 @@
       },
       "e": {
         "name": "wornRoad",
-        "color": "#9A8050",
+        "color": "transparent",
         "walkable": true
       },
       "f": {
         "name": "crackedRoad",
-        "color": "#8D7548",
+        "color": "transparent",
         "walkable": true
       }
     },
