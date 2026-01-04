@@ -22,6 +22,7 @@ import { cssVar } from './utils.js';
 import { getQuestsByState } from './quests.js';
 import { mapConfig, getRingVisualization } from './mapConfig.js';
 import { getSpawners } from './spawnDirector.js';
+import { getCurrentPath } from './movement.js';
 
 // ============================================
 // CONFIGURATION
@@ -622,8 +623,8 @@ function onClickToPath(e) {
   // Create path to clicked location
   import('./movement.js').then(({ createPathTo }) => {
     createPathTo(Math.floor(x), Math.floor(y), false);
-    // Close the map after setting path
-    closeWorldMap();
+    // Re-render to show the path
+    scheduleRender();
   });
 }
 
@@ -1126,6 +1127,9 @@ function renderOverlay(vp) {
     renderRings(vp);
   }
   
+  // Render movement path
+  renderPath(vp);
+  
   // Render player (always on top)
   renderPlayer(vp);
 }
@@ -1453,6 +1457,65 @@ function renderWaypoints(vp) {
     overlayCtx.stroke();
     
     overlayCtx.restore();
+  }
+}
+
+function renderPath(vp) {
+  const path = getCurrentPath();
+  if (!path || path.length === 0) return;
+  
+  const colors = getColors();
+  const pathLen = path.length;
+  
+  // Path marker size scales with zoom
+  const markerSize = Math.max(2, Math.min(6, vp.pixelsPerTile * 0.3));
+  const halfSize = markerSize / 2;
+  
+  overlayCtx.fillStyle = colors.path || '#00ff88';
+  overlayCtx.strokeStyle = colors.pathStroke || 'rgba(0,0,0,0.5)';
+  overlayCtx.lineWidth = 1;
+  
+  for (let i = 0; i < pathLen; i++) {
+    const { x, y } = path[i];
+    
+    // Check if in view
+    if (x < vp.left - 1 || x > vp.right + 1 || y < vp.top - 1 || y > vp.bottom + 1) {
+      continue;
+    }
+    
+    const pos = tileToScreen(x + 0.5, y + 0.5);
+    if (!pos) continue;
+    
+    // Opacity increases along path (more opaque near destination)
+    overlayCtx.globalAlpha = 0.4 + (i / pathLen) * 0.5;
+    
+    // Draw square marker
+    overlayCtx.fillRect(pos.x - halfSize, pos.y - halfSize, markerSize, markerSize);
+    overlayCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, markerSize, markerSize);
+  }
+  
+  overlayCtx.globalAlpha = 1;
+  
+  // Draw destination marker (larger, at end of path)
+  if (pathLen > 0) {
+    const dest = path[pathLen - 1];
+    const destPos = tileToScreen(dest.x + 0.5, dest.y + 0.5);
+    if (destPos) {
+      const destSize = markerSize * 2;
+      const halfDest = destSize / 2;
+      
+      overlayCtx.fillStyle = '#ffff00';
+      overlayCtx.strokeStyle = 'rgba(0,0,0,0.8)';
+      overlayCtx.lineWidth = 2;
+      
+      // Draw diamond shape for destination
+      overlayCtx.save();
+      overlayCtx.translate(destPos.x, destPos.y);
+      overlayCtx.rotate(Math.PI / 4);
+      overlayCtx.fillRect(-halfDest, -halfDest, destSize, destSize);
+      overlayCtx.strokeRect(-halfDest, -halfDest, destSize, destSize);
+      overlayCtx.restore();
+    }
   }
 }
 
