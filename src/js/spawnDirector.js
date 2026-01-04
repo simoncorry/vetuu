@@ -2644,5 +2644,5 @@ if (typeof window !== 'undefined') {
   window.VETUU_POPULATION = debugPopulation;
 }
 
-export { ENEMY_TYPES, RINGS };
+export { ENEMY_TYPES };
 
