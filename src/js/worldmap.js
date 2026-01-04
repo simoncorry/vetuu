@@ -1416,6 +1416,37 @@ function renderRings(vp) {
   overlayCtx.strokeStyle = '#ff0000';
   overlayCtx.lineWidth = 2;
   overlayCtx.stroke();
+  
+  // Draw base footprint (wall boundaries)
+  // Original wall coords: x 71-121, y 49-87
+  const offset = mapConfig.offset;
+  const baseWallsMin = tileToScreen(71 + offset.x, 49 + offset.y);
+  const baseWallsMax = tileToScreen(121 + offset.x, 87 + offset.y);
+  
+  if (baseWallsMin && baseWallsMax) {
+    const width = baseWallsMax.x - baseWallsMin.x;
+    const height = baseWallsMax.y - baseWallsMin.y;
+    
+    // Draw semi-transparent fill
+    overlayCtx.beginPath();
+    overlayCtx.rect(baseWallsMin.x, baseWallsMin.y, width, height);
+    overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+    overlayCtx.fill();
+    
+    // Draw border
+    overlayCtx.strokeStyle = '#00ffff';
+    overlayCtx.lineWidth = 2;
+    overlayCtx.setLineDash([]);
+    overlayCtx.stroke();
+    
+    // Label
+    overlayCtx.font = 'bold 11px monospace';
+    overlayCtx.fillStyle = '#00ffff';
+    overlayCtx.strokeStyle = '#000';
+    overlayCtx.lineWidth = 2;
+    overlayCtx.strokeText('BASE', baseWallsMin.x + 5, baseWallsMin.y - 5);
+    overlayCtx.fillText('BASE', baseWallsMin.x + 5, baseWallsMin.y - 5);
+  }
 }
 
 function updatePositionDisplay(vp) {
