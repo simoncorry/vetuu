@@ -14,6 +14,7 @@ import {
   toggleQuestTracker, 
   handleEscape 
 } from './ui.js';
+import { toggleWorldMap, closeWorldMap, isWorldMapOpen } from './worldmap.js';
 
 // ============================================
 // STATE
@@ -120,11 +121,19 @@ function onKeyDown(e) {
   // Skip if typing in input fields or dialogs are open
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   
+  // Check if world map is open - only allow M and Escape through
+  const worldMapOpen = isWorldMapOpen();
+  
   // Check if dialogue panel is open (for dialogue-specific keys)
   const dialoguePanel = document.getElementById('dialogue-panel');
   const dialogueOpen = dialoguePanel && dialoguePanel.open;
 
   const code = e.code;
+  
+  // When world map is open, only allow M (toggle) and Escape (close)
+  if (worldMapOpen && code !== 'KeyM' && code !== 'Escape') {
+    return;
+  }
 
   // Movement keys are handled by movement.js
   if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(code)) {
@@ -266,6 +275,15 @@ function onKeyDown(e) {
   }
 
   // ============================================
+  // WORLD MAP TOGGLE (M without modifier)
+  // ============================================
+  if (code === 'KeyM' && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    toggleWorldMap();
+    return;
+  }
+
+  // ============================================
   // MINIMAP TOGGLE (Ctrl/Cmd + M)
   // ============================================
   if (code === 'KeyM' && (e.metaKey || e.ctrlKey)) {
@@ -285,10 +303,17 @@ function onKeyDown(e) {
 
   // ============================================
   // ESCAPE - Close UI / Cancel / Settings
-  // Priority: dialogues → inventory → character sheet → settings toggle
+  // Priority: world map → dialogues → inventory → character sheet → settings toggle
   // ============================================
   if (code === 'Escape') {
     e.preventDefault();
+    
+    // Close world map first if open
+    if (isWorldMapOpen()) {
+      closeWorldMap();
+      return;
+    }
+    
     cancelPath();
     targetCallback('clear');
     handleEscape();
@@ -316,6 +341,9 @@ function isDoubleClick(x, y) {
 }
 
 function onLeftClick(e, forceDoubleClick = false) {
+  // Block gameplay clicks when world map is open
+  if (isWorldMapOpen()) return;
+  
   // Ignore clicks on UI elements
   if (e.target.closest('#character-sheet, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #settings-menu, #dialogue-panel, #inventory-panel')) {
     return;
@@ -380,6 +408,9 @@ function onLeftClick(e, forceDoubleClick = false) {
 function onRightClick(e) {
   e.preventDefault();
   e.stopPropagation();
+  
+  // Block gameplay right-clicks when world map is open
+  if (isWorldMapOpen()) return;
   
   const debug = window.VETUU_DEBUG_INPUT;
   if (debug) console.log('[RIGHT-CLICK] Event fired at', e.clientX, e.clientY, '| target:', e.target.tagName, e.target.id || e.target.className);

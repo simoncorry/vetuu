@@ -19,6 +19,7 @@ import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIn
 import { cssVar } from './utils.js';
 import { initUI, initSettingsMenu, loadPanelState } from './ui.js';
 import { initMinimap, updateMinimap as updateMinimapNew, addMarker, removeMarker } from './minimap.js';
+import { initWorldMap } from './worldmap.js';
 import './perf.js'; // Initialize perf monitoring (exposes VETUU_PERF() to console)
 
 // ============================================
@@ -1364,6 +1365,9 @@ async function init() {
     
     // Initialize new minimap system
     initMinimap(state);
+    
+    // Initialize world map system
+    initWorldMap(state);
     
     // Initialize UI module (draggable panels, settings menu)
     initUI();

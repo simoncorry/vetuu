@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="styles/combat.css">
   <link rel="stylesheet" href="styles/effects.css">
   <link rel="stylesheet" href="styles/ui.css">
+  <link rel="stylesheet" href="styles/worldmap.css">
 </head>
 <body>
   <main id="game">
@@ -298,6 +299,90 @@
     <div id="toast-container" aria-live="polite"></div>
   </main>
 
+  <!-- World Map Overlay (hidden by default, toggle with M) -->
+  <div id="worldmap-overlay" aria-label="World Map">
+    <!-- Map Viewport (main canvas area) -->
+    <div id="worldmap-viewport">
+      <canvas id="worldmap-terrain"></canvas>
+      <canvas id="worldmap-overlay-canvas"></canvas>
+      
+      <!-- Zoom indicator -->
+      <div id="worldmap-zoom">1x</div>
+      
+      <!-- Current region/position -->
+      <div id="worldmap-position">Drycross</div>
+      
+      <!-- Center on player button -->
+      <button id="worldmap-center-player">Center</button>
+      
+      <!-- Controls hint bar -->
+      <div id="worldmap-hints">
+        <span class="worldmap-hint"><kbd>Drag</kbd> Pan</span>
+        <span class="worldmap-hint"><kbd>Scroll</kbd> Zoom</span>
+        <span class="worldmap-hint"><kbd>R-Click</kbd> Waypoint</span>
+        <span class="worldmap-hint"><kbd>M</kbd> / <kbd>Esc</kbd> Close</span>
+      </div>
+    </div>
+    
+    <!-- Right Panel (filters + quests) -->
+    <aside id="worldmap-panel">
+      <header class="worldmap-panel-header">
+        <h2>World Map</h2>
+        <button class="worldmap-close" aria-label="Close">&times;</button>
+      </header>
+      
+      <div class="worldmap-panel-content">
+        <!-- Filters -->
+        <section class="worldmap-section">
+          <h3 class="worldmap-section-title">Show</h3>
+          <div class="worldmap-filters">
+            <label class="worldmap-filter">
+              <input type="checkbox" id="filter-quests" checked>
+              <span class="worldmap-filter-icon">❗</span>
+              <span class="worldmap-filter-label">Quests</span>
+            </label>
+            <label class="worldmap-filter">
+              <input type="checkbox" id="filter-merchants" checked>
+              <span class="worldmap-filter-icon">🛒</span>
+              <span class="worldmap-filter-label">Merchants</span>
+            </label>
+            <label class="worldmap-filter">
+              <input type="checkbox" id="filter-save-points" checked>
+              <span class="worldmap-filter-icon">💾</span>
+              <span class="worldmap-filter-label">Save Points</span>
+            </label>
+            <label class="worldmap-filter">
+              <input type="checkbox" id="filter-fast-travel" checked>
+              <span class="worldmap-filter-icon">⚡</span>
+              <span class="worldmap-filter-label">Fast Travel</span>
+            </label>
+            <label class="worldmap-filter">
+              <input type="checkbox" id="filter-waypoints" checked>
+              <span class="worldmap-filter-icon">📍</span>
+              <span class="worldmap-filter-label">Waypoints</span>
+            </label>
+          </div>
+        </section>
+        
+        <!-- Active Quests -->
+        <section class="worldmap-section">
+          <h3 class="worldmap-section-title">Active Quests</h3>
+          <div id="worldmap-quest-list" class="worldmap-quest-list">
+            <!-- Populated by JS -->
+          </div>
+        </section>
+        
+        <!-- Custom Waypoints -->
+        <section class="worldmap-section">
+          <h3 class="worldmap-section-title">Waypoints</h3>
+          <div id="worldmap-waypoint-list" class="worldmap-waypoint-list">
+            <!-- Populated by JS -->
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
   <!-- Settings Menu (hidden by default, toggle with Esc) -->
   <aside id="settings-menu" aria-label="Settings">
     <header class="settings-header">
@@ -323,7 +408,8 @@
         <div class="controls-list">
           <p><kbd>C</kbd> Character Sheet</p>
           <p><kbd>I</kbd> Inventory</p>
-          <p><kbd>Ctrl/⌘</kbd>+<kbd>M</kbd> Toggle Map</p>
+          <p><kbd>M</kbd> World Map</p>
+          <p><kbd>Ctrl/⌘</kbd>+<kbd>M</kbd> Toggle Minimap</p>
           <p><kbd>Ctrl/⌘</kbd>+<kbd>J</kbd> Toggle Quests</p>
           <p><kbd>Esc</kbd> Settings / Close</p>
         </div>
