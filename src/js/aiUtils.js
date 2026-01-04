@@ -208,6 +208,12 @@ export function startRetreat(enemy, t = nowMs(), reason = 'leash') {
   enemy.targetId = null;
   enemy.isEngaged = false;
   enemy.isAware = false;
+  
+  // Guard retreat clears provoke - guards represent overwhelming force
+  // This prevents the enemy from immediately re-engaging after returning home
+  if (reason === 'guards') {
+    enemy.provokedUntil = 0;
+  }
 
   // CRITICAL: Retreat destination is ALWAYS enemy's authoritative spawn point (unique per enemy)
   // With the spawn footprint system, this is guaranteed to be valid and exclusive
@@ -388,6 +394,10 @@ export function shouldBreakOffFromGuards(enemy, guards, _t = nowMs()) {
 /**
  * Check if enemy should start retreating due to leash/deaggro
  * @returns {string|null} Retreat reason or null if should stay engaged
+ * 
+ * NOTE: Provoked enemies ignore leash/deaggro BUT guards always win.
+ * Guard retreat (shouldBreakOffFromGuards) is checked BEFORE this function
+ * in processEnemy(), so guard retreat takes priority over provoke.
  */
 export function checkLeashAndDeaggro(enemy, player, t = nowMs()) {
   // Provoked enemies ignore leash/deaggro - they're angry and won't just walk away

@@ -702,11 +702,17 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.action-slot:focus,
-.action-slot:focus-visible,
+/* Remove focus ring for mouse users */
+.action-slot:focus:not(:focus-visible),
 .action-slot:active {
   outline: none;
   box-shadow: none;
+}
+
+/* Subtle focus ring for keyboard users (Tab navigation) */
+.action-slot:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 1px;
 }
 
 .action-slot:hover:not(.on-cooldown):not(.locked-slot) {
@@ -914,6 +920,62 @@
 .auto-slot.swing-ready + .swing-timer-border .swing-timer-fill {
   --swing-color: var(--success);
   filter: drop-shadow(0 0 6px var(--success));
+}
+
+/* ============================================
+   CAST/CHANNEL TIMER (SVG stroke - GPU accelerated)
+   ============================================ */
+.cast-slot-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.cast-timer-border {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+/* Show when casting/channeling */
+.cast-slot-wrapper.casting .cast-timer-border,
+.cast-slot-wrapper.channeling .cast-timer-border {
+  opacity: 1;
+}
+
+.cast-timer-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cast-timer-fill {
+  fill: none;
+  stroke: var(--cast-color, var(--accent));
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: translate3d(0, 0, 0);
+  will-change: stroke-dashoffset;
+  filter: drop-shadow(0 0 3px var(--cast-color, var(--accent)));
+}
+
+/* Channel state: melee color (blade flurry) */
+.cast-slot-wrapper.channeling .cast-timer-fill {
+  --cast-color: var(--melee-color, #e74c3c);
+}
+
+/* Cast state: ranged color (charged shot) */
+.cast-slot-wrapper.casting .cast-timer-fill {
+  --cast-color: var(--ranged-color, #00d4ff);
 }
 
 /* Sense ability slots - same style as weapon abilities */

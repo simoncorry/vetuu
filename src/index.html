@@ -140,13 +140,19 @@
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
-        <button class="action-slot melee-slot" data-slot="3" data-action-type="ability" title="Blade Flurry - 4 rapid strikes (8s CD)">
-          <span class="slot-icon">⚔️</span>
-          <span class="slot-label">Flurry</span>
-          <span class="slot-key">3</span>
-          <div class="cooldown-overlay"></div>
-          <span class="cooldown-timer"></span>
-        </button>
+        <div class="cast-slot-wrapper">
+          <button class="action-slot melee-slot" data-slot="3" data-action-type="ability" title="Blade Flurry - 4 rapid strikes (8s CD)">
+            <span class="slot-icon">⚔️</span>
+            <span class="slot-label">Flurry</span>
+            <span class="slot-key">3</span>
+            <div class="cooldown-overlay"></div>
+            <span class="cooldown-timer"></span>
+          </button>
+          <svg class="cast-timer-border" data-slot="3" viewBox="0 0 48 48">
+            <path class="cast-timer-track" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+            <path class="cast-timer-fill" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+          </svg>
+        </div>
         <!-- Ranged Skills (Slots 4-5) -->
         <button class="action-slot ranged-slot" data-slot="4" data-action-type="ability" title="Burst - 3 rapid shots (4s CD)">
           <span class="slot-icon">💥</span>
@@ -155,13 +161,19 @@
           <div class="cooldown-overlay"></div>
           <span class="cooldown-timer"></span>
         </button>
-        <button class="action-slot ranged-slot" data-slot="5" data-action-type="ability" title="Charged Shot - powerful charge attack (10s CD)">
-          <span class="slot-icon">🎯</span>
-          <span class="slot-label">Charged</span>
-          <span class="slot-key">5</span>
-          <div class="cooldown-overlay"></div>
-          <span class="cooldown-timer"></span>
-        </button>
+        <div class="cast-slot-wrapper">
+          <button class="action-slot ranged-slot" data-slot="5" data-action-type="ability" title="Charged Shot - powerful charge attack (10s CD)">
+            <span class="slot-icon">🎯</span>
+            <span class="slot-label">Charged</span>
+            <span class="slot-key">5</span>
+            <div class="cooldown-overlay"></div>
+            <span class="cooldown-timer"></span>
+          </button>
+          <svg class="cast-timer-border" data-slot="5" viewBox="0 0 48 48">
+            <path class="cast-timer-track" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+            <path class="cast-timer-fill" d="M24,1 L41,1 Q47,1 47,7 L47,41 Q47,47 41,47 L7,47 Q1,47 1,41 L1,7 Q1,1 7,1 Z"/>
+          </svg>
+        </div>
       </div>
       
       <div class="slot-divider sense-divider"></div>

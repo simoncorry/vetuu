@@ -1391,9 +1391,9 @@ function processRegeneration(now) {
     // No HP regen while fighting
     
     // Sense: Slow regeneration (30s for full bar)
-    if (player.sense < player.maxSense) {
+      if (player.sense < player.maxSense) {
       const senseRegen = Math.ceil(player.maxSense * SENSE_REGEN_IN_COMBAT_RATE);
-      player.sense = Math.min(player.maxSense, player.sense + senseRegen);
+        player.sense = Math.min(player.maxSense, player.sense + senseRegen);
       didUpdateSense = true;
     }
   } else {
@@ -1407,9 +1407,9 @@ function processRegeneration(now) {
     }
     
     // Sense: Very fast regeneration (5s for full bar)
-    if (player.sense < player.maxSense) {
+      if (player.sense < player.maxSense) {
       const senseRegen = Math.ceil(player.maxSense * SENSE_REGEN_OUT_OF_COMBAT_RATE);
-      player.sense = Math.min(player.maxSense, player.sense + senseRegen);
+        player.sense = Math.min(player.maxSense, player.sense + senseRegen);
       didUpdateSense = true;
     }
   }
@@ -3121,7 +3121,7 @@ function toggleAutoAttack() {
       logCombat('Target is retreating.');
     } else if (result.reason === 'dead') {
       logCombat('Target is dead.');
-    } else {
+  } else {
       logCombat('Invalid target.');
     }
     clearTarget();
@@ -3147,20 +3147,31 @@ function toggleAutoAttack() {
 function findNearestVisibleEnemy() {
   const player = currentState.player;
   const enemies = currentState.runtime.activeEnemies || [];
+  const now = nowMs();
   
-  // Filter to visible enemies (in viewport and not in fog)
-  const visible = enemies.filter(e => e.hp > 0 && isActorVisible(e));
+  // Filter to valid targets:
+  // - Alive
+  // - Visible (in viewport and not in fog) 
+  // - Not retreating
+  // - Not broken off (prevents chasing enemies running home)
+  const valid = enemies.filter(e => {
+    if (e.hp <= 0) return false;
+    if (!isActorVisible(e)) return false;
+    if (e.isRetreating) return false;
+    if (e.brokenOffUntil && now < e.brokenOffUntil) return false;
+    return true;
+  });
   
-  if (visible.length === 0) return null;
+  if (valid.length === 0) return null;
   
   // Sort by distance
-  visible.sort((a, b) => {
+  valid.sort((a, b) => {
     const distA = distCoords(a.x, a.y, player.x, player.y);
     const distB = distCoords(b.x, b.y, player.x, player.y);
     return distA - distB;
   });
   
-  return visible[0];
+  return valid[0];
 }
 
 /**
@@ -3187,24 +3198,27 @@ function updateAutoAttackUI(active) {
 }
 
 async function moveToAttackRange(target, range, actionType) {
+  const player = currentState.player;
+  const bestTile = findTileInRange(player.x, player.y, target.x, target.y, range);
+  
+  if (!bestTile) {
+    // No valid tile found - clear intent and stop
+    logCombat('No clear position to attack.');
+    pendingAttack = null;
+    clearCombatIntent();
+    return;
+  }
+  
   logCombat(`Moving to range...`);
   pendingAttack = { target, range, actionType };
   
   const { createPathTo } = await import('./movement.js');
-  
-  const player = currentState.player;
-  const bestTile = findTileInRange(player.x, player.y, target.x, target.y, range);
-  
-  if (bestTile) {
-    createPathTo(bestTile.x, bestTile.y, false);
-  } else {
-    logCombat('Cannot find path to target');
-    pendingAttack = null;
-  }
+  createPathTo(bestTile.x, bestTile.y, false);
 }
 
 function findTileInRange(fromX, fromY, targetX, targetY, range) {
   const candidates = [];
+  const enemies = currentState.runtime?.activeEnemies || [];
   
   for (let dx = -range; dx <= range; dx++) {
     for (let dy = -range; dy <= range; dy++) {
@@ -3213,13 +3227,21 @@ function findTileInRange(fromX, fromY, targetX, targetY, range) {
       const distToTarget = distCoords(x, y, targetX, targetY);
       
       if (distToTarget <= range && distToTarget > 0) {
-        if (canMoveTo(currentState, x, y)) {
+        // Check terrain walkability
+        if (!canMoveTo(currentState, x, y)) continue;
+        
+        // Check not occupied by another enemy (excluding the target)
+        const occupied = enemies.some(e => 
+          e.hp > 0 && 
+          e.x === x && e.y === y && 
+          !(e.x === targetX && e.y === targetY)
+        );
+        if (occupied) continue;
+        
           const distFromPlayer = distCoords(fromX, fromY, x, y);
-          // Prefer horizontal positioning (same Y as target) for more natural facing
-          // Tiles at same Y level get a bonus (lower score = better)
-          const isHorizontal = y === targetY;
-          candidates.push({ x, y, dist: distFromPlayer, isHorizontal });
-        }
+        // Prefer horizontal positioning (same Y as target) for more natural facing
+        const isHorizontal = y === targetY;
+        candidates.push({ x, y, dist: distFromPlayer, isHorizontal });
       }
     }
   }
@@ -3903,18 +3925,26 @@ function executeLeap(ability) {
     destY = target.y - Math.sign(dy);
   }
   
-  // Validate destination is walkable
-  if (!canMoveTo(currentState, destX, destY)) {
-    // Try adjacent tiles (horizontal first)
+  // Helper to check if a tile is valid for landing (walkable and not enemy-occupied)
+  const enemies = currentState.runtime?.activeEnemies || [];
+  const isValidLandingTile = (x, y) => {
+    if (!canMoveTo(currentState, x, y)) return false;
+    // Check not occupied by another enemy (target is fine)
+    return !enemies.some(e => e.hp > 0 && e.x === x && e.y === y && e.id !== target.id);
+  };
+  
+  // Validate destination is walkable and not occupied
+  if (!isValidLandingTile(destX, destY)) {
+    // Try adjacent tiles (horizontal first for natural positioning)
     const alternatives = [
       { x: target.x - 1, y: target.y },
       { x: target.x + 1, y: target.y },
       { x: target.x, y: target.y - 1 },
       { x: target.x, y: target.y + 1 }
-    ].filter(p => canMoveTo(currentState, p.x, p.y));
+    ].filter(p => isValidLandingTile(p.x, p.y));
     
     if (alternatives.length === 0) {
-      logCombat('Cannot leap - path blocked.');
+      logCombat('No landing spot.');
       // Refund cooldown and clear GCD
       actionCooldowns[ability.slot] = 0;
       actionMaxCooldowns[ability.slot] = 0;
@@ -3922,7 +3952,7 @@ function executeLeap(ability) {
       return;
     }
     
-    // Pick closest alternative
+    // Pick closest alternative (prefer horizontal via order)
     const closest = alternatives.reduce((best, alt) => {
       const altDist = Math.abs(alt.x - player.x) + Math.abs(alt.y - player.y);
       const bestDist = Math.abs(best.x - player.x) + Math.abs(best.y - player.y);
@@ -3973,6 +4003,7 @@ function executeLeap(ability) {
  * Movement cancels and refunds cooldown
  */
 let bladeFlurryState = null;
+let channelIdCounter = 0; // Unique ID for race condition prevention
 
 function executeBladeFlurry(ability) {
   if (!currentTarget || currentTarget.hp <= 0) return;
@@ -3986,8 +4017,10 @@ function executeBladeFlurry(ability) {
     cancelBladeFlurry(false); // Don't refund, we're starting a new one
   }
   
-  // Start channel
+  // Start channel with unique ID to prevent race conditions
+  const channelId = ++channelIdCounter;
   bladeFlurryState = {
+    channelId,  // Token for race condition prevention
     ability,
     target,
     targetId,
@@ -4004,6 +4037,9 @@ function executeBladeFlurry(ability) {
   
   logCombat('Blade Flurry!');
   
+  // Start channel timer UI (2s channel)
+  startCastTimerAnimation(3, ability.channelTimeMs, 'channeling');
+  
   // Schedule hits
   scheduleFlurryHit();
 }
@@ -4011,8 +4047,12 @@ function executeBladeFlurry(ability) {
 function scheduleFlurryHit() {
   if (!bladeFlurryState) return;
   
+  // Capture channelId to detect stale callbacks
+  const expectedChannelId = bladeFlurryState.channelId;
+  
   bladeFlurryState.timerId = setTimeout(() => {
-    if (!bladeFlurryState) return;
+    // Race condition guard: bail if state was cleared or ID mismatches
+    if (!bladeFlurryState || bladeFlurryState.channelId !== expectedChannelId) return;
     
     const { ability, target, targetId, maxHits } = bladeFlurryState;
     
@@ -4075,6 +4115,14 @@ function cancelBladeFlurry(refund = true) {
     player.channeling = false;
   }
   
+  // Clear matching ability intent to prevent re-triggering
+  if (combatIntent?.type === 'ability' && combatIntent?.slot === ability?.slot) {
+    clearCombatIntent();
+  }
+  
+  // Cancel channel timer UI
+  cancelCastTimerAnimation(3);
+  
   // Only refund cooldown if NO damage was dealt
   // If any hit landed, ability was "used" - no refund
   if (refund && ability && !damageDealt) {
@@ -4090,6 +4138,9 @@ function cancelBladeFlurry(refund = true) {
 
 function endBladeFlurry() {
   if (!bladeFlurryState) return;
+  
+  // Complete channel timer UI
+  completeCastTimerAnimation(3);
   
   // Unlock movement
   const player = currentState?.player;
@@ -4152,6 +4203,7 @@ function executeBurst(ability) {
  * 3.0s cast, 300% ranged damage, movement cancels with refund
  */
 let chargedShotState = null;
+let castIdCounter = 0; // Unique ID for race condition prevention
 
 function executeChargedShot(ability) {
   if (!currentTarget || currentTarget.hp <= 0) return;
@@ -4165,8 +4217,10 @@ function executeChargedShot(ability) {
     cancelChargedShot(false);
   }
   
-  // Start cast
+  // Start cast with unique ID to prevent race conditions
+  const castId = ++castIdCounter;
   chargedShotState = {
+    castId,  // Token for race condition prevention
     ability,
     target,
     targetId,
@@ -4180,9 +4234,16 @@ function executeChargedShot(ability) {
   
   logCombat('Charging shot...');
   
+  // Start cast timer UI (3s cast)
+  startCastTimerAnimation(5, ability.castTimeMs, 'casting');
+  
+  // Capture castId to detect stale callbacks
+  const expectedCastId = castId;
+  
   // Start cast timer
   chargedShotState.timerId = setTimeout(() => {
-    if (!chargedShotState) return;
+    // Race condition guard: bail if state was cleared or ID mismatches
+    if (!chargedShotState || chargedShotState.castId !== expectedCastId) return;
     
     const { target: castTarget, targetId: castTargetId } = chargedShotState;
     
@@ -4235,10 +4296,18 @@ function cancelChargedShot(refund = true) {
     clearTimeout(timerId);
   }
   
+  // Cancel cast timer UI
+  cancelCastTimerAnimation(5);
+  
   // Unlock movement
   const player = currentState?.player;
   if (player) {
     player.casting = false;
+  }
+  
+  // Clear matching ability intent to prevent re-triggering
+  if (combatIntent?.type === 'ability' && combatIntent?.slot === ability?.slot) {
+    clearCombatIntent();
   }
   
   // Refund cooldown if cancelled by movement
@@ -4260,6 +4329,9 @@ function cancelChargedShot(refund = true) {
 
 function endChargedShot() {
   if (!chargedShotState) return;
+  
+  // Complete cast timer UI
+  completeCastTimerAnimation(5);
   
   // Unlock movement
   const player = currentState?.player;
@@ -7936,8 +8008,8 @@ function updateCooldownUI() {
 function updateSlotCooldown(slotNum, actionType) {
   const cached = getCachedSlot(slotNum, actionType);
   if (!cached) return;
-  
-  const { slot } = cached;
+    
+    const { slot } = cached;
   
   // Get cooldown from appropriate source
   let cooldown = 0;
@@ -7951,38 +8023,38 @@ function updateSlotCooldown(slotNum, actionType) {
     maxCooldown = actionMaxCooldowns[slotNum] || 8000;
   }
   
-  const isOnCooldown = cooldown > 0;
+    const isOnCooldown = cooldown > 0;
   
   // Check if ability is locked (for visual feedback)
   const player = currentState?.player;
   const flags = window.__vetuuFlags || {};
   const ability = getAbility(slotNum);
   const isLocked = ability && player && !isAbilityUnlocked(slotNum, player, flags);
-  
-  slot.classList.toggle('on-cooldown', isOnCooldown);
+
+    slot.classList.toggle('on-cooldown', isOnCooldown);
   slot.classList.toggle('locked-slot', isLocked);
 
-  if (isOnCooldown) {
-    // Create overlay/timer if needed
-    if (!cached.overlay) {
+    if (isOnCooldown) {
+      // Create overlay/timer if needed
+      if (!cached.overlay) {
       cached.overlay = slot.querySelector('.cooldown-overlay') || document.createElement('div');
       if (!cached.overlay.parentElement) {
         cached.overlay.className = 'cooldown-overlay';
         slot.appendChild(cached.overlay);
       }
-    }
-    if (!cached.timer) {
+      }
+      if (!cached.timer) {
       cached.timer = slot.querySelector('.cooldown-timer') || document.createElement('span');
       if (!cached.timer.parentElement) {
         cached.timer.className = 'cooldown-timer';
         slot.appendChild(cached.timer);
       }
-    }
+      }
 
-    const pct = (cooldown / maxCooldown) * 100;
-    cached.overlay.style.setProperty('--cooldown-pct', pct);
-    cached.timer.textContent = (cooldown / 1000).toFixed(1);
-  } else if (cached.overlay) {
+      const pct = (cooldown / maxCooldown) * 100;
+      cached.overlay.style.setProperty('--cooldown-pct', pct);
+      cached.timer.textContent = (cooldown / 1000).toFixed(1);
+    } else if (cached.overlay) {
     // Clear cooldown display
     cached.overlay.style.setProperty('--cooldown-pct', 0);
     if (cached.timer) cached.timer.textContent = '';
@@ -8086,6 +8158,99 @@ function updateSwingTimerUI() {
   autoSlot.classList.toggle('auto-attacking', isAutoAttacking);
   autoSlot.classList.toggle('swing-cooldown', isAutoAttacking && !state.isReady);
   autoSlot.classList.toggle('swing-ready', isAutoAttacking && state.isReady);
+}
+
+// ============================================
+// CAST/CHANNEL TIMER UI (slots 3 and 5)
+// ============================================
+const castTimerCache = new Map(); // slot -> { pathLength, fillPath, wrapper }
+
+/**
+ * Initialize cast timer for a slot
+ */
+function initCastTimer(slot) {
+  if (castTimerCache.has(slot)) return castTimerCache.get(slot);
+  
+  const svg = document.querySelector(`.cast-timer-border[data-slot="${slot}"]`);
+  if (!svg) return null;
+  
+  const fillPath = svg.querySelector('.cast-timer-fill');
+  const wrapper = svg.parentElement;
+  
+  if (!fillPath || !wrapper) return null;
+  
+  const pathLength = fillPath.getTotalLength();
+  fillPath.style.strokeDasharray = `${pathLength} ${pathLength}`;
+  fillPath.style.strokeDashoffset = pathLength; // Start hidden
+  
+  const cache = { pathLength, fillPath, wrapper };
+  castTimerCache.set(slot, cache);
+  return cache;
+}
+
+/**
+ * Start cast/channel timer animation
+ * @param {number} slot - Ability slot (3 or 5)
+ * @param {number} durationMs - Cast/channel time in ms
+ * @param {string} type - 'casting' or 'channeling'
+ */
+function startCastTimerAnimation(slot, durationMs, type) {
+  const cache = initCastTimer(slot);
+  if (!cache) return;
+  
+  const { pathLength, fillPath, wrapper } = cache;
+  
+  // Add state class
+  wrapper.classList.remove('casting', 'channeling');
+  wrapper.classList.add(type);
+  
+  // Reset to start (hidden)
+  fillPath.style.transition = 'none';
+  fillPath.style.strokeDashoffset = pathLength;
+  
+  // Force reflow
+  // eslint-disable-next-line no-unused-expressions
+  fillPath.offsetHeight;
+  
+  // Animate to end (fully visible)
+  fillPath.style.transition = `stroke-dashoffset ${durationMs}ms linear`;
+  fillPath.style.strokeDashoffset = 0;
+}
+
+/**
+ * Cancel cast/channel timer animation (snaps back to hidden)
+ * @param {number} slot - Ability slot (3 or 5)
+ */
+function cancelCastTimerAnimation(slot) {
+  const cache = castTimerCache.get(slot);
+  if (!cache) return;
+  
+  const { pathLength, fillPath, wrapper } = cache;
+  
+  // Remove state classes
+  wrapper.classList.remove('casting', 'channeling');
+  
+  // Snap to hidden (no transition)
+  fillPath.style.transition = 'none';
+  fillPath.style.strokeDashoffset = pathLength;
+}
+
+/**
+ * Complete cast/channel timer (stays filled briefly then hides)
+ * @param {number} slot - Ability slot (3 or 5)
+ */
+function completeCastTimerAnimation(slot) {
+  const cache = castTimerCache.get(slot);
+  if (!cache) return;
+  
+  const { fillPath, wrapper } = cache;
+  
+  // Brief flash at completion
+  setTimeout(() => {
+    wrapper.classList.remove('casting', 'channeling');
+    fillPath.style.transition = 'stroke-dashoffset 0.2s ease-out';
+    fillPath.style.strokeDashoffset = cache.pathLength;
+  }, 100);
 }
 
 function logCombat(msg) {

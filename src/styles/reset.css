@@ -75,11 +75,17 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-button:focus,
-button:focus-visible,
+/* Remove focus ring for mouse users */
+button:focus:not(:focus-visible),
 button:active {
   outline: none;
   box-shadow: none;
+}
+
+/* Subtle focus ring for keyboard users (Tab navigation) */
+button:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
 }
 
 /* Make sure textareas without a rows attribute are not tiny */

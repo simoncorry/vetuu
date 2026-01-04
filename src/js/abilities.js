@@ -24,35 +24,92 @@
  */
 
 // ============================================
-// TIMING CONSTANTS
+// BALANCE CONSTANTS (tune all damage/timing here)
 // ============================================
-export const GCD_MS = 1500;
-export const AUTO_ATTACK_CD_MS = 1500;
+export const BALANCE = {
+  // Timing (ms)
+  gcdMs: 1500,
+  autoAttackCdMs: 1500,
+  
+  // Basic attack damage
+  meleeDamage: 10,        // Sword strike (Phase 6 target: 9-10)
+  rangedDamage: 7,        // Rifle shot (Phase 6 target: 6-7)
+  
+  // Ability multipliers (relative to basic attack)
+  leapMultiplier: 1.5,         // 150% melee = 15 dmg
+  flurryMultiplier: 0.75,      // Per hit (4 × 0.75 = 3.0x total = 30 dmg)
+  burstMultiplier: 0.5,        // Per shot (3 × 0.5 = 1.5x total = 10.5 dmg)
+  chargedMultiplier: 3.0,      // 300% ranged = 21 dmg
+  
+  // Ability cooldowns (ms)
+  leapCd: 8000,
+  flurryCd: 8000,
+  burstCd: 4000,
+  chargedCd: 10000,
+  pullCd: 12000,       // Long due to 4s stun being powerful
+  pushCd: 8000,        // Shorter for spacing/burn tool
+  
+  // Sense abilities
+  sensePool: 100,      // Fixed pool (no level scaling)
+  senseCost: 50,       // 50% per ability (allows double-cast then wait)
+  
+  // Ranges (tiles)
+  meleeRange: 1,       // Adjacent only
+  rangedRange: 6,
+  leapRange: 12,       // Gap closer
+  senseRadius: 8,
+  
+  // Flurry channel
+  flurryHits: 4,
+  flurryHitIntervalMs: 500,    // 2.0s total
+  flurryFreezeChance: 0.5,
+  flurryFreezeDurationMs: 1000,
+  
+  // Burst shots
+  burstShots: 3,
+  burstShotIntervalMs: 150,
+  
+  // Charged shot cast
+  chargedCastMs: 3000,
+  
+  // Leap dash
+  leapDashSpeed: 3.0,  // 300% movement speed
+  
+  // Sense push/pull distance
+  pullDistance: 2,
+  pushDistance: 2
+};
 
 // ============================================
-// BASIC ATTACK DEFINITIONS
+// TIMING CONSTANTS (derived from BALANCE)
+// ============================================
+export const GCD_MS = BALANCE.gcdMs;
+export const AUTO_ATTACK_CD_MS = BALANCE.autoAttackCdMs;
+
+// ============================================
+// BASIC ATTACK DEFINITIONS (derived from BALANCE)
 // ============================================
 export const BASIC_ATTACKS = {
   melee: {
     name: 'Sword Strike',
-    damage: 10,        // Base sword damage (Phase 6: tune to 9-10)
-    range: 1,          // Adjacent tile only
+    damage: BALANCE.meleeDamage,
+    range: BALANCE.meleeRange,
     requiresLOS: true,
-    cooldownMs: AUTO_ATTACK_CD_MS,
+    cooldownMs: BALANCE.autoAttackCdMs,
     type: 'melee'
   },
   ranged: {
     name: 'Rifle Shot',
-    damage: 7,         // Base rifle damage (Phase 6: tune to 6-7)
-    range: 6,
+    damage: BALANCE.rangedDamage,
+    range: BALANCE.rangedRange,
     requiresLOS: true,
-    cooldownMs: AUTO_ATTACK_CD_MS,
+    cooldownMs: BALANCE.autoAttackCdMs,
     type: 'ranged'
   }
 };
 
 // ============================================
-// PLAYER ABILITIES (Slots 2-7)
+// PLAYER ABILITIES (Slots 2-7) - derived from BALANCE
 // ============================================
 export const PLAYER_ABILITIES = {
   // ==========================================
@@ -71,9 +128,9 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'melee',
-    damageMultiplier: 1.5,  // 150% of basic melee damage
-    range: 12,              // Can leap from 12 tiles away
-    cooldownMs: 8000,
+    damageMultiplier: BALANCE.leapMultiplier,
+    range: BALANCE.leapRange,
+    cooldownMs: BALANCE.leapCd,
     
     // Execution
     castType: 'instant',
@@ -81,7 +138,7 @@ export const PLAYER_ABILITIES = {
     
     // Special behavior
     isGapCloser: true,
-    dashSpeed: 3.0,         // 300% movement speed during dash
+    dashSpeed: BALANCE.leapDashSpeed,
     
     // Cancel rules
     cancelOnMove: false,    // Instant, no cancel needed
@@ -94,7 +151,7 @@ export const PLAYER_ABILITIES = {
   3: {
     id: 'blade_flurry',
     name: 'Blade Flurry',
-    description: '4 rapid strikes, final hit may freeze',
+    description: `${BALANCE.flurryHits} rapid strikes, final hit may freeze`,
     slot: 3,
     icon: '⚔️',
     
@@ -104,22 +161,23 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'melee',
-    damageMultiplier: 0.75, // Per hit (4 hits × 0.75 = 3.0x total)
-    hits: 4,
-    hitIntervalMs: 500,     // 2.0s total channel (4 × 500ms)
-    range: 1,               // Adjacent tile only
-    cooldownMs: 8000,
+    damageMultiplier: BALANCE.flurryMultiplier,
+    hits: BALANCE.flurryHits,
+    hitIntervalMs: BALANCE.flurryHitIntervalMs,
+    range: BALANCE.meleeRange,
+    cooldownMs: BALANCE.flurryCd,
     
     // Execution
     castType: 'channel',
-    castTimeMs: 2000,
+    castTimeMs: BALANCE.flurryHits * BALANCE.flurryHitIntervalMs,
+    channelTimeMs: BALANCE.flurryHits * BALANCE.flurryHitIntervalMs,
     locksMovement: true,
     
     // Special effects
     finalHitEffect: {
       type: 'freeze',
-      chance: 0.5,          // 50% chance
-      durationMs: 1000      // 1 second freeze
+      chance: BALANCE.flurryFreezeChance,
+      durationMs: BALANCE.flurryFreezeDurationMs
     },
     
     // Cancel rules
@@ -133,7 +191,7 @@ export const PLAYER_ABILITIES = {
   4: {
     id: 'burst',
     name: 'Burst',
-    description: '3 rapid shots',
+    description: `${BALANCE.burstShots} rapid shots`,
     slot: 4,
     icon: '💥',
     
@@ -143,11 +201,11 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'ranged',
-    damageMultiplier: 0.5,  // Per shot (3 shots × 0.5 = 1.5x total)
-    shots: 3,
-    shotIntervalMs: 150,    // Fast burst
-    range: 6,
-    cooldownMs: 4000,
+    damageMultiplier: BALANCE.burstMultiplier,
+    shots: BALANCE.burstShots,
+    shotIntervalMs: BALANCE.burstShotIntervalMs,
+    range: BALANCE.rangedRange,
+    cooldownMs: BALANCE.burstCd,
     
     // Execution
     castType: 'instant',
@@ -175,17 +233,17 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'ranged',
-    damageMultiplier: 3.0,  // 300% of basic ranged damage
-    range: 6,
-    cooldownMs: 10000,
+    damageMultiplier: BALANCE.chargedMultiplier,
+    range: BALANCE.rangedRange,
+    cooldownMs: BALANCE.chargedCd,
     
     // Execution
     castType: 'cast',
-    castTimeMs: 3000,       // 3 second charge
+    castTimeMs: BALANCE.chargedCastMs,
     locksMovement: true,
     
     // GCD behavior: cast abilities lock for full cast time
-    gcdMs: 3000,            // GCD = cast time (double GCD)
+    gcdMs: BALANCE.chargedCastMs,
     cooldownOnSuccess: true, // Cooldown only starts when cast completes
     
     // Cancel rules
@@ -210,10 +268,10 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'sense',
-    senseCost: 50,      // 50% of 100% pool (allows double-cast then wait)
-    radius: 8,
-    pullDistance: 2,
-    cooldownMs: 12000,  // 12s - long CD due to 4s stun being very powerful
+    senseCost: BALANCE.senseCost,
+    radius: BALANCE.senseRadius,
+    pullDistance: BALANCE.pullDistance,
+    cooldownMs: BALANCE.pullCd,
     
     // Execution
     castType: 'instant',
@@ -240,10 +298,10 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'sense',
-    senseCost: 50,      // 50% of 100% pool (allows double-cast then wait)
-    radius: 8,
-    pushDistance: 2,
-    cooldownMs: 8000,   // 8s - shorter CD for spacing/burn damage tool
+    senseCost: BALANCE.senseCost,
+    radius: BALANCE.senseRadius,
+    pushDistance: BALANCE.pushDistance,
+    cooldownMs: BALANCE.pushCd,
     
     // Execution
     castType: 'instant',
