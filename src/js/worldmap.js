@@ -75,6 +75,20 @@ function getColors() {
 }
 
 // ============================================
+// DEBUG RING OVERLAY
+// ============================================
+let showRings = false;
+
+// Ring boundaries (in tiles) - must match spawnDirector.js RINGS
+const RING_BOUNDARIES = [
+  { name: 'SAFE', max: 24, color: '#00ff00' },      // Green
+  { name: 'FRONTIER', max: 42, color: '#ffff00' },  // Yellow
+  { name: 'WILDERNESS', max: 58, color: '#ff8800' }, // Orange
+  { name: 'DANGER', max: 68, color: '#ff0000' },    // Red
+  { name: 'DEEP', max: 80, color: '#ff00ff' }       // Magenta
+];
+
+// ============================================
 // STATE
 // ============================================
 let overlay = null;
@@ -1051,6 +1065,11 @@ function renderOverlay(vp) {
   // Render waypoints
   if (filters.waypoints) renderWaypoints(vp);
   
+  // Render debug rings if enabled
+  if (showRings) {
+    renderRings(vp);
+  }
+  
   // Render player (always on top)
   renderPlayer(vp);
 }
@@ -1343,6 +1362,69 @@ function renderPlayer(vp) {
   overlayCtx.fill();
 }
 
+function renderRings(vp) {
+  if (!overlayCtx || !gameState?.map) return;
+  
+  // Get base center from map offset
+  const ox = gameState.map.meta.originalOffset?.x || 44;
+  const oy = gameState.map.meta.originalOffset?.y || 32;
+  const baseCenterX = 56 + ox;
+  const baseCenterY = 38 + oy;
+  
+  // Convert base center to screen position
+  const baseScreen = tileToScreen(baseCenterX, baseCenterY);
+  if (!baseScreen) return;
+  
+  // Draw each ring boundary
+  for (const ring of RING_BOUNDARIES) {
+    const radiusPx = ring.max * vp.pixelsPerTile;
+    
+    // Draw circle
+    overlayCtx.beginPath();
+    overlayCtx.arc(baseScreen.x, baseScreen.y, radiusPx, 0, Math.PI * 2);
+    overlayCtx.strokeStyle = ring.color;
+    overlayCtx.lineWidth = 2;
+    overlayCtx.setLineDash([8, 8]);
+    overlayCtx.stroke();
+    
+    // Draw label at top of circle if in view
+    const labelY = baseScreen.y - radiusPx + 15;
+    if (labelY > 20 && labelY < vp.canvasH - 20) {
+      overlayCtx.setLineDash([]);
+      overlayCtx.font = 'bold 12px monospace';
+      overlayCtx.fillStyle = ring.color;
+      overlayCtx.strokeStyle = '#000';
+      overlayCtx.lineWidth = 2;
+      
+      const labelText = `${ring.name} (${ring.max})`;
+      overlayCtx.strokeText(labelText, baseScreen.x - 35, labelY);
+      overlayCtx.fillText(labelText, baseScreen.x - 35, labelY);
+    }
+  }
+  
+  // Reset line dash
+  overlayCtx.setLineDash([]);
+  
+  // Draw base center marker
+  overlayCtx.beginPath();
+  overlayCtx.arc(baseScreen.x, baseScreen.y, 6, 0, Math.PI * 2);
+  overlayCtx.fillStyle = '#ffffff';
+  overlayCtx.fill();
+  overlayCtx.strokeStyle = '#ff0000';
+  overlayCtx.lineWidth = 2;
+  overlayCtx.stroke();
+  
+  // Cross-hair at center
+  overlayCtx.beginPath();
+  overlayCtx.moveTo(baseScreen.x - 12, baseScreen.y);
+  overlayCtx.lineTo(baseScreen.x + 12, baseScreen.y);
+  overlayCtx.moveTo(baseScreen.x, baseScreen.y - 12);
+  overlayCtx.lineTo(baseScreen.x, baseScreen.y + 12);
+  overlayCtx.strokeStyle = '#ff0000';
+  overlayCtx.lineWidth = 2;
+  overlayCtx.stroke();
+}
+
 function updatePositionDisplay(vp) {
   const posEl = document.getElementById('worldmap-position');
   if (!gameState) return;
@@ -1393,6 +1475,15 @@ function updatePositionDisplay(vp) {
       centerBtn.classList.add('hidden');
     }
   }
+}
+
+// ============================================
+// RING OVERLAY TOGGLE
+// ============================================
+export function toggleWorldMapRings() {
+  showRings = !showRings;
+  scheduleRender();
+  return showRings;
 }
 
 // ============================================

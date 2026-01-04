@@ -504,6 +504,7 @@ let ringOverlayVisible = false;
 /**
  * Toggle debug ring overlay showing spawn zone boundaries.
  * Call from console: VETUU_RINGS()
+ * Toggles rings on main view, minimap, and fullscreen world map.
  */
 window.VETUU_RINGS = function() {
   ringOverlayVisible = !ringOverlayVisible;
@@ -516,10 +517,36 @@ window.VETUU_RINGS = function() {
     drawRingOverlay();
     ringOverlayCanvas.style.display = 'block';
     console.log('[Debug] Ring overlay ON - showing spawn zone boundaries');
+    console.log('  🟢 Green: SAFE (0-24 tiles)');
+    console.log('  🟡 Yellow: FRONTIER (25-42 tiles)');
+    console.log('  🟠 Orange: WILDERNESS (43-58 tiles)');
+    console.log('  🔴 Red: DANGER (59-68 tiles)');
+    console.log('  🟣 Magenta: DEEP (69+ tiles)');
   } else {
     ringOverlayCanvas.style.display = 'none';
     console.log('[Debug] Ring overlay OFF');
   }
+  
+  // Also toggle on minimap and world map
+  import('./minimap.js').then(mod => {
+    if (mod.toggleMinimapRings) {
+      // Force to match main overlay state
+      const minimapState = mod.toggleMinimapRings();
+      if (minimapState !== ringOverlayVisible) {
+        mod.toggleMinimapRings();
+      }
+    }
+  }).catch(() => {});
+  
+  import('./worldmap.js').then(mod => {
+    if (mod.toggleWorldMapRings) {
+      // Force to match main overlay state
+      const worldmapState = mod.toggleWorldMapRings();
+      if (worldmapState !== ringOverlayVisible) {
+        mod.toggleWorldMapRings();
+      }
+    }
+  }).catch(() => {});
   
   return ringOverlayVisible;
 };

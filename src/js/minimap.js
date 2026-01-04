@@ -64,6 +64,20 @@ function getColors() {
 }
 
 // ============================================
+// DEBUG RING OVERLAY
+// ============================================
+let showRings = false;
+
+// Ring boundaries (in tiles) - must match spawnDirector.js RINGS
+const RING_BOUNDARIES = [
+  { name: 'SAFE', max: 24, color: '#00ff00' },      // Green
+  { name: 'FRONTIER', max: 42, color: '#ffff00' },  // Yellow
+  { name: 'WILDERNESS', max: 58, color: '#ff8800' }, // Orange
+  { name: 'DANGER', max: 68, color: '#ff0000' },    // Red
+  { name: 'DEEP', max: 80, color: '#ff00ff' }       // Magenta
+];
+
+// ============================================
 // STATE
 // ============================================
 let canvas = null;
@@ -596,6 +610,11 @@ function render() {
   // Draw enemies last, on fog canvas, so they're visible above fog
   renderEnemies(vp);
   
+  // Draw debug rings if enabled
+  if (showRings) {
+    renderRings(vp);
+  }
+  
   // Update player coords display
   if (coordsEl && gameState?.player) {
     const x = Math.floor(gameState.player.x);
@@ -979,6 +998,45 @@ function isInView(x, y, vp) {
   return x >= vp.left - 1 && x <= vp.right + 1 && y >= vp.top - 1 && y <= vp.bottom + 1;
 }
 
+function renderRings(vp) {
+  if (!fogCtx || !gameState?.map) return;
+  
+  // Get base center from map offset
+  const ox = gameState.map.meta.originalOffset?.x || 44;
+  const oy = gameState.map.meta.originalOffset?.y || 32;
+  const baseCenterX = 56 + ox;
+  const baseCenterY = 38 + oy;
+  
+  // Convert base center to screen position
+  const baseScreen = worldToScreen(baseCenterX, baseCenterY);
+  if (!baseScreen) return;
+  
+  // Draw each ring boundary
+  for (const ring of RING_BOUNDARIES) {
+    const radiusPx = ring.max * vp.pixelsPerTile;
+    
+    // Draw circle
+    fogCtx.beginPath();
+    fogCtx.arc(baseScreen.x, baseScreen.y, radiusPx, 0, Math.PI * 2);
+    fogCtx.strokeStyle = ring.color;
+    fogCtx.lineWidth = 1.5;
+    fogCtx.setLineDash([4, 4]);
+    fogCtx.stroke();
+  }
+  
+  // Reset line dash
+  fogCtx.setLineDash([]);
+  
+  // Draw base center marker
+  fogCtx.beginPath();
+  fogCtx.arc(baseScreen.x, baseScreen.y, 3, 0, Math.PI * 2);
+  fogCtx.fillStyle = '#ffffff';
+  fogCtx.fill();
+  fogCtx.strokeStyle = '#ff0000';
+  fogCtx.lineWidth = 1;
+  fogCtx.stroke();
+}
+
 function isRevealed(x, y) {
   // Use fog module's isRevealed for O(1) array lookup (no string allocation)
   // Floor coordinates since enemies can have fractional positions during movement
@@ -994,6 +1052,15 @@ function isRevealed(x, y) {
  */
 export function updateMinimap() {
   scheduleRender();
+}
+
+/**
+ * Toggle debug ring overlay
+ */
+export function toggleMinimapRings() {
+  showRings = !showRings;
+  scheduleRender();
+  return showRings;
 }
 
 /**
