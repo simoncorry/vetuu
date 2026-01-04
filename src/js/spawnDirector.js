@@ -36,14 +36,14 @@ const MAP_EDGE_RADIUS = 256;        // Distance from center to map edge
 // ============================================
 // CONSTANTS - DENSITY & SPAWNING
 // ============================================
-const ACTIVE_RADIUS = 50;           // Bubble around player for spawn decisions (wider for larger world)
+const ACTIVE_RADIUS = 70;           // Bubble around player for spawn decisions (wider for larger world)
 const NO_SPAWN_RADIUS = 12;         // Don't spawn within this range of player
 const SPAWN_TICK_MS = 500;          // How often to check spawns
 
 // Density caps within active bubble
-const MAX_STRAYS = 8;               // Enough for early leveling
-const MAX_PACKS = 2;                // Allow 2 packs at a time for more action
-const MAX_TOTAL_ENEMIES = 15;       // Room for strays + packs
+const MAX_STRAYS = 12;              // More strays for a populated feel
+const MAX_PACKS = 3;                // Allow 3 packs at a time for more action
+const MAX_TOTAL_ENEMIES = 25;       // Room for strays + packs
 
 // NPE (New Player Experience) critter guarantees
 const NPE_CRITTER_MIN = 2;
@@ -59,9 +59,9 @@ const PACK_RESPAWN_MS = { min: 300000, max: 600000 };    // 5-10 min (was 4-10)
 // ============================================
 // CONSTANTS - CULLING (Performance)
 // ============================================
-const CULL_DISTANCE = 120;           // Despawn enemies beyond this distance from player
-const CULL_CHECK_INTERVAL = 2000;    // How often to check for culling (ms)
-const CULL_GRACE_PERIOD = 5000;      // Don't cull recently spawned enemies (ms)
+const CULL_DISTANCE = 150;           // Despawn enemies beyond this distance from player
+const CULL_CHECK_INTERVAL = 3000;    // How often to check for culling (ms)
+const CULL_GRACE_PERIOD = 10000;     // Don't cull recently spawned enemies (ms)
 const NEVER_CULL_IN_COMBAT = true;   // Never cull engaged/aggro enemies
 
 // ============================================
@@ -1598,7 +1598,7 @@ function cullEnemy(enemy) {
     if (slot) {
       // Reset slot for respawn (with shorter timer since it was culled, not killed)
       slot.aliveEnemyId = null;
-      slot.nextRespawnAt = nowMs() + randomRange(30000, 60000); // 30-60 sec respawn
+      slot.nextRespawnAt = nowMs() + randomRange(10000, 20000); // 10-20 sec respawn after cull
     }
     spawner.aliveCount = Math.max(0, spawner.aliveCount - 1);
   }

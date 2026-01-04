@@ -21,6 +21,7 @@
   --wall: #3C3124;
 
   /* UI Colors */
+  --black: #000000;
   --bg-dark: #0D0F11;
   --bg-panel: #181C20;
   --bg-panel-alpha: rgba(24, 28, 32, 0.95);

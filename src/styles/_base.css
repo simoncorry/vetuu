@@ -28,7 +28,7 @@ html {
 
 body {
   font-family: var(--font-body);
-  background: #000000;
+  background: var(--black);
   color: var(--text-primary);
   min-height: 100vh;
   overflow: hidden;
