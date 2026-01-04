@@ -783,12 +783,6 @@ function getActiveWeaponType() {
   return flags.rifle_unlocked ? 'ranged' : 'melee';
 }
 
-// Helper to get the active weapon object (for future use)
-function _getActiveWeapon() {
-  const type = getActiveWeaponType();
-  return type === 'ranged' ? WEAPONS.laser_rifle : WEAPONS.vibro_sword;
-}
-
 // Determine best attack type based on distance and unlock status
 function getBestAttackType(targetDist) {
   const flags = window.__vetuuFlags || {};

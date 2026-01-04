@@ -613,11 +613,6 @@ function drawRingOverlay() {
   const baseCenterX = baseCenterTileX * TILE_SIZE + TILE_SIZE / 2;
   const baseCenterY = baseCenterTileY * TILE_SIZE + TILE_SIZE / 2;
   
-  // Debug info (only log once per toggle)
-  console.log('[Ring Debug] Map:', mapConfig.width, 'x', mapConfig.height);
-  console.log('[Ring Debug] Base center tile:', baseCenterTileX, baseCenterTileY);
-  console.log('[Ring Debug] Base center px:', baseCenterX, baseCenterY);
-  
   // Ring boundaries from mapConfig (auto-scaled based on map size)
   const rings = getRingVisualization();
   
@@ -710,20 +705,14 @@ function drawRingOverlay() {
   ringOverlayCtx.fillText('ORIGINAL MAP (128x128)', originalMap.minX + 10, originalMap.minY - 10);
   
   // Draw BASE WALLS footprint (inner walled area)
-  // Original wall coords: x 43-93, y 49-87 (after crop)
+  // Wall coords in original map: x 40-87, y 40-87 (48x48 base)
+  const BASE_WALLS = { minX: 40, maxX: 87, minY: 40, maxY: 87 };
   const baseWalls = {
-    minX: (43 + offset.x) * TILE_SIZE,
-    maxX: (93 + offset.x) * TILE_SIZE,
-    minY: (49 + offset.y) * TILE_SIZE,
-    maxY: (87 + offset.y) * TILE_SIZE
+    minX: (BASE_WALLS.minX + offset.x) * TILE_SIZE,
+    maxX: (BASE_WALLS.maxX + offset.x) * TILE_SIZE,
+    minY: (BASE_WALLS.minY + offset.y) * TILE_SIZE,
+    maxY: (BASE_WALLS.maxY + offset.y) * TILE_SIZE
   };
-  
-  // Debug: verify center alignment
-  const wallCenterX = (43 + 93) / 2 + offset.x;  // Should be 68 + 132 = 200
-  const wallCenterY = (49 + 87) / 2 + offset.y;  // Should be 68 + 132 = 200
-  console.log('[Ring Debug] Wall center (tiles):', wallCenterX, wallCenterY);
-  console.log('[Ring Debug] Base center from config:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
-  console.log('[Ring Debug] Match:', wallCenterX === mapConfig.baseCenter.x && wallCenterY === mapConfig.baseCenter.y);
   
   // Draw semi-transparent fill
   ringOverlayCtx.beginPath();

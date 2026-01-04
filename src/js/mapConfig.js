@@ -128,13 +128,7 @@ export function initMapConfig(originalMapData, options = {}) {
   
   mapConfig.initialized = true;
   
-  console.log('[MapConfig] Initialized:');
-  console.log('  Original map:', mapConfig.originalWidth, 'x', mapConfig.originalHeight);
-  console.log('  Expanded to:', mapConfig.width, 'x', mapConfig.height);
-  console.log('  Offset (to center base):', mapConfig.offset.x, mapConfig.offset.y);
-  console.log('  Original base center:', mapConfig.originalBaseCenter.x, mapConfig.originalBaseCenter.y);
-  console.log('  NEW base center:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
-  console.log('  Verification: original base', mapConfig.originalBaseCenter.x, '+', mapConfig.offset.x, '=', mapConfig.originalBaseCenter.x + mapConfig.offset.x);
+  console.log(`[MapConfig] Initialized: ${mapConfig.originalWidth}x${mapConfig.originalHeight} → ${mapConfig.width}x${mapConfig.height}, base at (${mapConfig.baseCenter.x}, ${mapConfig.baseCenter.y})`);
   
   return mapConfig;
 }
@@ -154,9 +148,6 @@ export function confirmExpansion(expandedMapMeta) {
   
   // baseCenter is already correctly set to map center in initMapConfig
   // Don't override it with offset-based calculation
-  
-  console.log('[MapConfig] Expansion confirmed:', mapConfig.width, 'x', mapConfig.height);
-  console.log('[MapConfig] Base center remains at:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
 }
 
 // ============================================
@@ -168,14 +159,6 @@ export function confirmExpansion(expandedMapMeta) {
  * For a square map with centered base, rings scale to cover the map evenly.
  */
 function updateRingBoundaries() {
-  // For a square map with centered base, max reach is the same in all directions
-  const maxReach = Math.min(
-    mapConfig.baseCenter.x,
-    mapConfig.width - mapConfig.baseCenter.x,
-    mapConfig.baseCenter.y,
-    mapConfig.height - mapConfig.baseCenter.y
-  );
-  
   // All ring boundaries use multiples of 8
   // Original map edge: 64 tiles (128/2)
   // Expanded map edge: 256 tiles (512/2)
@@ -186,9 +169,6 @@ function updateRingBoundaries() {
     danger:     { min: 129, max: 192 },    // to 8×24
     deep:       { min: 193, max: Infinity } // to 256 (8×32, map edge)
   };
-  
-  console.log('[MapConfig] Ring boundaries updated (maxReach:', maxReach, 'tiles)');
-  console.log('[MapConfig] Rings:', JSON.stringify(mapConfig.rings));
 }
 
 // ============================================

@@ -42,9 +42,7 @@ export function expandMap(originalMap) {
   const offsetX = mapConfig.offset.x;
   const offsetY = mapConfig.offset.y;
   
-  console.log('[MapGenerator] Expanding map:', originalMap.meta.width, 'x', originalMap.meta.height, '→', newWidth, 'x', newHeight);
-  console.log('[MapGenerator] Offset:', offsetX, offsetY);
-  console.log('[MapGenerator] Base center:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
+  console.log(`[MapGenerator] Expanded: ${originalMap.meta.width}x${originalMap.meta.height} → ${newWidth}x${newHeight}`);
 
   // Generate expanded ground
   const expandedGround = [];

@@ -109,8 +109,7 @@ export function initFog(state) {
   repositionFogCanvas(state.player.x, state.player.y);
   renderFogViewport();
   
-  console.log(`[Fog] Viewport canvas: ${fogCanvas.width}×${fogCanvas.height}px (${canvasTilesW}×${canvasTilesH} tiles)`);
-  console.log(`[Fog] vs full map would be: ${mapWidth * TILE_SIZE}×${mapHeight * TILE_SIZE}px`);
+  console.log(`[Fog] Viewport canvas: ${fogCanvas.width}×${fogCanvas.height}px`);
 }
 
 /**

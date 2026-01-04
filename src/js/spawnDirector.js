@@ -547,8 +547,7 @@ export function initSpawnDirector(state) {
   // Log summary
   const totalSlots = spawners.reduce((sum, s) => sum + s.slots.length, 0);
   const validSlots = spawners.reduce((sum, s) => sum + s.slots.filter(sl => sl.spawnX !== null).length, 0);
-  console.log(`[SpawnDirector] Initialized with ${spawners.length} spawners, ${validSlots}/${totalSlots} valid slots`);
-  console.log(`[SpawnDirector] Base center: (${getBaseCenter().x}, ${getBaseCenter().y}), Player at: (${currentState.player.x}, ${currentState.player.y})`);
+  console.log(`[SpawnDirector] ${spawners.length} spawners, ${validSlots}/${totalSlots} slots`);
 }
 
 function initializeSpawners(state) {
@@ -652,34 +651,22 @@ function bootstrapSpawns() {
   // Get spawners in loaded regions
   const loadedSpawners = spawners.filter(s => isSpawnerInLoadedRegion(s));
   
-  console.log(`[SpawnDirector] Bootstrapping ${loadedSpawners.length} spawners in loaded regions...`);
-  
+  // Bootstrap spawners in loaded regions
   let spawnedCount = 0;
-  let skippedNoSlots = 0;
-  let skippedFlag = 0;
   
   for (const spawner of loadedSpawners) {
     // Check requirements (e.g., Act 3)
-    if (spawner.requires?.flag && !hasFlag(currentState, spawner.requires.flag)) {
-      skippedFlag++;
-      continue;
-    }
+    if (spawner.requires?.flag && !hasFlag(currentState, spawner.requires.flag)) continue;
     
     // Check if spawner has valid slots
     const validSlots = spawner.slots.filter(s => s.spawnX !== null);
-    if (validSlots.length === 0) {
-      skippedNoSlots++;
-      continue;
-    }
+    if (validSlots.length === 0) continue;
     
     // Fill slots
-    const filled = fillSpawnerSlots(spawner, now, { immediate: true });
-    spawnedCount += filled;
+    spawnedCount += fillSpawnerSlots(spawner, now, { immediate: true });
   }
   
-  console.log(`[SpawnDirector] Bootstrap complete: ${spawnedCount} enemies spawned`);
-  console.log(`[SpawnDirector] Skipped: ${skippedNoSlots} no valid slots, ${skippedFlag} flag requirements`);
-  console.log(`[SpawnDirector] Active enemies: ${currentState.runtime.activeEnemies.length}`);
+  console.log(`[SpawnDirector] Spawned ${spawnedCount} enemies (${currentState.runtime.activeEnemies.length} active)`);
   
   // NOTE: Rendering happens synchronously in game.js after initSpawnDirector returns.
   // No async import needed here - enemies are already in state.runtime.activeEnemies.
