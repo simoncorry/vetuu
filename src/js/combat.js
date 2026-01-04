@@ -6119,16 +6119,30 @@ function clearCombatIntent() {
  *   → Player is just repositioning while fighting
  */
 export function cancelCombatPursuit() {
-  // Canceling a weapon ability pursuit = full disengage
-  // Player explicitly decided not to use the ability
-  if (combatIntent?.type === 'weaponAbility') {
-    clearCombatIntent();
-    clearBurstTimers(); // Cancel any in-flight burst attacks
-    autoAttackEnabled = false; // Don't start auto-attacking after canceling ability
-  }
   // Clear any pending movement for attack
   pendingAttack = null;
-  // Basic auto-attack continues (kiting behavior preserved)
+  
+  if (!combatIntent) return;
+  
+  // Ability pursuit (slots 2-5, weapon abilities): always cancel
+  // Player explicitly decided not to use the ability
+  if (combatIntent.type === 'weaponAbility' || combatIntent.type === 'ability') {
+    clearCombatIntent();
+    clearBurstTimers();
+    autoAttackEnabled = false;
+    return;
+  }
+  
+  // Basic auto-attack: only cancel if NOT yet in combat (no successful attack)
+  // This allows kiting: once you've attacked, WASD just moves you, doesn't break auto-attack
+  if (combatIntent.type === 'basic') {
+    if (!combatIntent.lastSuccessAt) {
+      // Still moving to initial engagement - cancel pursuit
+      clearCombatIntent();
+      autoAttackEnabled = false;
+    }
+    // else: already in combat, preserve auto-attack for kiting
+  }
 }
 
 /**
