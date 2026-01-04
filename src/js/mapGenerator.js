@@ -17,6 +17,8 @@ const EXPANDED_HEIGHT = 320;
 // But we need defaults for road generation before expandMap is called
 let currentOffset = { x: 180, y: 120 };  // Default for 120x80 input
 let currentBaseCenter = { x: 236, y: 158 };  // Default
+let currentOriginalWidth = 120;   // Will be updated by expandMap
+let currentOriginalHeight = 80;   // Will be updated by expandMap
 
 // Export getters for dynamic values
 export function getExpansionOffset() { return currentOffset; }
@@ -62,6 +64,8 @@ export function expandMap(originalMap) {
     x: ORIGINAL_BASE_CENTER.x + offsetX, 
     y: ORIGINAL_BASE_CENTER.y + offsetY 
   };
+  currentOriginalWidth = originalMap.meta.width;
+  currentOriginalHeight = originalMap.meta.height;
   
   console.log('[MapGenerator] Expanding map:', originalMap.meta.width, 'x', originalMap.meta.height, '→', newWidth, 'x', newHeight);
   console.log('[MapGenerator] Offset:', offsetX, offsetY);
@@ -348,7 +352,7 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
     // Skip if in original map area or too close to base center
     const distFromCenter = Math.hypot(x - centerX, y - centerY);
     if (distFromCenter < 50) continue;
-    if (x >= offsetX && x < offsetX + ORIGINAL_WIDTH && y >= offsetY && y < offsetY + ORIGINAL_HEIGHT) continue;
+    if (x >= offsetX && x < offsetX + currentOriginalWidth && y >= offsetY && y < offsetY + currentOriginalHeight) continue;
     
     // Skip if on road footprint (7 tiles wide = 3 from center + buffer)
     if (Math.abs(x - centerX) <= ROAD_TOTAL_HALF + 2 || Math.abs(y - centerY) <= ROAD_TOTAL_HALF + 2) continue;
