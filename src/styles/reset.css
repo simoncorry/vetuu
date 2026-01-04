@@ -72,15 +72,14 @@ button {
   color: inherit;
   cursor: pointer;
   outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-button:focus {
+button:focus,
+button:focus-visible,
+button:active {
   outline: none;
-}
-
-button:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
+  box-shadow: none;
 }
 
 /* Make sure textareas without a rows attribute are not tiny */

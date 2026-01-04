@@ -697,6 +697,16 @@
   justify-content: center;
   /* GPU-friendly transitions */
   transition: opacity 0.15s ease, background-color 0.15s ease;
+  /* Remove all focus outlines */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.action-slot:focus,
+.action-slot:focus-visible,
+.action-slot:active {
+  outline: none;
+  box-shadow: none;
 }
 
 .action-slot:hover:not(.on-cooldown):not(.locked-slot) {
