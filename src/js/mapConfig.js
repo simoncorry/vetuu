@@ -125,10 +125,12 @@ export function initMapConfig(originalMapData, options = {}) {
   mapConfig.initialized = true;
   
   console.log('[MapConfig] Initialized:');
-  console.log('  Original:', mapConfig.originalWidth, 'x', mapConfig.originalHeight);
-  console.log('  Expanded:', mapConfig.width, 'x', mapConfig.height);
-  console.log('  Offset:', mapConfig.offset.x, mapConfig.offset.y);
-  console.log('  Base center:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
+  console.log('  Original map:', mapConfig.originalWidth, 'x', mapConfig.originalHeight);
+  console.log('  Expanded to:', mapConfig.width, 'x', mapConfig.height);
+  console.log('  Offset (to center base):', mapConfig.offset.x, mapConfig.offset.y);
+  console.log('  Original base center:', mapConfig.originalBaseCenter.x, mapConfig.originalBaseCenter.y);
+  console.log('  NEW base center:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
+  console.log('  Verification: original base', mapConfig.originalBaseCenter.x, '+', mapConfig.offset.x, '=', mapConfig.originalBaseCenter.x + mapConfig.offset.x);
   
   return mapConfig;
 }
