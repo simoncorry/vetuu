@@ -21,6 +21,7 @@ import { perfStart, perfEnd } from './perf.js';
 import { cssVar } from './utils.js';
 import { getQuestsByState } from './quests.js';
 import { mapConfig, getRingVisualization } from './mapConfig.js';
+import { getSpawners } from './spawnDirector.js';
 
 // ============================================
 // CONFIGURATION
@@ -1206,9 +1207,13 @@ function renderQuestMarkers(vp) {
 }
 
 function renderSpawnerPins(vp) {
-  if (!gameState?.spawnDirector?.spawners) return;
+  const spawners = getSpawners();
+  if (!spawners || spawners.length === 0) {
+    console.log('[WorldMap] No spawners found');
+    return;
+  }
   
-  const spawners = gameState.spawnDirector.spawners;
+  console.log(`[WorldMap] Rendering ${spawners.length} spawner pins`);
   const ringColors = {
     safe: '#00ff00',
     frontier: '#ffff00',
