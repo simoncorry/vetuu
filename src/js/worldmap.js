@@ -1360,8 +1360,9 @@ function renderRings(vp) {
   if (!overlayCtx || !gameState?.map) return;
   
   // Get base center from mapConfig (single source of truth)
-  const baseCenterX = mapConfig.baseCenter.x;
-  const baseCenterY = mapConfig.baseCenter.y;
+  // Add 0.5 to center within the tile, not at top-left corner
+  const baseCenterX = mapConfig.baseCenter.x + 0.5;
+  const baseCenterY = mapConfig.baseCenter.y + 0.5;
   
   // Convert base center to screen position
   const baseScreen = tileToScreen(baseCenterX, baseCenterY);
