@@ -701,67 +701,141 @@ function generateDefaultSpawners() {
   const center = getBaseCenter();
   const mapSize = mapConfig.expandedWidth; // 512
   
-  // Helper to create spawner with common defaults
+  // Track all placed spawners for overlap checking
+  const placedSpawners = []; // { x, y, radius }
+  
+  // Helper to check if a position+radius would overlap existing spawners
+  function wouldOverlap(x, y, radius) {
+    for (const placed of placedSpawners) {
+      const dist = Math.sqrt((x - placed.x) ** 2 + (y - placed.y) ** 2);
+      const minSeparation = radius + placed.radius + 2; // 2 tile buffer
+      if (dist < minSeparation) return true;
+    }
+    return false;
+  }
+  
+  // Helper to find non-overlapping position near target
+  function findNonOverlappingPosition(targetX, targetY, radius, maxAttempts = 20) {
+    // Try exact position first
+    if (!wouldOverlap(targetX, targetY, radius)) {
+      return { x: targetX, y: targetY };
+    }
+    
+    // Try nearby positions with increasing distance
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 5 + attempt * 3; // Increasing search radius
+      const newX = Math.max(10, Math.min(mapSize - 10, targetX + Math.cos(angle) * dist));
+      const newY = Math.max(10, Math.min(mapSize - 10, targetY + Math.sin(angle) * dist));
+      
+      if (!wouldOverlap(newX, newY, radius)) {
+        return { x: newX, y: newY };
+      }
+    }
+    
+    return null; // Couldn't find non-overlapping position
+  }
+  
+  // Helper to create spawner with common defaults AND register for overlap tracking
   function createSpawner(config) {
-    return {
+    const spawner = {
       noSpawnRadius: NO_SPAWN_RADIUS,
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
       ...config
     };
+    
+    // Register for overlap tracking
+    placedSpawners.push({
+      x: spawner.center.x,
+      y: spawner.center.y,
+      radius: spawner.spawnRadius
+    });
+    
+    return spawner;
   }
   
-  // Helper to place spawners in a ring with good spacing
-  function placeInRing(count, minDist, maxDist, angleOffset = 0) {
+  // Helper to place spawners in a ring with overlap prevention
+  function placeInRing(count, minDist, maxDist, radius, angleOffset = 0) {
     const positions = [];
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + angleOffset;
       const dist = minDist + Math.random() * (maxDist - minDist);
       const rawX = center.x + Math.cos(angle) * dist;
       const rawY = center.y + Math.sin(angle) * dist;
+      
       // Clamp to map bounds
       const clampedX = Math.max(10, Math.min(mapSize - 10, rawX));
       const clampedY = Math.max(10, Math.min(mapSize - 10, rawY));
-      positions.push(adjustSpawnerToAvoidRoad(clampedX, clampedY));
+      const adjusted = adjustSpawnerToAvoidRoad(clampedX, clampedY);
+      
+      // Find non-overlapping position
+      const finalPos = findNonOverlappingPosition(adjusted.x, adjusted.y, radius);
+      if (finalPos) {
+        positions.push(finalPos);
+      }
     }
     return positions;
   }
   
-  // Helper to place spawners in map corners (for deep ring coverage)
-  function placeInCorners() {
+  // Helper to place spawners in map corners with overlap prevention
+  function placeInCorners(radius) {
     const positions = [];
     const cornerOffsets = [
-      { x: 30, y: 30 },     // Top-left
-      { x: mapSize - 30, y: 30 },     // Top-right
-      { x: 30, y: mapSize - 30 },     // Bottom-left
-      { x: mapSize - 30, y: mapSize - 30 },  // Bottom-right
+      { x: 40, y: 40 },     // Top-left
+      { x: mapSize - 40, y: 40 },     // Top-right
+      { x: 40, y: mapSize - 40 },     // Bottom-left
+      { x: mapSize - 40, y: mapSize - 40 },  // Bottom-right
     ];
-    // Add multiple spawners per corner area
+    
+    // Add multiple spawners per corner area with spacing
     for (const corner of cornerOffsets) {
-      for (let i = 0; i < 3; i++) {
-        const offsetX = (Math.random() - 0.5) * 40;
-        const offsetY = (Math.random() - 0.5) * 40;
-        positions.push(adjustSpawnerToAvoidRoad(
-          Math.max(10, Math.min(mapSize - 10, corner.x + offsetX)),
-          Math.max(10, Math.min(mapSize - 10, corner.y + offsetY))
-        ));
+      // Place in a small grid pattern within corner
+      const offsets = [
+        { x: 0, y: 0 },
+        { x: radius * 2.5, y: 0 },
+        { x: 0, y: radius * 2.5 },
+        { x: radius * 2.5, y: radius * 2.5 },
+      ];
+      
+      for (const off of offsets) {
+        const targetX = Math.max(10, Math.min(mapSize - 10, corner.x + off.x));
+        const targetY = Math.max(10, Math.min(mapSize - 10, corner.y + off.y));
+        const adjusted = adjustSpawnerToAvoidRoad(targetX, targetY);
+        
+        const finalPos = findNonOverlappingPosition(adjusted.x, adjusted.y, radius);
+        if (finalPos) {
+          positions.push(finalPos);
+        }
       }
     }
     return positions;
   }
   
   // ============================================
+  // SPAWN RADIUS CONSTANTS (non-overlapping)
+  // ============================================
+  const RADIUS = {
+    safe: 4,        // Small, tight around base
+    frontier: 6,    // Slightly larger
+    wilderness: 10, // Medium 
+    danger: 12,     // Larger for packs
+    deep: 14,       // Largest
+    corner: 12      // Corner spawners
+  };
+  
+  // ============================================
   // SAFE RING: NOMADS ONLY (Solo, Level 1-3)
   // ============================================
-  const safePositions = placeInRing(12, 28, 32);
+  const safePositions = placeInRing(16, 28, 32, RADIUS.safe);
   safePositions.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_safe_${id++}`,
       kind: 'stray',
       ring: 'safe',
       center: pos,
-      spawnRadius: 4,
+      spawnRadius: RADIUS.safe,
       enemyPool: ['nomad'],
       levelRange: [1, 3],
       aggroType: 'passive',
@@ -776,15 +850,15 @@ function generateDefaultSpawners() {
   // ============================================
   // FRONTIER RING: SCAVS (Mix solo + packs, Level 4-12)
   // ============================================
-  // 8 frontier strays
-  const frontierStrayPos = placeInRing(8, 35, 50);
+  // 12 frontier strays
+  const frontierStrayPos = placeInRing(12, 35, 52, RADIUS.frontier);
   frontierStrayPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_frontier_stray_${id++}`,
       kind: 'stray',
       ring: 'frontier',
       center: pos,
-      spawnRadius: 6,
+      spawnRadius: RADIUS.frontier,
       enemyPool: ['nomad', 'scav_melee'],
       levelRange: [4, 8],
       aggroType: 'conditional',
@@ -795,8 +869,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 6 frontier packs
-  const frontierPackPos = placeInRing(6, 50, 62, Math.PI / 6);
+  // 10 frontier packs
+  const frontierPackPos = placeInRing(10, 48, 62, RADIUS.frontier, Math.PI / 10);
   frontierPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_frontier_pack_${id++}`,
@@ -804,7 +878,7 @@ function generateDefaultSpawners() {
       ring: 'frontier',
       templateId: 'frontier_pack',
       center: pos,
-      spawnRadius: 8,
+      spawnRadius: RADIUS.frontier,
       enemyPool: ['scav_ranged', 'scav_melee'],
       levelRange: [6, 12],
       packSize: { min: 3, max: 6 },
@@ -814,24 +888,24 @@ function generateDefaultSpawners() {
       leashRadius: 18,
       deaggroTimeMs: 6000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
-      minDistanceToOtherPacks: 25
+      minDistanceToOtherPacks: 20
     }));
   });
   
   // ============================================
   // WILDERNESS RING: TROGS (Mix, Level 12-25)
-  // 3x spawn radius (30-36 tiles)
+  // More spawners with non-overlapping radii
   // ============================================
-  // 8 wilderness strays (including solo alphas)
-  const wildStrayPos = placeInRing(8, 70, 100);
+  // 16 wilderness strays (including solo alphas)
+  const wildStrayPos = placeInRing(16, 70, 115, RADIUS.wilderness);
   wildStrayPos.forEach((pos, i) => {
-    const isAlpha = i < 2; // First 2 are solo alphas
+    const isAlpha = i < 4; // First 4 are solo alphas
     result.push(createSpawner({
       id: `sp_wild_stray_${id++}`,
       kind: 'stray',
       ring: 'wilderness',
       center: pos,
-      spawnRadius: 30, // 3x
+      spawnRadius: RADIUS.wilderness,
       enemyPool: ['trog_warrior', 'trog_shaman'],
       levelRange: isAlpha ? [18, 25] : [12, 18],
       aggroType: 'aggressive',
@@ -844,8 +918,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 10 wilderness packs
-  const wildPackPos = placeInRing(10, 85, 125, Math.PI / 10);
+  // 14 wilderness packs
+  const wildPackPos = placeInRing(14, 85, 125, RADIUS.wilderness, Math.PI / 14);
   wildPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_wild_pack_${id++}`,
@@ -853,7 +927,7 @@ function generateDefaultSpawners() {
       ring: 'wilderness',
       templateId: 'wilderness_pack',
       center: pos,
-      spawnRadius: 36, // 3x
+      spawnRadius: RADIUS.wilderness,
       enemyPool: ['trog_warrior', 'trog_shaman'],
       levelRange: [14, 25],
       packSize: { min: 3, max: 7 },
@@ -863,24 +937,24 @@ function generateDefaultSpawners() {
       leashRadius: 24,
       deaggroTimeMs: 8000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
-      minDistanceToOtherPacks: 30
+      minDistanceToOtherPacks: 25
     }));
   });
   
   // ============================================
   // DANGER RING: KARTH (Mix, Level 25-40)
-  // 3x spawn radius (42 tiles), many more spawners
+  // Many spawners spread across large area
   // ============================================
-  // 12 danger strays (including solo alphas)
-  const dangerStrayPos = placeInRing(12, 135, 175);
+  // 20 danger strays (including solo alphas)
+  const dangerStrayPos = placeInRing(20, 135, 185, RADIUS.danger);
   dangerStrayPos.forEach((pos, i) => {
-    const isAlpha = i < 3; // First 3 are solo alphas
+    const isAlpha = i < 5; // First 5 are solo alphas
     result.push(createSpawner({
       id: `sp_danger_stray_${id++}`,
       kind: 'stray',
       ring: 'danger',
       center: pos,
-      spawnRadius: 42, // 3x
+      spawnRadius: RADIUS.danger,
       enemyPool: ['karth_grunt', 'karth_officer'],
       levelRange: isAlpha ? [32, 40] : [25, 35],
       aggroType: 'aggressive',
@@ -893,8 +967,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 16 danger packs
-  const dangerPackPos = placeInRing(16, 145, 188, Math.PI / 16);
+  // 20 danger packs
+  const dangerPackPos = placeInRing(20, 145, 188, RADIUS.danger, Math.PI / 20);
   dangerPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_danger_pack_${id++}`,
@@ -902,7 +976,7 @@ function generateDefaultSpawners() {
       ring: 'danger',
       templateId: 'karth_patrol',
       center: pos,
-      spawnRadius: 42, // 3x
+      spawnRadius: RADIUS.danger,
       enemyPool: ['karth_grunt', 'karth_officer'],
       levelRange: [25, 40],
       packSize: { min: 4, max: 8 },
@@ -912,24 +986,24 @@ function generateDefaultSpawners() {
       leashRadius: 26,
       deaggroTimeMs: 10000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
-      minDistanceToOtherPacks: 35
+      minDistanceToOtherPacks: 28
     }));
   });
   
   // ============================================
   // DEEP RING: ENDGAME (Mix, Level 40-50)
-  // 3x spawn radius (48 tiles), extends into corners
+  // Extends into corners
   // ============================================
-  // 10 deep strays (including solo alphas)
-  const deepStrayPos = placeInRing(10, 200, 240);
+  // 18 deep strays (including solo alphas)
+  const deepStrayPos = placeInRing(18, 200, 245, RADIUS.deep);
   deepStrayPos.forEach((pos, i) => {
-    const isAlpha = i < 4; // First 4 are solo alphas
+    const isAlpha = i < 6; // First 6 are solo alphas
     result.push(createSpawner({
       id: `sp_deep_stray_${id++}`,
       kind: 'stray',
       ring: 'deep',
       center: pos,
-      spawnRadius: 48, // 3x
+      spawnRadius: RADIUS.deep,
       enemyPool: ['karth_grunt', 'karth_officer'],
       levelRange: isAlpha ? [45, 50] : [40, 48],
       aggroType: 'aggressive',
@@ -942,8 +1016,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 16 deep packs in ring
-  const deepPackPos = placeInRing(16, 205, 248, Math.PI / 16);
+  // 18 deep packs in ring
+  const deepPackPos = placeInRing(18, 205, 248, RADIUS.deep, Math.PI / 18);
   deepPackPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_deep_pack_${id++}`,
@@ -951,7 +1025,7 @@ function generateDefaultSpawners() {
       ring: 'deep',
       templateId: 'deep_patrol',
       center: pos,
-      spawnRadius: 48, // 3x
+      spawnRadius: RADIUS.deep,
       enemyPool: ['karth_grunt', 'karth_officer'],
       levelRange: [40, 50],
       packSize: { min: 5, max: 9 },
@@ -961,12 +1035,12 @@ function generateDefaultSpawners() {
       leashRadius: 30,
       deaggroTimeMs: 12000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min * 1.5, PACK_RESPAWN_MS.max * 1.5),
-      minDistanceToOtherPacks: 40
+      minDistanceToOtherPacks: 32
     }));
   });
   
-  // 12 corner spawners (3 per corner) - fills map corners
-  const cornerPos = placeInCorners();
+  // 16 corner spawners (4 per corner) - fills map corners
+  const cornerPos = placeInCorners(RADIUS.corner);
   cornerPos.forEach((pos, i) => {
     const isPack = i % 2 === 0; // Alternate pack/stray
     if (isPack) {
@@ -976,7 +1050,7 @@ function generateDefaultSpawners() {
         ring: 'deep',
         templateId: 'deep_patrol',
         center: pos,
-        spawnRadius: 48,
+        spawnRadius: RADIUS.corner,
         enemyPool: ['karth_grunt', 'karth_officer'],
         levelRange: [42, 50],
         packSize: { min: 4, max: 9 },
@@ -986,7 +1060,7 @@ function generateDefaultSpawners() {
         leashRadius: 32,
         deaggroTimeMs: 15000,
         respawnMs: randomRange(PACK_RESPAWN_MS.min * 1.5, PACK_RESPAWN_MS.max * 1.5),
-        minDistanceToOtherPacks: 30
+        minDistanceToOtherPacks: 25
       }));
     } else {
       result.push(createSpawner({
@@ -994,7 +1068,7 @@ function generateDefaultSpawners() {
         kind: 'stray',
         ring: 'deep',
         center: pos,
-        spawnRadius: 48,
+        spawnRadius: RADIUS.corner,
         enemyPool: ['karth_grunt', 'karth_officer'],
         levelRange: [45, 50],
         aggroType: 'aggressive',
