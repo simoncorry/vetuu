@@ -704,6 +704,17 @@ function generateDefaultSpawners() {
   // Track all placed spawners for overlap checking
   const placedSpawners = []; // { x, y, radius }
   
+  // Road center lines
+  const roadX = center.x;
+  const roadY = center.y;
+  
+  // Helper to check if position is on or near a road
+  function isOnRoad(x, y) {
+    const distToVertical = Math.abs(x - roadX);
+    const distToHorizontal = Math.abs(y - roadY);
+    return distToVertical < ROAD_EXCLUSION_RADIUS || distToHorizontal < ROAD_EXCLUSION_RADIUS;
+  }
+  
   // Helper to check if a position+radius would overlap existing spawners
   function wouldOverlap(x, y, radius) {
     for (const placed of placedSpawners) {
@@ -714,26 +725,50 @@ function generateDefaultSpawners() {
     return false;
   }
   
-  // Helper to find non-overlapping position near target
-  function findNonOverlappingPosition(targetX, targetY, radius, maxAttempts = 20) {
-    // Try exact position first
-    if (!wouldOverlap(targetX, targetY, radius)) {
-      return { x: targetX, y: targetY };
+  // Helper to check if position is valid (not on road, not overlapping)
+  function isValidPosition(x, y, radius) {
+    if (isOnRoad(x, y)) return false;
+    if (wouldOverlap(x, y, radius)) return false;
+    return true;
+  }
+  
+  // Helper to find non-overlapping, road-avoiding position near target
+  function findValidPosition(targetX, targetY, radius, maxAttempts = 30) {
+    // First, move off road if needed
+    let startX = targetX;
+    let startY = targetY;
+    
+    if (isOnRoad(targetX, targetY)) {
+      const adjusted = adjustSpawnerToAvoidRoad(targetX, targetY);
+      startX = adjusted.x;
+      startY = adjusted.y;
     }
     
-    // Try nearby positions with increasing distance
+    // Try adjusted position first
+    if (isValidPosition(startX, startY, radius)) {
+      return { x: startX, y: startY };
+    }
+    
+    // Try nearby positions with increasing distance, always avoiding roads
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 5 + attempt * 3; // Increasing search radius
-      const newX = Math.max(10, Math.min(mapSize - 10, targetX + Math.cos(angle) * dist));
-      const newY = Math.max(10, Math.min(mapSize - 10, targetY + Math.sin(angle) * dist));
+      const angle = (attempt / maxAttempts) * Math.PI * 2 + Math.random() * 0.5;
+      const dist = 5 + attempt * 2; // Increasing search radius
+      let newX = Math.max(10, Math.min(mapSize - 10, startX + Math.cos(angle) * dist));
+      let newY = Math.max(10, Math.min(mapSize - 10, startY + Math.sin(angle) * dist));
       
-      if (!wouldOverlap(newX, newY, radius)) {
+      // Always ensure we're off roads
+      if (isOnRoad(newX, newY)) {
+        const adjusted = adjustSpawnerToAvoidRoad(newX, newY);
+        newX = adjusted.x;
+        newY = adjusted.y;
+      }
+      
+      if (isValidPosition(newX, newY, radius)) {
         return { x: newX, y: newY };
       }
     }
     
-    return null; // Couldn't find non-overlapping position
+    return null; // Couldn't find valid position
   }
   
   // Helper to create spawner with common defaults AND register for overlap tracking
@@ -756,7 +791,7 @@ function generateDefaultSpawners() {
     return spawner;
   }
   
-  // Helper to place spawners in a ring with overlap prevention
+  // Helper to place spawners in a ring with overlap + road prevention
   function placeInRing(count, minDist, maxDist, radius, angleOffset = 0) {
     const positions = [];
     for (let i = 0; i < count; i++) {
@@ -768,10 +803,9 @@ function generateDefaultSpawners() {
       // Clamp to map bounds
       const clampedX = Math.max(10, Math.min(mapSize - 10, rawX));
       const clampedY = Math.max(10, Math.min(mapSize - 10, rawY));
-      const adjusted = adjustSpawnerToAvoidRoad(clampedX, clampedY);
       
-      // Find non-overlapping position
-      const finalPos = findNonOverlappingPosition(adjusted.x, adjusted.y, radius);
+      // Find valid position (avoids roads AND overlaps)
+      const finalPos = findValidPosition(clampedX, clampedY, radius);
       if (finalPos) {
         positions.push(finalPos);
       }
@@ -779,7 +813,7 @@ function generateDefaultSpawners() {
     return positions;
   }
   
-  // Helper to place spawners in map corners with overlap prevention
+  // Helper to place spawners in map corners with overlap + road prevention
   function placeInCorners(radius) {
     const positions = [];
     const cornerOffsets = [
@@ -802,9 +836,9 @@ function generateDefaultSpawners() {
       for (const off of offsets) {
         const targetX = Math.max(10, Math.min(mapSize - 10, corner.x + off.x));
         const targetY = Math.max(10, Math.min(mapSize - 10, corner.y + off.y));
-        const adjusted = adjustSpawnerToAvoidRoad(targetX, targetY);
         
-        const finalPos = findNonOverlappingPosition(adjusted.x, adjusted.y, radius);
+        // Find valid position (avoids roads AND overlaps)
+        const finalPos = findValidPosition(targetX, targetY, radius);
         if (finalPos) {
           positions.push(finalPos);
         }
@@ -827,8 +861,9 @@ function generateDefaultSpawners() {
   
   // ============================================
   // SAFE RING: NOMADS ONLY (Solo, Level 1-3)
+  // Ring is 28-32 tiles from center, small band near roads
   // ============================================
-  const safePositions = placeInRing(16, 28, 32, RADIUS.safe);
+  const safePositions = placeInRing(10, 28, 32, RADIUS.safe);
   safePositions.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_safe_${id++}`,
