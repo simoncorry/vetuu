@@ -117,6 +117,14 @@ let lastPlayerY = 0;
 let needsRender = true;
 let isOpen = false;
 
+// UI elements
+let coordsEl = null;
+let lastCoordsText = '';
+
+// Zoom smoothing (trackpad/wheel accumulator)
+let zoomWheelAccum = 0;
+const ZOOM_THRESH = 100;  // Higher = less sensitive (tune 100-140)
+
 // Waypoints
 let waypoints = [];
 
@@ -147,6 +155,9 @@ export function initWorldMap(state) {
   
   terrainCtx = terrainCanvas.getContext('2d', { alpha: false });
   overlayCtx = overlayCanvas.getContext('2d');
+  
+  // Cache UI element refs
+  coordsEl = document.getElementById('worldmap-coords');
   
   // Pre-render terrain
   prerenderTerrain();
@@ -480,13 +491,21 @@ function onWheel(e) {
   const tileBeforeX = mapCamX + (cursorX - vp.canvasW / 2) / vp.pixelsPerTile;
   const tileBeforeY = mapCamY + (cursorY - vp.canvasH / 2) / vp.pixelsPerTile;
   
-  // Change zoom
+  // Normalize wheel delta: trackpads emit many small deltas, mouse wheels emit bigger ticks.
+  // Clamp prevents large deltas from skipping multiple zoom levels.
+  const raw = e.deltaY;
+  const delta = Math.max(-120, Math.min(120, raw));
+  
+  // Accumulate until threshold crossed, then apply discrete zoom steps.
+  zoomWheelAccum += delta;
+  
   const oldRadius = viewRadius;
-  if (e.deltaY > 0) {
-    // Zoom out
+  while (zoomWheelAccum >= ZOOM_THRESH) {
+    zoomWheelAccum -= ZOOM_THRESH;
     viewRadius = Math.min(CONFIG.maxViewRadius, viewRadius + CONFIG.zoomStep);
-  } else {
-    // Zoom in
+  }
+  while (zoomWheelAccum <= -ZOOM_THRESH) {
+    zoomWheelAccum += ZOOM_THRESH;
     viewRadius = Math.max(CONFIG.minViewRadius, viewRadius - CONFIG.zoomStep);
   }
   
@@ -1245,7 +1264,7 @@ function renderPlayer(vp) {
 
 function updatePositionDisplay(vp) {
   const posEl = document.getElementById('worldmap-position');
-  if (!posEl || !gameState) return;
+  if (!gameState) return;
   
   // Find current region
   const offset = gameState.map?.meta?.originalOffset || { x: 0, y: 0 };
@@ -1267,7 +1286,20 @@ function updatePositionDisplay(vp) {
     }
   }
   
-  posEl.textContent = regionName;
+  if (posEl) {
+    posEl.textContent = regionName;
+  }
+  
+  // Update coords badge (shows map center tile, useful for mapping POIs + waypoints)
+  if (coordsEl) {
+    const x = Math.floor(mapCamX);
+    const y = Math.floor(mapCamY);
+    const text = `X: ${x} Y: ${y}`;
+    if (text !== lastCoordsText) {
+      coordsEl.textContent = text;
+      lastCoordsText = text;
+    }
+  }
 }
 
 // ============================================

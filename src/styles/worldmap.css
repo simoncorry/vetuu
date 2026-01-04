@@ -416,6 +416,22 @@
 }
 
 /* ============================================
+   COORDINATES INDICATOR
+   ============================================ */
+#worldmap-coords {
+  position: absolute;
+  top: 1rem;
+  right: calc(280px + 1rem);
+  background: rgba(20, 24, 28, 0.9);
+  border: 1px solid var(--frame-border);
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* ============================================
    CENTER ON PLAYER BUTTON
    ============================================ */
 #worldmap-center-player {

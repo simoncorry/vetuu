@@ -105,6 +105,10 @@ let needsRender = true;
 let lastCameraX = 0;
 let lastCameraY = 0;
 
+// Coords display
+let coordsEl = null;
+let lastCoordsText = '';
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -134,6 +138,9 @@ export function initMinimap(state) {
     container.appendChild(fogCanvas);
   }
   fogCtx = fogCanvas.getContext('2d');
+  
+  // Coords display element
+  coordsEl = document.getElementById('minimap-coords');
   
   // Remove old player marker element (we'll draw it on canvas)
   const oldPlayerMarker = document.getElementById('minimap-player');
@@ -588,6 +595,17 @@ function render() {
   
   // Draw enemies last, on fog canvas, so they're visible above fog
   renderEnemies(vp);
+  
+  // Update player coords display
+  if (coordsEl && gameState?.player) {
+    const x = Math.floor(gameState.player.x);
+    const y = Math.floor(gameState.player.y);
+    const text = `X: ${x} Y: ${y}`;
+    if (text !== lastCoordsText) {
+      coordsEl.textContent = text;
+      lastCoordsText = text;
+    }
+  }
 }
 
 function renderTerrain(vp) {
