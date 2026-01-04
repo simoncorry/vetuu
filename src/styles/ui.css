@@ -948,7 +948,7 @@
 
 /* Sense ability slots - same style as weapon abilities */
 
-/* Locked slot (slot 6) */
+/* Locked slot (level requirement not met) */
 .locked-slot {
   opacity: 0.4;
   cursor: not-allowed;
@@ -964,6 +964,22 @@
 
 .locked-slot .slot-icon {
   filter: grayscale(1);
+}
+
+/* Hidden ability slots (MSQ not yet revealed) */
+/* Sense abilities are completely hidden until the MSQ reveals them */
+#sense-abilities.hidden-abilities {
+  display: none !important;
+}
+
+/* Also hide the divider before sense abilities when they're hidden */
+.slot-divider.sense-divider {
+  display: none;
+}
+
+/* Show divider when sense is revealed */
+.sense-revealed .slot-divider.sense-divider {
+  display: block;
 }
 
 /* Utility slots - same style as weapon abilities */

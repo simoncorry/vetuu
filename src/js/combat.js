@@ -28,6 +28,7 @@ import {
   isSlowed, isVulnerable, isBurning, cssVar
 } from './utils.js';
 import { AI } from './aiConstants.js';
+import { dashToPosition } from './movement.js';
 import { getMaxHP, getHPPercent } from './entityCompat.js';
 import { nowMs, toPerfTime, isExpired } from './time.js';
 import {
@@ -598,13 +599,25 @@ if (typeof window !== 'undefined') {
 // ============================================
 // COMEBACK MECHANIC - Player Regeneration
 // ============================================
-// Player heals faster out of combat to encourage recovery and retry.
-// In-combat regen is slower to maintain challenge.
-const REGEN_OUT_OF_COMBAT_RATE = 0.25;      // 25% HP/Sense per tick (fast recovery)
-const REGEN_OUT_OF_COMBAT_INTERVAL = 800;   // Every 0.8s
-const REGEN_IN_COMBAT_RATE = 0.03;          // 3% HP/Sense per tick (slow trickle)
-const REGEN_IN_COMBAT_INTERVAL = 5000;      // Every 5s
-const COMBAT_TIMEOUT = 3000;                // 3s to be considered "out of combat"
+// REGENERATION CONSTANTS
+// ============================================
+// Combat state: 5s after last hostile action (taking or dealing damage)
+const COMBAT_TIMEOUT = 5000;                // 5s to be considered "out of combat"
+
+// Health Regeneration
+// In-combat: DISABLED (maintains fight tension)
+// Out-of-combat: 10s for full heal (10%/s)
+const HP_REGEN_IN_COMBAT = false;           // Disabled during combat
+const HP_REGEN_OUT_OF_COMBAT_RATE = 0.10;   // 10% per second (full heal in 10s)
+
+// Sense Regeneration
+// In-combat: 30s for full bar (3.33%/s) - "engagement rate"
+// Out-of-combat: 5s for full bar (20%/s) - "pacing rate"
+const SENSE_REGEN_IN_COMBAT_RATE = 0.0333;  // 3.33% per second (full in 30s)
+const SENSE_REGEN_OUT_OF_COMBAT_RATE = 0.20; // 20% per second (full in 5s)
+
+// Regen tick interval (1 second for smooth visual updates)
+const REGEN_INTERVAL = 1000;
 
 // ============================================
 // STATE
@@ -1353,51 +1366,57 @@ function acquireClosestEnemyInRange({ maxRange, requireLOS = false }) {
 // ============================================
 // REGENERATION SYSTEM
 // ============================================
+// Combat state: 5s after last hostile action (taking or dealing damage)
+// Health: Disabled in-combat, 10s full heal out-of-combat
+// Sense: 30s full in-combat, 5s full out-of-combat
+// ============================================
 function processRegeneration(now) {
-  const player = currentState.player;
-  const timeSinceHit = now - lastHitTime;
+  // Only process once per second
+  if (now - lastRegenTick < REGEN_INTERVAL) return;
+  lastRegenTick = now;
   
-  // Use lastCombatEventAt for reliable combat detection
-  // This fixes: "any engaged enemy" keeping player in combat forever (stuck sense)
-  const isInCombat = (now - lastCombatEventAt) <= COMBAT_TIMEOUT;
-
-  if (!isInCombat || timeSinceHit > COMBAT_TIMEOUT) {
-    if (now - lastRegenTick >= REGEN_OUT_OF_COMBAT_INTERVAL) {
-      lastRegenTick = now;
-      
-      const playerMax = getMaxHP(player);
-      const hpRegen = Math.ceil(playerMax * REGEN_OUT_OF_COMBAT_RATE);
-      const senseRegen = Math.ceil(player.maxSense * REGEN_OUT_OF_COMBAT_RATE);
-      
-      if (player.hp < playerMax) {
-        player.hp = Math.min(playerMax, player.hp + hpRegen);
-      }
-      if (player.sense < player.maxSense) {
-        player.sense = Math.min(player.maxSense, player.sense + senseRegen);
-      }
-
-      updatePlayerHealthBar();
-      updatePlayerSenseBar();
+  const player = currentState.player;
+  const playerMaxHP = getMaxHP(player);
+  
+  // Determine combat state (5s since last combat event)
+  const isInCombat = lastCombatEventAt && (now - lastCombatEventAt) <= COMBAT_TIMEOUT;
+  
+  let didUpdateHP = false;
+  let didUpdateSense = false;
+  
+  if (isInCombat) {
+    // ========== IN-COMBAT REGENERATION ==========
+    
+    // Health: DISABLED during combat (maintains fight tension)
+    // No HP regen while fighting
+    
+    // Sense: Slow regeneration (30s for full bar)
+    if (player.sense < player.maxSense) {
+      const senseRegen = Math.ceil(player.maxSense * SENSE_REGEN_IN_COMBAT_RATE);
+      player.sense = Math.min(player.maxSense, player.sense + senseRegen);
+      didUpdateSense = true;
     }
-  } else if (timeSinceHit >= REGEN_IN_COMBAT_INTERVAL) {
-    if (now - lastRegenTick >= REGEN_IN_COMBAT_INTERVAL) {
-      lastRegenTick = now;
-      
-      const playerMaxCombat = getMaxHP(player);
-      const hpRegen = Math.ceil(playerMaxCombat * REGEN_IN_COMBAT_RATE);
-      const senseRegen = Math.ceil(player.maxSense * REGEN_IN_COMBAT_RATE);
-      
-      if (player.hp < playerMaxCombat) {
-        player.hp = Math.min(playerMaxCombat, player.hp + hpRegen);
-      }
-      if (player.sense < player.maxSense) {
-        player.sense = Math.min(player.maxSense, player.sense + senseRegen);
-      }
-
-      updatePlayerHealthBar();
-      updatePlayerSenseBar();
+  } else {
+    // ========== OUT-OF-COMBAT REGENERATION ==========
+    
+    // Health: Fast regeneration (10s for full heal)
+    if (player.hp < playerMaxHP) {
+      const hpRegen = Math.ceil(playerMaxHP * HP_REGEN_OUT_OF_COMBAT_RATE);
+      player.hp = Math.min(playerMaxHP, player.hp + hpRegen);
+      didUpdateHP = true;
+    }
+    
+    // Sense: Very fast regeneration (5s for full bar)
+    if (player.sense < player.maxSense) {
+      const senseRegen = Math.ceil(player.maxSense * SENSE_REGEN_OUT_OF_COMBAT_RATE);
+      player.sense = Math.min(player.maxSense, player.sense + senseRegen);
+      didUpdateSense = true;
     }
   }
+  
+  // Update UI only if values changed
+  if (didUpdateHP) updatePlayerHealthBar();
+  if (didUpdateSense) updatePlayerSenseBar();
 }
 
 // ============================================
@@ -3204,20 +3223,40 @@ export function checkPendingAttack() {
     // New unified ability system (slots 2-5)
     const slot = parseInt(actionType.split('_')[1], 10);
     if (!isNaN(slot) && actionCooldowns[slot] <= 0 && !isGcdActive()) {
+      // Snapshot swing timer before ability (to restore after)
+      const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
+      const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
+      
       executeAbilityDirect(slot);
-      // Resume auto-attack after ability
+      
+      // Resume auto-attack after ability, preserving swing timer
       if (autoAttackEnabled && currentTarget?.hp > 0) {
         setAutoAttackIntent(currentTarget);
+        // Restore swing timer so we don't get instant auto-attack after ability
+        if (savedNextAttackAt > nowMs()) {
+          combatIntent.nextAttackAt = savedNextAttackAt;
+          combatIntent.cooldownStartedAt = savedCooldownStartedAt;
+        }
       }
     }
   } else if (actionType.startsWith('weaponAbility_')) {
     // Legacy weapon ability from old intent system - execute directly
     const slot = parseInt(actionType.split('_')[1], 10);
     if (!isNaN(slot) && actionCooldowns[slot] <= 0) {
+      // Snapshot swing timer before ability (to restore after)
+      const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
+      const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
+      
       executeWeaponAbilityDirect(slot);
-      // Resume auto-attack after ability
+      
+      // Resume auto-attack after ability, preserving swing timer
       if (autoAttackEnabled && currentTarget?.hp > 0) {
         setAutoAttackIntent(currentTarget);
+        // Restore swing timer
+        if (savedNextAttackAt > nowMs()) {
+          combatIntent.nextAttackAt = savedNextAttackAt;
+          combatIntent.cooldownStartedAt = savedCooldownStartedAt;
+        }
       }
     }
   } else {
@@ -3744,14 +3783,16 @@ function setAbilityIntent(slot, target) {
 // ============================================
 
 /**
- * SLOT 2: LEAP - Gap closer + damage
- * Instantly dash to target, dealing 150% melee damage
+ * SLOT 2: LEAP - Gap closer ability
+ * Dash to target at 300% speed, deal 150% melee damage ON ARRIVAL
+ * Movement must complete before damage is dealt
  */
 function executeLeap(ability) {
   if (!currentTarget || currentTarget.hp <= 0) return;
   
   const player = currentState.player;
   const target = currentTarget;
+  const targetId = target.id;  // Capture for callback validation
   
   // Calculate dash destination (adjacent to target)
   const dx = target.x - player.x;
@@ -3761,8 +3802,8 @@ function executeLeap(ability) {
   if (dist <= 0) return;
   
   // Normalize and move to 1 tile away from target
-  const destX = target.x - Math.round(dx / dist);
-  const destY = target.y - Math.round(dy / dist);
+  let destX = target.x - Math.round(dx / dist);
+  let destY = target.y - Math.round(dy / dist);
   
   // Validate destination is walkable
   if (!canMoveTo(currentState, destX, destY)) {
@@ -3778,6 +3819,7 @@ function executeLeap(ability) {
       logCombat('Cannot leap - path blocked.');
       // Refund cooldown
       actionCooldowns[ability.slot] = 0;
+      actionMaxCooldowns[ability.slot] = 0;
       return;
     }
     
@@ -3788,29 +3830,39 @@ function executeLeap(ability) {
       return altDist < bestDist ? alt : best;
     });
     
-    player.x = closest.x;
-    player.y = closest.y;
-  } else {
-    player.x = destX;
-    player.y = destY;
+    destX = closest.x;
+    destY = closest.y;
   }
   
-  // Calculate damage (150% of melee basic)
-  const damage = calculateAbilityDamage(ability.slot, 'melee');
+  logCombat('Leaping!');
   
-  // Deal damage
-  target.hp -= damage;
-  markCombatEvent();
-  showDamageNumber(target.x, target.y, damage, false);
-  
-  logCombat(`Leap! ${damage} damage`);
-  
-  updateEnemyHealthBar(target);
-  updateTargetFrame();
-  
-  if (target.hp <= 0) {
-    handleEnemyDeath(target);
-  }
+  // Dash to target at 300% speed, deal damage on arrival
+  dashToPosition(destX, destY, 3, () => {
+    // Callback: deal damage AFTER dash completes
+    
+    // Validate target still exists and is the same target
+    if (!currentTarget || currentTarget.id !== targetId || currentTarget.hp <= 0) {
+      logCombat('Leap: Target lost.');
+      return;
+    }
+    
+    // Calculate damage (150% of melee basic)
+    const damage = calculateAbilityDamage(ability.slot, 'melee');
+    
+    // Deal damage
+    currentTarget.hp -= damage;
+    markCombatEvent();
+    showDamageNumber(currentTarget.x, currentTarget.y, damage, false);
+    
+    logCombat(`Leap! ${damage} damage`);
+    
+    updateEnemyHealthBar(currentTarget);
+    updateTargetFrame();
+    
+    if (currentTarget.hp <= 0) {
+      handleEnemyDeath(currentTarget);
+    }
+  });
 }
 
 /**
@@ -3841,7 +3893,8 @@ function executeBladeFlurry(ability) {
     maxHits: ability.hits,
     intervalMs: ability.hitIntervalMs,
     startTime: performance.now(),
-    timerId: null
+    timerId: null,
+    damageDealt: false  // Track if any damage was dealt (no refund if true)
   };
   
   // Lock movement during channel
@@ -3862,6 +3915,7 @@ function scheduleFlurryHit() {
     const { ability, target, targetId, maxHits } = bladeFlurryState;
     
     // Guard: target dead or swapped
+    // Note: cancelBladeFlurry checks damageDealt internally - won't refund if damage was dealt
     if (!target || target.hp <= 0 || !currentTarget || currentTarget.id !== targetId) {
       cancelBladeFlurry(true);
       return;
@@ -3874,6 +3928,7 @@ function scheduleFlurryHit() {
     showDamageNumber(target.x, target.y, damage, false);
     
     bladeFlurryState.hitCount++;
+    bladeFlurryState.damageDealt = true;  // Mark that damage was dealt (no refund)
     
     // Check if final hit
     if (bladeFlurryState.hitCount >= maxHits) {
@@ -3906,7 +3961,7 @@ function scheduleFlurryHit() {
 function cancelBladeFlurry(refund = true) {
   if (!bladeFlurryState) return;
   
-  const { ability, timerId } = bladeFlurryState;
+  const { ability, timerId, damageDealt } = bladeFlurryState;
   
   if (timerId) {
     clearTimeout(timerId);
@@ -3918,11 +3973,14 @@ function cancelBladeFlurry(refund = true) {
     player.channeling = false;
   }
   
-  // Refund cooldown if cancelled by movement
-  if (refund && ability) {
+  // Only refund cooldown if NO damage was dealt
+  // If any hit landed, ability was "used" - no refund
+  if (refund && ability && !damageDealt) {
     actionCooldowns[ability.slot] = 0;
     actionMaxCooldowns[ability.slot] = 0; // Reset max so UI doesn't get stuck
     logCombat('Blade Flurry cancelled - cooldown refunded.');
+  } else if (refund && ability && damageDealt) {
+    logCombat('Blade Flurry interrupted.');  // No refund, damage was dealt
   }
   
   bladeFlurryState = null;
@@ -4428,8 +4486,8 @@ const SENSE_ABILITIES = {
   6: {
     id: 'pull',
     name: 'Pull',
-    senseCost: 10,       // 50% of base maxSense (20) - allows chaining
-    cooldownMs: 8000,
+    senseCost: 50,       // 50% of 100% pool (allows double-cast then wait)
+    cooldownMs: 12000,   // 12s - long CD due to 4s stun being very powerful
     radius: 8,           // Affects enemies within 8 tiles
     pullToDistance: 2,   // Pull them to within 2 tiles
     freezeDurationMs: 4000, // 4 second freeze (stun)
@@ -4438,8 +4496,8 @@ const SENSE_ABILITIES = {
   7: {
     id: 'push',
     name: 'Push',
-    senseCost: 10,       // 50% of base maxSense (20) - allows chaining
-    cooldownMs: 8000,
+    senseCost: 50,       // 50% of 100% pool (allows double-cast then wait)
+    cooldownMs: 8000,    // 8s - shorter CD for spacing/burn damage tool
     radius: 8,           // Affects enemies within 8 tiles
     // Push distance varies by starting distance:
     // 1 tile away = pushed 8 tiles, 8 tiles away = pushed 1 tile
@@ -4449,8 +4507,8 @@ const SENSE_ABILITIES = {
 };
 
 const SENSE_COOLDOWNS = {
-  6: { current: 0, max: 8000 },
-  7: { current: 0, max: 8000 }
+  6: { current: 0, max: 12000 },  // Pull: 12s cooldown
+  7: { current: 0, max: 8000 }    // Push: 8s cooldown
 };
 
 export function useSenseAbility(slot) {
@@ -4461,6 +4519,13 @@ export function useSenseAbility(slot) {
   
   if (playerImmunityActive) {
     logCombat('Cannot use abilities during immunity');
+    return;
+  }
+  
+  // Check if sense abilities are revealed via MSQ
+  const flags = window.__vetuuFlags || {};
+  if (!flags.sense_revealed) {
+    // Silently fail - UI should be hidden, but guard against direct calls
     return;
   }
   
@@ -4503,6 +4568,9 @@ export function useSenseAbility(slot) {
   // Remember if auto-attack was enabled (to resume after ability)
   const wasAutoAttackEnabled = autoAttackEnabled;
   const previousTarget = currentTarget;
+  // Snapshot swing timer before ability (to restore after)
+  const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
+  const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
   
   // Execute ability (handles its own enemy detection)
   switch (ability.id) {
@@ -4532,8 +4600,12 @@ export function useSenseAbility(slot) {
   
   // Resume auto-attack if it was enabled and we have a valid target
   if (wasAutoAttackEnabled && previousTarget && previousTarget.hp > 0) {
-    // Refresh the auto-attack intent
     setAutoAttackIntent(previousTarget);
+    // Restore swing timer to prevent instant auto-attack after ability
+    if (savedNextAttackAt > nowMs()) {
+      combatIntent.nextAttackAt = savedNextAttackAt;
+      combatIntent.cooldownStartedAt = savedCooldownStartedAt;
+    }
   }
 }
 
@@ -5889,6 +5961,12 @@ function getIntentTarget() {
 export function tryExecuteCombatIntent() {
   if (!combatIntent) return;
   
+  // Block intent execution while casting or channeling
+  const player = currentState?.player;
+  if (player?.casting || player?.channeling) {
+    return; // Don't interrupt cast/channel
+  }
+  
   // Never process utility intents (should never exist, but safety check)
   if (combatIntent.type === 'utility') {
     clearCombatIntent();
@@ -5946,6 +6024,12 @@ export function tryExecuteCombatIntent() {
  * Uses weapon.basic.damage - NOT slot 1 ability damage
  */
 function executeBasicIntent(now) {
+  // Block auto-attacks while casting or channeling
+  const player = currentState?.player;
+  if (player?.casting || player?.channeling) {
+    return; // Don't interrupt cast/channel with auto-attack
+  }
+  
   let target = getIntentTarget();
   
   // Target invalid - try to reacquire
@@ -5975,7 +6059,7 @@ function executeBasicIntent(now) {
     return;
   }
   
-  const player = currentState.player;
+  // player already declared at top of function
   const dist = distCoords(player.x, player.y, target.x, target.y);
   
   // Determine attack type based on distance and unlock status
@@ -6174,26 +6258,22 @@ function executeWeaponAbilityIntent(now) {
   // Ready to execute ability - clear intent FIRST (one-shot)
   const intentSlot = slot;
   const wasAutoAttackEnabled = autoAttackEnabled;
+  // Snapshot swing timer before clearing intent (to restore after)
+  const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
+  const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
   clearCombatIntent();
   
   // Execute the ability
   executeWeaponAbilityDirect(intentSlot);
   
-  // ============================================
-  // ABILITY WEAVING DESIGN CHOICE
-  // ============================================
-  // After a weapon ability, we immediately resume auto-attack with a FRESH intent.
-  // This means nextAttackAt = 0, allowing an instant basic attack after the ability.
-  // 
-  // This is INTENTIONAL "ability weaving" - rewarding players who time abilities well.
-  // The flow is: basic attack → ability → instant basic attack → normal 1.5s cadence
-  // 
-  // If you want SWING TIMER PRESERVATION instead (no instant attack after ability):
-  // 1. Before clearCombatIntent(), snapshot: const savedNextAttackAt = combatIntent?.nextAttackAt
-  // 2. After setAutoAttackIntent(), restore: combatIntent.nextAttackAt = savedNextAttackAt
-  // ============================================
+  // Resume auto-attack after ability, preserving swing timer
   if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
     setAutoAttackIntent(currentTarget);
+    // Restore swing timer to prevent instant auto-attack after ability
+    if (savedNextAttackAt > nowMs()) {
+      combatIntent.nextAttackAt = savedNextAttackAt;
+      combatIntent.cooldownStartedAt = savedCooldownStartedAt;
+    }
   }
 }
 
@@ -6278,14 +6358,22 @@ function executeAbilityIntent(_now) {
   // Ready to execute ability - clear intent FIRST (one-shot)
   const intentSlot = slot;
   const wasAutoAttackEnabled = autoAttackEnabled;
+  // Snapshot swing timer before clearing intent (to restore after)
+  const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
+  const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
   clearCombatIntent();
   
   // Execute the ability
   executeAbilityDirect(intentSlot);
   
-  // Resume auto-attack after ability
+  // Resume auto-attack after ability, preserving swing timer
   if (wasAutoAttackEnabled && currentTarget && currentTarget.hp > 0) {
     setAutoAttackIntent(currentTarget);
+    // Restore swing timer to prevent instant auto-attack after ability
+    if (savedNextAttackAt > nowMs()) {
+      combatIntent.nextAttackAt = savedNextAttackAt;
+      combatIntent.cooldownStartedAt = savedCooldownStartedAt;
+    }
   }
 }
 
@@ -7684,6 +7772,33 @@ function updateActionBarState() {
     } else {
       actionBar.classList.remove('target-friendly');
     }
+  }
+  
+  // Update sense ability visibility based on MSQ flag
+  updateSenseAbilityVisibility();
+}
+
+/**
+ * Show/hide sense abilities based on MSQ flag
+ * Sense abilities are completely hidden until the MSQ reveals them
+ */
+function updateSenseAbilityVisibility() {
+  const senseAbilities = document.getElementById('sense-abilities');
+  const senseDivider = document.querySelector('.slot-divider.sense-divider');
+  const flags = window.__vetuuFlags || {};
+  
+  const senseRevealed = !!flags.sense_revealed;
+  
+  if (senseAbilities) {
+    if (senseRevealed) {
+      senseAbilities.classList.remove('hidden-abilities');
+    } else {
+      senseAbilities.classList.add('hidden-abilities');
+    }
+  }
+  
+  if (senseDivider) {
+    senseDivider.style.display = senseRevealed ? 'block' : 'none';
   }
 }
 

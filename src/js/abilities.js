@@ -210,10 +210,10 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'sense',
-    senseCost: 10,
+    senseCost: 50,      // 50% of 100% pool (allows double-cast then wait)
     radius: 8,
     pullDistance: 2,
-    cooldownMs: 8000,
+    cooldownMs: 12000,  // 12s - long CD due to 4s stun being very powerful
     
     // Execution
     castType: 'instant',
@@ -240,10 +240,10 @@ export const PLAYER_ABILITIES = {
     
     // Combat properties
     type: 'sense',
-    senseCost: 10,
+    senseCost: 50,      // 50% of 100% pool (allows double-cast then wait)
     radius: 8,
     pushDistance: 2,
-    cooldownMs: 8000,
+    cooldownMs: 8000,   // 8s - shorter CD for spacing/burn damage tool
     
     // Execution
     castType: 'instant',

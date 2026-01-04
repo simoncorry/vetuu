@@ -33,8 +33,8 @@ export const state = {
     y: 42,
     hp: 100,
     maxHP: 100,
-    sense: 20,
-    maxSense: 20,
+    sense: 100,     // Fixed 100% pool (never scales with level)
+    maxSense: 100,  // Fixed 100% pool (never scales with level)
     atk: 5,
     def: 3,
     luck: 1,
@@ -214,8 +214,8 @@ function levelUp() {
   setMaxHP(state.player, newMaxHP);
   state.player.hp = newMaxHP;
   
-  // Sense: +1 per level (slower than before)
-  state.player.maxSense += 1;
+  // Sense: Fixed 100% pool (does NOT scale with level)
+  // Restore sense to full on level up as a reward
   state.player.sense = state.player.maxSense;
   
   // ATK/DEF: +1 every 2 levels (half rate)

@@ -272,6 +272,12 @@ function completeMove() {
   const targetX = state.player.x;
   const targetY = state.player.y;
   
+  // If this was a dash, use dash completion handler
+  if (isDashing) {
+    completeDash(targetX, targetY);
+    return;
+  }
+  
   currentTween = null;
   isMoving = false;
   
@@ -849,5 +855,117 @@ export function activateSprintBuff(onComplete) {
  */
 export function isSprintBuffActive() {
   return sprintBuffActive;
+}
+
+// ============================================
+// DASH / LEAP MOVEMENT
+// Fast movement to position with callback on arrival
+// ============================================
+let dashCallback = null;
+let isDashing = false;
+
+/**
+ * Dash to a position at high speed, execute callback on arrival
+ * Used for Leap ability - rapid movement then deal damage
+ * 
+ * @param {number} destX - Destination X coordinate
+ * @param {number} destY - Destination Y coordinate
+ * @param {number} speedMultiplier - How much faster than normal (3 = 300% speed)
+ * @param {function} onComplete - Callback when dash completes
+ */
+export function dashToPosition(destX, destY, speedMultiplier = 3, onComplete = null) {
+  if (!state?.player || !playerEl) return false;
+  
+  // Cancel any existing path/movement
+  cancelPath();
+  
+  const startX = state.player.x;
+  const startY = state.player.y;
+  
+  // Calculate distance for animation timing
+  const dx = destX - startX;
+  const dy = destY - startY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  if (dist === 0) {
+    // Already at destination
+    if (onComplete) onComplete();
+    return true;
+  }
+  
+  // Calculate duration: base duration / speed multiplier
+  // Scale by distance for consistent apparent speed
+  const baseDuration = MOVE_DURATION * dist;
+  const dashDuration = baseDuration / speedMultiplier;
+  
+  // Set logical position immediately
+  state.player.x = destX;
+  state.player.y = destY;
+  
+  // Store callback
+  dashCallback = onComplete;
+  isDashing = true;
+  isMoving = true;
+  
+  // Setup animation
+  if (playerEl) {
+    playerEl.classList.add('moving');
+    playerEl.classList.add('dashing'); // Visual indicator for dash
+    playerEl.style.transition = 'none';
+  }
+  
+  // Notify camera to follow
+  onMoveStart(destX, destY, dashDuration);
+  
+  // Create tween for dash
+  currentTween = {
+    startX: startX,
+    startY: startY,
+    targetX: destX,
+    targetY: destY,
+    startTime: performance.now(),
+    duration: dashDuration
+  };
+  
+  return true;
+}
+
+/**
+ * Complete a dash movement (called from tickMovement when tween completes)
+ */
+function completeDash(destX, destY) {
+  isDashing = false;
+  isMoving = false;
+  currentTween = null;
+  
+  // Remove visual indicators
+  if (playerEl) {
+    playerEl.classList.remove('moving');
+    playerEl.classList.remove('dashing');
+  }
+  
+  // Update visual position
+  visualX = destX;
+  visualY = destY;
+  if (playerEl) {
+    actorTransform(playerEl, destX, destY);
+  }
+  
+  // Call dash callback
+  if (dashCallback) {
+    const callback = dashCallback;
+    dashCallback = null;
+    callback();
+  }
+  
+  // Standard move completion
+  onMoveComplete(destX, destY);
+}
+
+/**
+ * Check if currently in a dash
+ */
+export function isDashActive() {
+  return isDashing;
 }
 
