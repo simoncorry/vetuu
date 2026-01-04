@@ -816,14 +816,7 @@ function generateDefaultSpawners() {
   // Helper to place spawners in map corners - the triangular areas beyond deep ring
   function placeInCorners(radius, spawnersPerCorner = 4) {
     const positions = [];
-    const margin = 15;
-    const spacing = radius * 2 + 8; // Generous spacing between spawners
-    
-    // Deep ring extends to ~248 tiles from center at 45° angles
-    // At 45°: 248 * cos(45°) ≈ 175 tiles from center in each axis
-    // Center is at 256, so deep ring reaches to ~81 and ~431 on each axis
-    // Corner regions must be BEYOND these limits
-    const deepReach = 70; // Stay within 70 tiles of actual corner
+    const margin = 18;
     
     // Define actual corner positions (the true map corners)
     const cornerDefs = [
@@ -834,32 +827,42 @@ function generateDefaultSpawners() {
     ];
     
     for (const corner of cornerDefs) {
-      let placed = 0;
+      // Define 4 strategic positions for each corner:
+      // 1. Absolute corner (closest to map edge)
+      // 2. Along horizontal edge (away from corner)
+      // 3. Along vertical edge (away from corner)
+      // 4. Diagonal middle (between the edge spawners)
       
-      // Place spawners in a diagonal pattern from the corner inward
-      for (let i = 0; i < spawnersPerCorner * 3 && placed < spawnersPerCorner; i++) {
-        // Diagonal distance from corner (tiles inward)
-        const diagDist = margin + (i % 2) * spacing + Math.floor(i / 2) * spacing * 0.7;
-        
-        if (diagDist > deepReach) continue; // Don't go beyond corner region
-        
-        // Vary position along the diagonal with some perpendicular offset
-        const perpOffset = ((i % 3) - 1) * spacing * 0.6;
-        
-        // Calculate position from corner
-        const baseX = corner.cornerX + corner.dirX * diagDist;
-        const baseY = corner.cornerY + corner.dirY * diagDist;
-        
-        // Add perpendicular offset (rotate 45° from diagonal)
-        const targetX = baseX + corner.dirX * perpOffset * 0.7 - corner.dirY * perpOffset * 0.7;
-        const targetY = baseY + corner.dirY * perpOffset * 0.7 + corner.dirX * perpOffset * 0.7;
-        
+      const cornerPositions = [
+        // Position 1: Absolute corner
+        { 
+          x: corner.cornerX + corner.dirX * margin, 
+          y: corner.cornerY + corner.dirY * margin 
+        },
+        // Position 2: Along horizontal edge (further from corner)
+        { 
+          x: corner.cornerX + corner.dirX * 55, 
+          y: corner.cornerY + corner.dirY * margin 
+        },
+        // Position 3: Along vertical edge (further from corner)
+        { 
+          x: corner.cornerX + corner.dirX * margin, 
+          y: corner.cornerY + corner.dirY * 55 
+        },
+        // Position 4: Diagonal middle (forms triangle with others)
+        { 
+          x: corner.cornerX + corner.dirX * 45, 
+          y: corner.cornerY + corner.dirY * 45 
+        },
+      ];
+      
+      for (const pos of cornerPositions) {
         // Add small randomization
-        const randX = (Math.random() - 0.5) * spacing * 0.3;
-        const randY = (Math.random() - 0.5) * spacing * 0.3;
+        const randX = (Math.random() - 0.5) * 8;
+        const randY = (Math.random() - 0.5) * 8;
         
-        const finalX = Math.max(margin, Math.min(mapSize - margin, targetX + randX));
-        const finalY = Math.max(margin, Math.min(mapSize - margin, targetY + randY));
+        const finalX = Math.max(margin, Math.min(mapSize - margin, pos.x + randX));
+        const finalY = Math.max(margin, Math.min(mapSize - margin, pos.y + randY));
         
         // Check this position is actually in the corner (beyond deep ring)
         const distFromCenter = Math.sqrt((finalX - center.x) ** 2 + (finalY - center.y) ** 2);
@@ -869,7 +872,6 @@ function generateDefaultSpawners() {
         const finalPos = findValidPosition(finalX, finalY, radius);
         if (finalPos) {
           positions.push(finalPos);
-          placed++;
         }
       }
     }
