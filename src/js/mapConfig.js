@@ -29,39 +29,40 @@
  */
 export const mapConfig = {
   // Original map dimensions (from map.json, before expansion)
-  originalWidth: 136,
-  originalHeight: 136,
+  // Using 128×128 (8×16) for clean multiples of 8
+  originalWidth: 128,
+  originalHeight: 128,
   
   // Expanded map dimensions (after mapGenerator expansion)
-  // Default to 400x400 square - actual values set by initMapConfig
-  width: 400,
-  height: 400,
+  // Using 512×512 (8×64) for clean multiples of 8
+  width: 512,
+  height: 512,
   
   // Target expansion dimensions (what we expand TO)
-  expandedWidth: 400,
-  expandedHeight: 400,
+  expandedWidth: 512,
+  expandedHeight: 512,
   
   // Offset where original map is placed within expanded map
-  // Calculated to center the BASE at (200, 200)
-  // With originalBaseCenter at (68, 68): offset = (200-68, 200-68) = (132, 132)
-  offset: { x: 132, y: 132 },
+  // Calculated to center the BASE at (256, 256)
+  // With originalBaseCenter at (64, 64): offset = (256-64, 256-64) = (192, 192)
+  offset: { x: 192, y: 192 },
   
   // Base center (Drycross) in expanded coordinates
-  // For 400x400 square map, base is at exact center
-  baseCenter: { x: 200, y: 200 },
+  // For 512×512 square map, base is at exact center
+  baseCenter: { x: 256, y: 256 },
   
   // Original base center in the source map coordinate system
-  // This is where Drycross is in the map.json data
-  originalBaseCenter: { x: 56, y: 38 },
+  // For 128×128 map, center is at (64, 64)
+  originalBaseCenter: { x: 64, y: 64 },
   
   // Ring boundaries for spawn zones (in tiles from baseCenter)
-  // Using multiples of 4/8 for clean alignment
+  // All using multiples of 8 for clean alignment
   rings: {
-    safe:       { min: 0,   max: 32 },
-    frontier:   { min: 33,  max: 68 },
-    wilderness: { min: 69,  max: 120 },
-    danger:     { min: 121, max: 168 },
-    deep:       { min: 169, max: Infinity }
+    safe:       { min: 0,   max: 32 },   // 8×4
+    frontier:   { min: 33,  max: 64 },   // 8×8 (original map edge)
+    wilderness: { min: 65,  max: 128 },  // 8×16
+    danger:     { min: 129, max: 192 },  // 8×24
+    deep:       { min: 193, max: Infinity } // to 256 (8×32)
   },
   
   // Ring colors for debug visualization
@@ -96,13 +97,12 @@ export function initMapConfig(originalMapData, options = {}) {
   mapConfig.originalHeight = meta.height;
   
   // Original base center (Drycross) in the original coordinate system
-  // Based on actual wall positions: x 43-93 (center 68), y 49-87 (center 68)
-  // Map was cropped to 136x136 centered on base
-  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 68, y: 68 };
+  // For 128×128 map, center is at (64, 64)
+  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 64, y: 64 };
   
   // Target expansion dimensions - use a SQUARE map for symmetrical rings
-  // Default 400x400 gives base at perfect center (200, 200)
-  const targetSize = options.expandedSize ?? 400;
+  // 512×512 (8×64) gives base at perfect center (256, 256)
+  const targetSize = options.expandedSize ?? 512;
   mapConfig.expandedWidth = options.expandedWidth ?? targetSize;
   mapConfig.expandedHeight = options.expandedHeight ?? targetSize;
   
@@ -176,24 +176,15 @@ function updateRingBoundaries() {
     mapConfig.height - mapConfig.baseCenter.y
   );
   
-  // Scale rings proportionally to fill the map
-  // With base at center of 400x400, maxReach = 200
-  // Rings are designed as percentages of max reach:
-  // - Safe: 0-15% (close to base)
-  // - Frontier: 15-35% (early exploration)
-  // - Wilderness: 35-60% (mid-game)
-  // - Danger: 60-85% (late-game)
-  // - Deep: 85%+ (endgame, map edges)
-  
-  // Ring boundaries using multiples of 4/8 for clean alignment
-  // Original map edge: 68 tiles (136/2)
-  // Expanded map edge: 200 tiles (400/2)
+  // All ring boundaries use multiples of 8
+  // Original map edge: 64 tiles (128/2)
+  // Expanded map edge: 256 tiles (512/2)
   mapConfig.rings = {
-    safe:       { min: 0,   max: 32 },    // 0-32 tiles (8×4)
-    frontier:   { min: 33,  max: 68 },    // 33-68 tiles (original map edge)
-    wilderness: { min: 69,  max: 120 },   // 69-120 tiles (8×15)
-    danger:     { min: 121, max: 168 },   // 121-168 tiles (8×21)
-    deep:       { min: 169, max: Infinity } // 169-200 tiles (to map edge)
+    safe:       { min: 0,   max: 32 },     // 8×4 tiles
+    frontier:   { min: 33,  max: 64 },     // to 8×8 (original map edge)
+    wilderness: { min: 65,  max: 128 },    // to 8×16
+    danger:     { min: 129, max: 192 },    // to 8×24
+    deep:       { min: 193, max: Infinity } // to 256 (8×32, map edge)
   };
   
   console.log('[MapConfig] Ring boundaries updated (maxReach:', maxReach, 'tiles)');

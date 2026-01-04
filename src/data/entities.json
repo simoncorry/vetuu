@@ -1,7 +1,7 @@
 {
   "playerStart": {
-    "x": 68,
-    "y": 68,
+    "x": 64,
+    "y": 64,
     "facing": "south"
   },
   "npcs": [
@@ -9,8 +9,8 @@
       "id": "npc_dax_rowan",
       "name": "Captain Dax Rowan",
       "role": "militiaCaptain",
-      "x": 20,
-      "y": 34,
+      "x": 16,
+      "y": 30,
       "color": "#22B6B8",
       "dialogueRoot": "dlg_dax_root"
     },
@@ -18,8 +18,8 @@
       "id": "npc_sela_marr",
       "name": "Sela Marr",
       "role": "hiddenAsset",
-      "x": 28,
-      "y": 28,
+      "x": 24,
+      "y": 24,
       "color": "#77C7FF",
       "dialogueRoot": "dlg_sela_root",
       "flags": {
@@ -30,8 +30,8 @@
       "id": "npc_verdleg_trader",
       "name": "Verdleg Trader",
       "role": "nomadStall",
-      "x": 36,
-      "y": 42,
+      "x": 32,
+      "y": 38,
       "color": "#E18B37",
       "dialogueRoot": "dlg_verdleg_trader"
     },
@@ -39,8 +39,8 @@
       "id": "npc_verdleg_chief",
       "name": "Verdleg Elder",
       "role": "campLeader",
-      "x": -16,
-      "y": 70,
+      "x": -20,
+      "y": 66,
       "color": "#E18B37",
       "dialogueRoot": "dlg_verdleg_elder"
     },
@@ -48,8 +48,8 @@
       "id": "npc_trog_envoy",
       "name": "Trog Envoy",
       "role": "ritualNomad",
-      "x": 71,
-      "y": 70,
+      "x": 67,
+      "y": 66,
       "color": "#8B5A2B",
       "dialogueRoot": "dlg_trog_envoy"
     },
@@ -57,8 +57,8 @@
       "id": "npc_silas_morn",
       "name": "Field Director Silas Morn",
       "role": "artLead",
-      "x": 40,
-      "y": 28,
+      "x": 36,
+      "y": 24,
       "color": "#2E343B",
       "dialogueRoot": "dlg_silas_root",
       "requires": {
@@ -69,8 +69,8 @@
       "id": "guard_north_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 26,
-      "y": 20,
+      "x": 22,
+      "y": 16,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -82,8 +82,8 @@
       "id": "guard_north_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 30,
-      "y": 20,
+      "x": 26,
+      "y": 16,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -95,8 +95,8 @@
       "id": "guard_south_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 26,
-      "y": 56,
+      "x": 22,
+      "y": 52,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -108,8 +108,8 @@
       "id": "guard_south_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 30,
-      "y": 56,
+      "x": 26,
+      "y": 52,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -121,8 +121,8 @@
       "id": "guard_east_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 52,
-      "y": 36,
+      "x": 48,
+      "y": 32,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -134,8 +134,8 @@
       "id": "guard_east_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 52,
-      "y": 40,
+      "x": 48,
+      "y": 36,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -147,8 +147,8 @@
       "id": "guard_west_1",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 4,
-      "y": 36,
+      "x": 0,
+      "y": 32,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -160,8 +160,8 @@
       "id": "guard_west_2",
       "name": "Ironcross Guard",
       "role": "guard",
-      "x": 4,
-      "y": 40,
+      "x": 0,
+      "y": 36,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 25,
@@ -173,8 +173,8 @@
       "id": "npc_nurse_vela",
       "name": "Field Medic Vela",
       "role": "medic",
-      "x": 16,
-      "y": 42,
+      "x": 12,
+      "y": 38,
       "color": "#E85D75",
       "dialogueRoot": "dlg_vela_root",
       "isMedic": true
@@ -183,8 +183,8 @@
       "id": "guard_collapse",
       "name": "Breach Watcher",
       "role": "guard",
-      "x": 2,
-      "y": 55,
+      "x": -2,
+      "y": 51,
       "color": "#22B6B8",
       "isGuard": true,
       "level": 15,
@@ -202,8 +202,8 @@
       "count": 3,
       "radius": 5,
       "center": {
-        "x": 56,
-        "y": 60
+        "x": 52,
+        "y": 56
       },
       "respawnSeconds": 120,
       "x": null
@@ -216,8 +216,8 @@
       "count": 3,
       "radius": 5,
       "center": {
-        "x": 75,
-        "y": 42
+        "x": 71,
+        "y": 38
       },
       "respawnSeconds": 120,
       "x": null
@@ -230,8 +230,8 @@
       "count": 3,
       "radius": 5,
       "center": {
-        "x": 37,
-        "y": 42
+        "x": 33,
+        "y": 38
       },
       "respawnSeconds": 120,
       "x": null
@@ -244,8 +244,8 @@
       "count": 4,
       "radius": 5,
       "center": {
-        "x": 56,
-        "y": 22
+        "x": 52,
+        "y": 18
       },
       "respawnSeconds": 150,
       "x": null
@@ -258,8 +258,8 @@
       "count": 4,
       "radius": 5,
       "center": {
-        "x": 78,
-        "y": 55
+        "x": 74,
+        "y": 51
       },
       "respawnSeconds": 150,
       "x": null
@@ -272,8 +272,8 @@
       "count": 4,
       "radius": 5,
       "center": {
-        "x": 34,
-        "y": 55
+        "x": 30,
+        "y": 51
       },
       "respawnSeconds": 150,
       "x": null
@@ -286,8 +286,8 @@
       "count": 4,
       "radius": 7,
       "center": {
-        "x": 10,
-        "y": 60
+        "x": 6,
+        "y": 56
       },
       "respawnSeconds": 240,
       "x": null
@@ -300,8 +300,8 @@
       "count": 4,
       "radius": 7,
       "center": {
-        "x": 100,
-        "y": 60
+        "x": 96,
+        "y": 56
       },
       "respawnSeconds": 240,
       "x": null
@@ -314,8 +314,8 @@
       "count": 5,
       "radius": 8,
       "center": {
-        "x": 10,
-        "y": 20
+        "x": 6,
+        "y": 16
       },
       "respawnSeconds": 300,
       "x": null
@@ -328,8 +328,8 @@
       "count": 5,
       "radius": 8,
       "center": {
-        "x": 105,
-        "y": 25
+        "x": 101,
+        "y": 21
       },
       "respawnSeconds": 300,
       "x": null
@@ -342,8 +342,8 @@
       "count": 4,
       "radius": 7,
       "center": {
-        "x": 56,
-        "y": -10
+        "x": 52,
+        "y": -14
       },
       "respawnSeconds": 360,
       "x": null
@@ -356,8 +356,8 @@
       "count": 5,
       "radius": 8,
       "center": {
-        "x": 96,
-        "y": 66
+        "x": 92,
+        "y": 62
       },
       "respawnSeconds": 420,
       "x": null
@@ -370,8 +370,8 @@
       "count": 5,
       "radius": 8,
       "center": {
-        "x": -20,
-        "y": 42
+        "x": -24,
+        "y": 38
       },
       "respawnSeconds": 420,
       "x": null
@@ -384,8 +384,8 @@
       "count": 6,
       "radius": 9,
       "center": {
-        "x": -30,
-        "y": 70
+        "x": -34,
+        "y": 66
       },
       "respawnSeconds": 480,
       "x": null
@@ -398,8 +398,8 @@
       "count": 6,
       "radius": 9,
       "center": {
-        "x": 140,
-        "y": 70
+        "x": 136,
+        "y": 66
       },
       "respawnSeconds": 480,
       "x": null
@@ -412,8 +412,8 @@
       "count": 5,
       "radius": 8,
       "center": {
-        "x": 56,
-        "y": -40
+        "x": 52,
+        "y": -44
       },
       "respawnSeconds": 540,
       "x": null
@@ -426,8 +426,8 @@
       "count": 6,
       "radius": 9,
       "center": {
-        "x": 78,
-        "y": 20
+        "x": 74,
+        "y": 16
       },
       "respawnSeconds": 600,
       "requires": {
@@ -443,8 +443,8 @@
       "count": 6,
       "radius": 9,
       "center": {
-        "x": 104,
-        "y": 16
+        "x": 100,
+        "y": 12
       },
       "respawnSeconds": 720,
       "requires": {
@@ -459,8 +459,8 @@
       "name": "Retriever Captain",
       "type": "retriever_captain",
       "level": 25,
-      "x": 76,
-      "y": 16,
+      "x": 72,
+      "y": 12,
       "requires": {
         "flag": "act3"
       },
