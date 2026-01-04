@@ -20,8 +20,8 @@ export const AI = {
   /** Cannot re-aggro after retreat for this duration */
   BROKEN_OFF_MS: 4000,
   
-  /** Cannot be damaged/CC'd right after spawn or reset */
-  SPAWN_IMMUNITY_MS: 1500,
+  /** Cannot be damaged/CC'd right after spawn or reset (reduced for difficulty) */
+  SPAWN_IMMUNITY_MS: 800,
   
   /** If can't reach home after this time, snap/reset as last resort */
   RETREAT_TIMEOUT_MS: 4000,

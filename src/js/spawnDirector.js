@@ -806,9 +806,9 @@ function generateDefaultSpawners() {
       enemyPool: ['nomad', 'scav_melee'],
       levelRange: [4, 6],
       aggroType: 'conditional',
-      aggroRadius: 5,
-      leashRadius: 12,
-      deaggroTimeMs: 4000,
+      aggroRadius: 7,       // was 5
+      leashRadius: 14,      // was 12
+      deaggroTimeMs: 6000,  // was 4000
       respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
@@ -833,12 +833,12 @@ function generateDefaultSpawners() {
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['scav_ranged', 'scav_melee'],  // Fallback if template fails
       levelRange: [5, 10],
-      packSize: { min: 2, max: 4 },
-      alpha: { chance: 0.20, max: 1 },
+      packSize: { min: 3, max: 5 },  // was min:2 max:4
+      alpha: { chance: 0.25, max: 1 },  // was 0.20
       aggroType: 'conditional',
-      aggroRadius: 6,
-      leashRadius: 14,
-      deaggroTimeMs: 4000,
+      aggroRadius: 8,       // was 6
+      leashRadius: 16,      // was 14
+      deaggroTimeMs: 6000,  // was 4000
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
@@ -870,12 +870,12 @@ function generateDefaultSpawners() {
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['trog_warrior', 'trog_shaman'],  // Fallback
       levelRange: [12, 18],
-      packSize: { min: 3, max: 5 },
-      alpha: { chance: 0.35, max: 1 },
+      packSize: { min: 4, max: 6 },  // was min:3 max:5
+      alpha: { chance: 0.40, max: 1 },  // was 0.35
       aggroType: 'aggressive',
-      aggroRadius: 8,
-      leashRadius: 18,
-      deaggroTimeMs: 5000,
+      aggroRadius: 10,      // was 8
+      leashRadius: 20,      // was 18
+      deaggroTimeMs: 8000,  // was 5000
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
@@ -901,12 +901,12 @@ function generateDefaultSpawners() {
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['trog_warrior', 'trog_shaman'],  // Fallback
       levelRange: [18, 25],
-      packSize: { min: 3, max: 5 },
-      alpha: { chance: 0.45, max: 1 },
+      packSize: { min: 4, max: 6 },  // was min:3 max:5
+      alpha: { chance: 0.50, max: 1 },  // was 0.45
       aggroType: 'aggressive',
-      aggroRadius: 9,
-      leashRadius: 20,
-      deaggroTimeMs: 5000,
+      aggroRadius: 11,      // was 9
+      leashRadius: 22,      // was 20
+      deaggroTimeMs: 8000,  // was 5000
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
@@ -938,12 +938,12 @@ function generateDefaultSpawners() {
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],  // Fallback
       levelRange: [25, 40],
-      packSize: { min: 3, max: 5 },
-      alpha: { chance: 0.4, max: 1 },
+      packSize: { min: 4, max: 6 },  // was min:3 max:5
+      alpha: { chance: 0.50, max: 1 },  // was 0.40
       aggroType: 'aggressive',
-      aggroRadius: 10,
-      leashRadius: 22,
-      deaggroTimeMs: 6000,
+      aggroRadius: 12,      // was 10
+      leashRadius: 24,      // was 22
+      deaggroTimeMs: 10000, // was 6000
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       maxAlive: 1,
       lastSpawnAt: -Infinity,
@@ -977,12 +977,12 @@ function generateDefaultSpawners() {
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['karth_grunt', 'karth_officer'],  // Fallback
       levelRange: [40, 50],
-      packSize: { min: 3, max: 5 },
-      alpha: { chance: 0.6, max: 1 },
+      packSize: { min: 5, max: 7 },  // was min:3 max:5 - endgame packs are BIG
+      alpha: { chance: 0.70, max: 2 },  // was 0.60 max:1 - can have 2 alphas!
       aggroType: 'aggressive',
-      aggroRadius: 14,
-      leashRadius: 26,
-      deaggroTimeMs: 8000,
+      aggroRadius: 16,      // was 14
+      leashRadius: 28,      // was 26
+      deaggroTimeMs: 12000, // was 8000 - they chase you FOREVER
       respawnMs: randomRange(PACK_RESPAWN_MS.min * 1.5, PACK_RESPAWN_MS.max * 1.5),
       maxAlive: 1,
       lastSpawnAt: -Infinity,

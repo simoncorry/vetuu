@@ -256,7 +256,7 @@ let DRYCROSS_CENTER = { x: 56, y: 42 };
 
 // Combat rules
 const GUARD_LEVEL = 5; // Guard level - enemies can now fight back
-const MAX_ENGAGED_ENEMIES = 2; // Only 2 enemies can actively attack at once
+const MAX_ENGAGED_ENEMIES = 3; // Max enemies actively attacking at once (increased for difficulty)
 
 // Passive critter threshold (critters below this level are non-aggressive)
 const PASSIVE_CRITTER_MAX_LEVEL = 5;
@@ -289,11 +289,11 @@ const retreatStats = {
 // Lower DEF_K = stronger defense. At DEF_K=20: 10 DEF = 33% reduction
 const DEF_K = 20;
 
-// Level scaling (bounded, not exponential)
+// Level scaling (bounded, not exponential) - tightened for difficulty
 const LEVEL_ADV_PER = 0.07;   // +7% damage per level above target
-const LEVEL_DIS_PER = 0.06;   // -6% damage per level below target
+const LEVEL_DIS_PER = 0.08;   // -8% damage per level below target (was 6%)
 const LEVEL_CAP_UP = 1.60;    // Max +60% from level advantage
-const LEVEL_CAP_DOWN = 0.55;  // Min 55% from level disadvantage
+const LEVEL_CAP_DOWN = 0.45;  // Min 45% from level disadvantage (was 55%)
 
 // Crit system
 const CRIT_BASE = 0.05;       // 5% base crit chance
@@ -395,7 +395,7 @@ function levelDiffMult(attackerLevel, defenderLevel) {
     // Attacker advantage: +7% per level, cap at +60%
     return Math.min(LEVEL_CAP_UP, 1 + delta * LEVEL_ADV_PER);
   } else if (delta < 0) {
-    // Attacker disadvantage: -6% per level, floor at 55%
+    // Attacker disadvantage: -8% per level, floor at 45%
     return Math.max(LEVEL_CAP_DOWN, 1 + delta * LEVEL_DIS_PER);
   }
   return 1;
@@ -753,9 +753,9 @@ const COMBAT_TIMEOUT = 2000;                // 2s to be considered "out of comba
 
 // Health Regeneration
 // In-combat: DISABLED (maintains fight tension)
-// Out-of-combat: 10s for full heal (10%/s)
+// Out-of-combat: 20s for full heal (5%/s) - slower regen for difficulty
 const HP_REGEN_IN_COMBAT = false;           // Disabled during combat
-const HP_REGEN_OUT_OF_COMBAT_RATE = 0.10;   // 10% per second (full heal in 10s)
+const HP_REGEN_OUT_OF_COMBAT_RATE = 0.05;   // 5% per second (full heal in 20s)
 
 // Sense Regeneration
 // In-combat: 30s for full bar (3.33%/s) - "engagement rate"
@@ -6620,7 +6620,7 @@ function clearCombatIntent() {
 
 const OP_SWIPE_WINDOW_MS = 450;     // Window after being adjacent to trigger
 const OP_SWIPE_COOLDOWN_MS = 1400;  // Cooldown between opportunity swipes
-const OP_SWIPE_DAMAGE_MULT = 0.5;   // 50% of normal damage
+const OP_SWIPE_DAMAGE_MULT = 0.7;   // 70% of normal damage (increased for difficulty)
 
 /**
  * Track that a melee enemy is adjacent to the player.

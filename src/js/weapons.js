@@ -141,6 +141,7 @@ WEAPONS.sword = WEAPONS.vibro_sword;
 // ============================================
 // Note: projectileColor now uses CSS variables (resolved in combat.js)
 // --projectile-enemy for enemies, --melee-enemy for melee attacks
+// Base damage increased ~25% for difficulty
 export const ENEMY_WEAPONS = {
   // Melee weapons (range = 1, adjacent only)
   melee_claws: {
@@ -148,7 +149,7 @@ export const ENEMY_WEAPONS = {
     type: 'melee',
     combatType: 'melee',
     range: 1,
-    baseDamage: 4,
+    baseDamage: 5,      // was 4
     cooldown: 1200,
     moveSpeed: 350
   },
@@ -157,7 +158,7 @@ export const ENEMY_WEAPONS = {
     type: 'melee',
     combatType: 'melee',
     range: 1,
-    baseDamage: 5,
+    baseDamage: 6,      // was 5
     cooldown: 1000,
     moveSpeed: 320
   },
@@ -166,7 +167,7 @@ export const ENEMY_WEAPONS = {
     type: 'melee',
     combatType: 'melee',
     range: 1,
-    baseDamage: 9,
+    baseDamage: 11,     // was 9
     cooldown: 1300,
     moveSpeed: 380
   },
@@ -175,7 +176,7 @@ export const ENEMY_WEAPONS = {
     type: 'melee',
     combatType: 'melee',
     range: 1,
-    baseDamage: 11,
+    baseDamage: 14,     // was 11
     cooldown: 1100,
     moveSpeed: 320
   },
@@ -184,7 +185,7 @@ export const ENEMY_WEAPONS = {
     type: 'melee',
     combatType: 'melee',
     range: 1,
-    baseDamage: 20,
+    baseDamage: 25,     // was 20
     cooldown: 1000,
     moveSpeed: 320
   },
@@ -195,7 +196,7 @@ export const ENEMY_WEAPONS = {
     type: 'ranged',
     combatType: 'ranged',
     range: 6,
-    baseDamage: 10,
+    baseDamage: 13,     // was 10
     cooldown: 1600,
     moveSpeed: 450
   },
@@ -204,7 +205,7 @@ export const ENEMY_WEAPONS = {
     type: 'ranged',
     combatType: 'ranged',
     range: 6,
-    baseDamage: 13,
+    baseDamage: 16,     // was 13
     cooldown: 2000,
     moveSpeed: 480
   },
@@ -213,7 +214,7 @@ export const ENEMY_WEAPONS = {
     type: 'ranged',
     combatType: 'ranged',
     range: 6,
-    baseDamage: 14,
+    baseDamage: 18,     // was 14
     cooldown: 1600,
     moveSpeed: 420
   },
@@ -222,7 +223,7 @@ export const ENEMY_WEAPONS = {
     type: 'ranged',
     combatType: 'ranged',
     range: 6,
-    baseDamage: 18,
+    baseDamage: 20,     // was 18 (guards are friendly, smaller increase)
     cooldown: 1400,
     moveSpeed: 400
   }
