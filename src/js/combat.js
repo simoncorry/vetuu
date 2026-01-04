@@ -6488,7 +6488,10 @@ function isInvalidCombatTarget(enemy, t = nowMs()) {
  * Set basic auto-attack intent on a target.
  * Intent persists until target dies, player cancels, or timeout.
  * Uses weapon.basic spec for damage/range/LOS (NOT slot 1 ability).
- * Timer-gated: attacks occur every BASIC_ATTACK_CD_MS (1.5s shared cadence).
+ * Timer-gated: attacks occurs every BASIC_ATTACK_CD_MS (1.5s shared cadence).
+ * 
+ * NOTE: Does NOT overwrite existing ability intents (slots 2-7).
+ * Player explicitly queued an ability, so honor that over auto-attack.
  * @returns {{ success: boolean, reason?: string }}
  */
 function setAutoAttackIntent(target) {
@@ -6496,6 +6499,15 @@ function setAutoAttackIntent(target) {
   const check = isInvalidCombatTarget(target);
   if (check.invalid) {
     return { success: false, reason: check.reason };
+  }
+  
+  // Don't overwrite ability intents - player explicitly queued an ability
+  // Only overwrite if: no intent, or intent is basic type, or intent targets different enemy
+  if (combatIntent && 
+      (combatIntent.type === 'ability' || combatIntent.type === 'weaponAbility') &&
+      combatIntent.targetId === target.id) {
+    // Ability already queued for this target - preserve it
+    return { success: true };
   }
   
   // Determine attack type based on unlock status
