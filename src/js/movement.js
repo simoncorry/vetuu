@@ -591,31 +591,38 @@ function findPath(startX, startY, endX, endY) {
 }
 
 function findAdjacentWalkable(targetX, targetY, fromX, fromY) {
-  // Include diagonal adjacent tiles
+  // Prioritize horizontal positions for more natural side-by-side interaction
+  // Order: horizontal (left/right) > vertical (above/below) > diagonal
   const adjacent = [
-    // Cardinal
-    { x: targetX, y: targetY - 1 },
-    { x: targetX, y: targetY + 1 },
-    { x: targetX - 1, y: targetY },
-    { x: targetX + 1, y: targetY },
+    // Horizontal first (same Y as target - natural side-by-side)
+    { x: targetX - 1, y: targetY, isHorizontal: true },
+    { x: targetX + 1, y: targetY, isHorizontal: true },
+    // Vertical
+    { x: targetX, y: targetY - 1, isHorizontal: false },
+    { x: targetX, y: targetY + 1, isHorizontal: false },
     // Diagonal
-    { x: targetX - 1, y: targetY - 1 },
-    { x: targetX + 1, y: targetY - 1 },
-    { x: targetX - 1, y: targetY + 1 },
-    { x: targetX + 1, y: targetY + 1 }
+    { x: targetX - 1, y: targetY - 1, isHorizontal: false },
+    { x: targetX + 1, y: targetY - 1, isHorizontal: false },
+    { x: targetX - 1, y: targetY + 1, isHorizontal: false },
+    { x: targetX + 1, y: targetY + 1, isHorizontal: false }
   ];
   
   let best = null;
-  let bestDist = Infinity;
+  let bestScore = Infinity;
   
   for (const adj of adjacent) {
     if (canMoveTo(adj.x, adj.y)) {
       // Use actual distance (accounts for diagonal being √2)
       const dx = adj.x - fromX;
       const dy = adj.y - fromY;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < bestDist) {
-        bestDist = d;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      // Score: distance, but horizontal tiles get a significant bonus (lower = better)
+      // Subtract 2 tiles worth of distance for horizontal positions
+      const score = adj.isHorizontal ? dist - 2 : dist;
+      
+      if (score < bestScore) {
+        bestScore = score;
         best = adj;
       }
     }

@@ -2450,32 +2450,48 @@ function canMeleeAttack(enemy, t = nowMs()) {
 function moveToSurroundPosition(enemy) {
   const player = currentState.player;
   
-  // Get positions around the player - prioritize horizontal (left/right) for natural positioning
-  const surroundPositions = [
-    { x: player.x - 1, y: player.y },     // Left (horizontal - priority)
-    { x: player.x + 1, y: player.y },     // Right (horizontal - priority)
+  // Get positions around the player in priority groups
+  // 1. Horizontal (left/right) - most natural for side-by-side combat
+  // 2. Vertical (above/below)
+  // 3. Diagonal
+  const horizontalPositions = [
+    { x: player.x - 1, y: player.y },     // Left
+    { x: player.x + 1, y: player.y }      // Right
+  ];
+  const verticalPositions = [
     { x: player.x, y: player.y - 1 },     // Above
-    { x: player.x, y: player.y + 1 },     // Below
+    { x: player.x, y: player.y + 1 }      // Below
+  ];
+  const diagonalPositions = [
     { x: player.x - 1, y: player.y - 1 }, // Diagonal top-left
     { x: player.x + 1, y: player.y - 1 }, // Diagonal top-right
     { x: player.x - 1, y: player.y + 1 }, // Diagonal bottom-left
     { x: player.x + 1, y: player.y + 1 }  // Diagonal bottom-right
   ];
   
-  // Shuffle to prevent clumping on same side
-  shuffleArray(surroundPositions);
+  // Shuffle within each group to prevent clumping, but maintain priority order
+  shuffleArray(horizontalPositions);
+  shuffleArray(verticalPositions);
+  shuffleArray(diagonalPositions);
+  
+  // Combine with priority preserved
+  const surroundPositions = [...horizontalPositions, ...verticalPositions, ...diagonalPositions];
   
   // Find an unoccupied position, preferring ones outside pack footprints
   for (const pos of surroundPositions) {
     if (canEnemyMoveTo(pos.x, pos.y, enemy.id)) {
-      // Move toward this position
+      // Move toward this position - prefer horizontal movement
       const dx = Math.sign(pos.x - enemy.x);
       const dy = Math.sign(pos.y - enemy.y);
       
-      const moves = [
-        { x: enemy.x + dx, y: enemy.y + dy },
-        { x: enemy.x + dx, y: enemy.y },
-        { x: enemy.x, y: enemy.y + dy }
+      // Build move list with horizontal preference
+      const moves = dx !== 0 ? [
+        { x: enemy.x + dx, y: enemy.y },           // Horizontal first
+        { x: enemy.x + dx, y: enemy.y + dy },      // Diagonal
+        { x: enemy.x, y: enemy.y + dy }            // Vertical last
+      ] : [
+        { x: enemy.x, y: enemy.y + dy },           // Vertical if no horizontal
+        { x: enemy.x + dx, y: enemy.y + dy }
       ];
       
       // First pass: prefer moves outside pack footprints
