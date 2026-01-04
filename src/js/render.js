@@ -589,9 +589,9 @@ window.VETUU_RINGS = function() {
 
 /**
  * Toggle enemy pins on the fullscreen world map.
- * Call from console: VETUU_ENEMIES()
+ * Call from console: VETUU_ENEMY_PINS()
  */
-window.VETUU_ENEMIES = function() {
+window.VETUU_ENEMY_PINS = function() {
   import('./worldmap.js').then(mod => {
     if (mod.toggleWorldMapEnemies) {
       mod.toggleWorldMapEnemies();

@@ -1265,9 +1265,13 @@ function renderSpawnerPins(vp) {
 }
 
 function renderEnemyPins(vp) {
-  if (!gameState?.runtime?.activeEnemies) return;
+  if (!gameState?.runtime?.activeEnemies) {
+    console.log('[WorldMap] No enemies found in gameState.runtime.activeEnemies');
+    return;
+  }
   
   const enemies = gameState.runtime.activeEnemies.filter(e => e.hp > 0);
+  console.log(`[WorldMap] Rendering ${enemies.length} enemy pins`);
   
   for (const enemy of enemies) {
     // Check fog (enemies only visible in revealed areas)
