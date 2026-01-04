@@ -3,7 +3,7 @@
  * 
  * Combat Simplified Rewrite:
  * - Player has exactly 2 weapons: Rifle (ranged) and Sword (melee)
- * - Standardized ranges: Ranged = 6 tiles, Melee = 2 tiles
+ * - Standardized ranges: Ranged = 6 tiles, Melee = 1 tile (adjacent only)
  * - No pistols, no casters, no damage types, no weaknesses/resistances
  * - Melee: hits harder and faster, moves faster
  * - Ranged: hits softer, can kite if played well
@@ -77,13 +77,13 @@ export const WEAPONS = {
   },
 
   // ============================================
-  // SWORD - Melee Combat (2 tile range)
+  // SWORD - Melee Combat (1 tile range, adjacent only)
   // ============================================
   vibro_sword: {
     name: 'Sword',
     type: 'melee',
     combatType: 'melee',
-    range: 2, // Standardized melee range
+    range: 1, // Adjacent only
     baseDamage: 14,
     multiplier: 1.0,
     moveSpeed: 350, // Faster movement for melee
@@ -93,7 +93,7 @@ export const WEAPONS = {
     // Basic attack (right-click auto-attack) - higher damage, melee
     basic: {
       damage: 12,
-      range: 2,
+      range: 1, // Adjacent only
       requiresLOS: true, // Keep consistent with existing system
       cooldownMs: BASIC_ATTACK_CD_MS
     },
@@ -106,7 +106,7 @@ export const WEAPONS = {
         description: 'Small AoE',
         cooldownMs: 6000,
         damage: 12,
-        range: 2,
+        range: 1, // Adjacent only
         aoe: { radius: 1.5, maxTargets: 3 }
       },
       2: {
@@ -124,7 +124,7 @@ export const WEAPONS = {
         description: 'AoE + small knockback',
         cooldownMs: 20000,
         damage: 20,
-        range: 2,
+        range: 1, // Adjacent only
         aoe: { radius: 2, maxTargets: 5 },
         knockbackTiles: 1
       }
@@ -142,12 +142,12 @@ WEAPONS.sword = WEAPONS.vibro_sword;
 // Note: projectileColor now uses CSS variables (resolved in combat.js)
 // --projectile-enemy for enemies, --melee-enemy for melee attacks
 export const ENEMY_WEAPONS = {
-  // Melee weapons (range = 2)
+  // Melee weapons (range = 1, adjacent only)
   melee_claws: {
     name: 'Claws',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 4,
     cooldown: 1200,
     moveSpeed: 350
@@ -156,7 +156,7 @@ export const ENEMY_WEAPONS = {
     name: 'Bite',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 5,
     cooldown: 1000,
     moveSpeed: 320
@@ -165,7 +165,7 @@ export const ENEMY_WEAPONS = {
     name: 'Club',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 9,
     cooldown: 1300,
     moveSpeed: 380
@@ -174,7 +174,7 @@ export const ENEMY_WEAPONS = {
     name: 'Spear',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 11,
     cooldown: 1100,
     moveSpeed: 320
@@ -183,7 +183,7 @@ export const ENEMY_WEAPONS = {
     name: 'Captain\'s Blade',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 20,
     cooldown: 1000,
     moveSpeed: 320

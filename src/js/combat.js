@@ -652,7 +652,7 @@ function getBestAttackType(targetDist) {
   }
   
   // Rifle unlocked: use ranged if far, melee if close
-  const MELEE_RANGE = 2;
+  const MELEE_RANGE = 1;
   return targetDist <= MELEE_RANGE ? 'melee' : 'ranged';
 }
 
@@ -2450,16 +2450,16 @@ function canMeleeAttack(enemy, t = nowMs()) {
 function moveToSurroundPosition(enemy) {
   const player = currentState.player;
   
-  // Get positions around the player
+  // Get positions around the player - prioritize horizontal (left/right) for natural positioning
   const surroundPositions = [
-    { x: player.x - 1, y: player.y },
-    { x: player.x + 1, y: player.y },
-    { x: player.x, y: player.y - 1 },
-    { x: player.x, y: player.y + 1 },
-    { x: player.x - 1, y: player.y - 1 },
-    { x: player.x + 1, y: player.y - 1 },
-    { x: player.x - 1, y: player.y + 1 },
-    { x: player.x + 1, y: player.y + 1 }
+    { x: player.x - 1, y: player.y },     // Left (horizontal - priority)
+    { x: player.x + 1, y: player.y },     // Right (horizontal - priority)
+    { x: player.x, y: player.y - 1 },     // Above
+    { x: player.x, y: player.y + 1 },     // Below
+    { x: player.x - 1, y: player.y - 1 }, // Diagonal top-left
+    { x: player.x + 1, y: player.y - 1 }, // Diagonal top-right
+    { x: player.x - 1, y: player.y + 1 }, // Diagonal bottom-left
+    { x: player.x + 1, y: player.y + 1 }  // Diagonal bottom-right
   ];
   
   // Shuffle to prevent clumping on same side
@@ -2631,21 +2631,22 @@ function moveTowardPlayer(enemy) {
   const dx = Math.sign(player.x - enemy.x);
   const dy = Math.sign(player.y - enemy.y);
   
-  // Alternate between horizontal/vertical to spread out
-  const preferHorizontal = enemy.id.charCodeAt(enemy.id.length - 1) % 2 === 0;
-  
+  // Always prefer horizontal movement first for more natural side-by-side positioning
+  // This creates a more visually appealing combat stance
   let moves;
-  if (preferHorizontal) {
+  if (dx !== 0) {
+    // Prioritize horizontal movement when there's horizontal distance
     moves = [
-      { x: enemy.x + dx, y: enemy.y },
-      { x: enemy.x, y: enemy.y + dy },
-      { x: enemy.x + dx, y: enemy.y + dy }
+      { x: enemy.x + dx, y: enemy.y },           // Horizontal first
+      { x: enemy.x + dx, y: enemy.y + dy },      // Diagonal
+      { x: enemy.x, y: enemy.y + dy }            // Vertical last
     ];
   } else {
+    // No horizontal distance - only vertical options
     moves = [
       { x: enemy.x, y: enemy.y + dy },
-      { x: enemy.x + dx, y: enemy.y },
-      { x: enemy.x + dx, y: enemy.y + dy }
+      { x: enemy.x + 1, y: enemy.y + dy },       // Try slight diagonal
+      { x: enemy.x - 1, y: enemy.y + dy }
     ];
   }
 
@@ -2676,10 +2677,15 @@ function moveTowardPlayerRanged(enemy, maxRange) {
   const dx = Math.sign(player.x - enemy.x);
   const dy = Math.sign(player.y - enemy.y);
   
-  const moves = [
-    { x: enemy.x + dx, y: enemy.y },
+  // Prefer horizontal movement for natural side positioning
+  const moves = dx !== 0 ? [
+    { x: enemy.x + dx, y: enemy.y },           // Horizontal first
+    { x: enemy.x + dx, y: enemy.y + dy },      // Diagonal
+    { x: enemy.x, y: enemy.y + dy }            // Vertical last
+  ] : [
     { x: enemy.x, y: enemy.y + dy },
-    { x: enemy.x + dx, y: enemy.y + dy }
+    { x: enemy.x + 1, y: enemy.y + dy },
+    { x: enemy.x - 1, y: enemy.y + dy }
   ];
 
   // First pass: prefer moves outside pack footprints
@@ -3089,8 +3095,8 @@ function toggleAutoAttack() {
   const hasRifle = !!flags.rifle_unlocked;
   const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
   
-  // Determine attack range: rifle (6) if unlocked, otherwise melee (2)
-  const attackRange = hasRifle ? 6 : 2;
+  // Determine attack range: rifle (6) if unlocked, otherwise melee (1)
+  const attackRange = hasRifle ? 6 : 1;
   
   // Start auto-attacking current target
   const result = setAutoAttackIntent(currentTarget);
@@ -3193,13 +3199,24 @@ function findTileInRange(fromX, fromY, targetX, targetY, range) {
       if (distToTarget <= range && distToTarget > 0) {
         if (canMoveTo(currentState, x, y)) {
           const distFromPlayer = distCoords(fromX, fromY, x, y);
-          candidates.push({ x, y, dist: distFromPlayer });
+          // Prefer horizontal positioning (same Y as target) for more natural facing
+          // Tiles at same Y level get a bonus (lower score = better)
+          const isHorizontal = y === targetY;
+          candidates.push({ x, y, dist: distFromPlayer, isHorizontal });
         }
       }
     }
   }
   
-  candidates.sort((a, b) => a.dist - b.dist);
+  // Sort by: horizontal preference first, then distance
+  candidates.sort((a, b) => {
+    // Horizontal tiles get priority
+    if (a.isHorizontal && !b.isHorizontal) return -1;
+    if (!a.isHorizontal && b.isHorizontal) return 1;
+    // Within same category, sort by distance
+    return a.dist - b.dist;
+  });
+  
   return candidates[0] || null;
 }
 
@@ -3684,7 +3701,8 @@ function useAbility(slot) {
   
   // If no target, auto-acquire nearest enemy within ability range
   if (!currentTarget || currentTarget.hp <= 0) {
-    const candidate = acquireClosestEnemyInRange({
+    // First try to find an enemy in ability range
+    let candidate = acquireClosestEnemyInRange({
       maxRange: abilityRange,
       requireLOS: needsLOS
     });
@@ -3693,8 +3711,26 @@ function useAbility(slot) {
       selectTarget(candidate);
       logCombat(`Targeting ${candidate.name}`);
     } else {
-      logCombat('No enemies in range.');
-      return;
+      // No enemy in range - find nearest visible enemy and path to them
+      candidate = findNearestVisibleEnemy();
+      if (candidate) {
+        selectTarget(candidate);
+        logCombat(`Targeting ${candidate.name}`);
+        
+        // Enable combat flags
+        autoAttackEnabled = true;
+        inCombat = true;
+        
+        // Set ability intent and path to target
+        const result = setAbilityIntent(ability.slot, candidate);
+        if (result.success) {
+          tryExecuteCombatIntent();
+        }
+        return;
+      } else {
+        logCombat('No enemies in sight.');
+        return;
+      }
     }
   }
   
@@ -5867,7 +5903,7 @@ function setAutoAttackIntent(target) {
   // If rifle is unlocked, use its range (6), otherwise melee range (2)
   const flags = window.__vetuuFlags || {};
   const hasRifle = !!flags.rifle_unlocked;
-  const range = hasRifle ? 6 : 2;
+  const range = hasRifle ? 6 : 1;  // Melee range is 1 (adjacent)
   const requiresLOS = hasRifle; // Only ranged requires LOS
   
   // Preserve existing timer state if target hasn't changed (prevents timer reset on spam)
@@ -6106,7 +6142,7 @@ function executeBasicIntent(now) {
   if (!weapon) return;
   
   // Update intent range based on actual weapon being used
-  const effectiveRange = attackType === 'ranged' ? 6 : 2;
+  const effectiveRange = attackType === 'ranged' ? 6 : 1;  // Melee range is 1 (adjacent)
   const hasLOS = attackType !== 'ranged' || hasLineOfSight(currentState, player.x, player.y, target.x, target.y);
   
   // Out of range or no LOS

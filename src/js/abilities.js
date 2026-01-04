@@ -36,7 +36,7 @@ export const BASIC_ATTACKS = {
   melee: {
     name: 'Sword Strike',
     damage: 10,        // Base sword damage (Phase 6: tune to 9-10)
-    range: 2,
+    range: 1,          // Adjacent tile only
     requiresLOS: true,
     cooldownMs: AUTO_ATTACK_CD_MS,
     type: 'melee'
@@ -72,7 +72,7 @@ export const PLAYER_ABILITIES = {
     // Combat properties
     type: 'melee',
     damageMultiplier: 1.5,  // 150% of basic melee damage
-    range: 6,               // Can leap from 6 tiles away
+    range: 12,              // Can leap from 12 tiles away
     cooldownMs: 8000,
     
     // Execution
@@ -107,7 +107,7 @@ export const PLAYER_ABILITIES = {
     damageMultiplier: 0.75, // Per hit (4 hits × 0.75 = 3.0x total)
     hits: 4,
     hitIntervalMs: 500,     // 2.0s total channel (4 × 500ms)
-    range: 2,
+    range: 1,               // Adjacent tile only
     cooldownMs: 8000,
     
     // Execution
@@ -345,12 +345,12 @@ export function getAllAbilities() {
 // ENEMY WEAPONS (unchanged from weapons.js)
 // ============================================
 export const ENEMY_WEAPONS = {
-  // Melee weapons (range = 2)
+  // Melee weapons (range = 1, adjacent only)
   melee_claws: {
     name: 'Claws',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 4,
     cooldown: 1200,
     moveSpeed: 350
@@ -359,7 +359,7 @@ export const ENEMY_WEAPONS = {
     name: 'Bite',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 5,
     cooldown: 1000,
     moveSpeed: 320
@@ -368,7 +368,7 @@ export const ENEMY_WEAPONS = {
     name: 'Club',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 9,
     cooldown: 1300,
     moveSpeed: 380
@@ -377,7 +377,7 @@ export const ENEMY_WEAPONS = {
     name: 'Spear',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 11,
     cooldown: 1100,
     moveSpeed: 320
@@ -386,7 +386,7 @@ export const ENEMY_WEAPONS = {
     name: 'Captain\'s Blade',
     type: 'melee',
     combatType: 'melee',
-    range: 2,
+    range: 1,
     baseDamage: 20,
     cooldown: 1000,
     moveSpeed: 320
