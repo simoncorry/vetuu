@@ -841,18 +841,18 @@ function generateDefaultSpawners() {
         },
         // Position 2: Along horizontal edge (further from corner)
         { 
-          x: corner.cornerX + corner.dirX * 55, 
+          x: corner.cornerX + corner.dirX * 75, 
           y: corner.cornerY + corner.dirY * margin 
         },
         // Position 3: Along vertical edge (further from corner)
         { 
           x: corner.cornerX + corner.dirX * margin, 
-          y: corner.cornerY + corner.dirY * 55 
+          y: corner.cornerY + corner.dirY * 75 
         },
         // Position 4: Diagonal middle (forms triangle with others)
         { 
-          x: corner.cornerX + corner.dirX * 45, 
-          y: corner.cornerY + corner.dirY * 45 
+          x: corner.cornerX + corner.dirX * 55, 
+          y: corner.cornerY + corner.dirY * 55 
         },
       ];
       
