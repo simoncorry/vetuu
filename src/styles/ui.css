@@ -693,21 +693,18 @@
   border-radius: 6px;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* GPU-friendly: only transition opacity, transform, and color-related properties */
-  transition: opacity 0.15s ease, transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  /* GPU-friendly transitions */
+  transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
-.action-slot:hover:not(.on-cooldown) {
-  border-color: var(--accent);
-  background: rgba(105, 210, 214, 0.1);
+.action-slot:hover:not(.on-cooldown):not(.locked-slot) {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .action-slot.active {
-  border-color: var(--accent);
-  /* Clean look - no glow, swing timer SVG handles visual feedback */
+  /* No special styling - swing timer SVG handles visual feedback */
 }
 
 /* Disabled state - when targeting friendly NPC */
@@ -747,9 +744,8 @@
   cursor: not-allowed;
 }
 
-/* GCD (Global Cooldown) active state - subtle border pulse */
+/* GCD (Global Cooldown) active state - just dim, no border change */
 .action-slot.gcd-active:not(.on-cooldown) {
-  border-color: var(--text-muted);
   opacity: 0.7;
 }
 
@@ -788,18 +784,12 @@
 }
 
 .slot-icon {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
 }
 
+/* Labels hidden - icons only */
 .slot-label {
-  font-family: var(--font-display);
-  font-size: 0.45rem;
-  color: var(--text-muted);
-  margin-top: 0.1rem;
-  max-width: 40px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .slot-key {
@@ -821,15 +811,9 @@
   margin: 0 0.25rem;
 }
 
+/* Special slot - no unique border styling */
 .special-slot {
-  border-color: var(--rarity-gold);
-  border-style: dashed;
-}
-
-.special-slot:hover:not(.on-cooldown) {
-  border-color: var(--rarity-gold);
-  background: rgba(214, 165, 90, 0.1);
-  border-style: solid;
+  /* Uses default frame-border */
 }
 
 /* Action groups */
@@ -848,14 +832,6 @@
 /* Auto-attack toggle slot */
 .auto-slot {
   position: relative;
-  border-color: var(--frame-border);
-  background: rgba(105, 210, 214, 0.05);
-}
-
-.auto-slot:hover {
-  border-color: var(--accent);
-  background: rgba(105, 210, 214, 0.15);
-  /* No glow - swing timer SVG stroke provides visual feedback */
 }
 
 .auto-slot .slot-icon {
@@ -864,29 +840,13 @@
 
 /* Auto-attack active state - swing timer SVG stroke handles the animation */
 .auto-slot.active {
-  border-color: var(--success);
-  background: rgba(105, 210, 214, 0.15);
-  /* No box-shadow glow - the SVG stroke animation provides feedback */
+  /* SVG stroke animation provides visual feedback */
 }
 
-/* Melee ability slots */
-.melee-slot {
-  border-color: var(--hp-color);
-}
-
-.melee-slot:hover {
-  border-color: var(--hp-color);
-  background: rgba(207, 102, 121, 0.15);
-}
-
-/* Ranged ability slots */
+/* Melee and ranged slots - no special styling, use default frame-border */
+.melee-slot,
 .ranged-slot {
-  border-color: var(--accent);
-}
-
-.ranged-slot:hover {
-  border-color: var(--accent);
-  background: rgba(105, 210, 214, 0.15);
+  /* Uses default frame-border */
 }
 
 /* ============================================
@@ -953,13 +913,6 @@
   opacity: 0.4;
   cursor: not-allowed;
   border-style: dashed;
-  border-color: var(--text-disabled);
-}
-
-.locked-slot:hover {
-  background: transparent;
-  border-color: var(--text-disabled);
-  box-shadow: none;
 }
 
 .locked-slot .slot-icon {
