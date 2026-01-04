@@ -60,27 +60,27 @@
       },
       "9": {
         "name": "landingPad",
-        "color": "transparent",
+        "color": "#5A5854",
         "walkable": true
       },
       "a": {
         "name": "livingQuarters",
-        "color": "transparent",
+        "color": "#5A5048",
         "walkable": true
       },
       "b": {
         "name": "workshop",
-        "color": "transparent",
+        "color": "#524A44",
         "walkable": true
       },
       "c": {
         "name": "storage",
-        "color": "transparent",
+        "color": "#4A5248",
         "walkable": true
       },
       "d": {
         "name": "market",
-        "color": "transparent",
+        "color": "#C9A870",
         "walkable": true
       },
       "e": {
