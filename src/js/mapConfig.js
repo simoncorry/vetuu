@@ -55,12 +55,13 @@ export const mapConfig = {
   originalBaseCenter: { x: 56, y: 38 },
   
   // Ring boundaries for spawn zones (in tiles from baseCenter)
+  // Using multiples of 4/8 for clean alignment
   rings: {
-    safe:       { min: 0,   max: 28 },
-    frontier:   { min: 29,  max: 55 },
-    wilderness: { min: 56,  max: 85 },
-    danger:     { min: 86,  max: 110 },
-    deep:       { min: 111, max: Infinity }
+    safe:       { min: 0,   max: 32 },
+    frontier:   { min: 33,  max: 68 },
+    wilderness: { min: 69,  max: 120 },
+    danger:     { min: 121, max: 168 },
+    deep:       { min: 169, max: Infinity }
   },
   
   // Ring colors for debug visualization
@@ -184,15 +185,15 @@ function updateRingBoundaries() {
   // - Danger: 60-85% (late-game)
   // - Deep: 85%+ (endgame, map edges)
   
-  // Ring boundaries designed to align with original map edge (68 tiles from center)
-  // Original map covers: 0-68 tiles (safe + frontier)
-  // Procedural terrain: 69+ tiles (wilderness, danger, deep)
+  // Ring boundaries using multiples of 4/8 for clean alignment
+  // Original map edge: 68 tiles (136/2)
+  // Expanded map edge: 200 tiles (400/2)
   mapConfig.rings = {
-    safe:       { min: 0,   max: 30 },                    // Close to base
-    frontier:   { min: 31,  max: 68 },                    // Original map edge
-    wilderness: { min: 69,  max: Math.round(maxReach * 0.60) },  // Procedural zone
-    danger:     { min: Math.round(maxReach * 0.60) + 1, max: Math.round(maxReach * 0.85) },
-    deep:       { min: Math.round(maxReach * 0.85) + 1, max: Infinity }
+    safe:       { min: 0,   max: 32 },    // 0-32 tiles (8×4)
+    frontier:   { min: 33,  max: 68 },    // 33-68 tiles (original map edge)
+    wilderness: { min: 69,  max: 120 },   // 69-120 tiles (8×15)
+    danger:     { min: 121, max: 168 },   // 121-168 tiles (8×21)
+    deep:       { min: 169, max: Infinity } // 169-200 tiles (to map edge)
   };
   
   console.log('[MapConfig] Ring boundaries updated (maxReach:', maxReach, 'tiles)');
