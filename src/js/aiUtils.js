@@ -390,6 +390,14 @@ export function shouldBreakOffFromGuards(enemy, guards, _t = nowMs()) {
  * @returns {string|null} Retreat reason or null if should stay engaged
  */
 export function checkLeashAndDeaggro(enemy, player, t = nowMs()) {
+  // Provoked enemies ignore leash/deaggro - they're angry and won't just walk away
+  // This prevents Push from putting enemies into retreat state
+  if (enemy.provokedUntil && t < enemy.provokedUntil) {
+    // Reset out-of-range timer while provoked
+    enemy.outOfRangeSince = null;
+    return null;
+  }
+
   if (!enemy.home) {
     enemy.home = { x: enemy.spawnX ?? enemy.x, y: enemy.spawnY ?? enemy.y };
   }
