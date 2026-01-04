@@ -3875,13 +3875,21 @@ function executeLeap(ability) {
   
   if (dist <= 0) return;
   
-  // Normalize and move to 1 tile away from target
-  let destX = target.x - Math.round(dx / dist);
-  let destY = target.y - Math.round(dy / dist);
+  // Normalize and move to 1 tile away from target (prefer horizontal)
+  let destX, destY;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Approach horizontally
+    destX = target.x - Math.sign(dx);
+    destY = target.y;
+  } else {
+    // Approach vertically
+    destX = target.x;
+    destY = target.y - Math.sign(dy);
+  }
   
   // Validate destination is walkable
   if (!canMoveTo(currentState, destX, destY)) {
-    // Try adjacent tiles
+    // Try adjacent tiles (horizontal first)
     const alternatives = [
       { x: target.x - 1, y: target.y },
       { x: target.x + 1, y: target.y },
@@ -3891,9 +3899,10 @@ function executeLeap(ability) {
     
     if (alternatives.length === 0) {
       logCombat('Cannot leap - path blocked.');
-      // Refund cooldown
+      // Refund cooldown and clear GCD
       actionCooldowns[ability.slot] = 0;
       actionMaxCooldowns[ability.slot] = 0;
+      clearGcd();
       return;
     }
     
@@ -3907,6 +3916,9 @@ function executeLeap(ability) {
     destX = closest.x;
     destY = closest.y;
   }
+  
+  // Provoke the target before leaping (ensures they aggro us)
+  provokeEnemy(target);
   
   logCombat('Leaping!');
   

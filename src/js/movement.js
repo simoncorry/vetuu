@@ -917,14 +917,14 @@ export function dashToPosition(destX, destY, speedMultiplier = 3, onComplete = n
   // Notify camera to follow
   onMoveStart(destX, destY, dashDuration);
   
-  // Create tween for dash
+  // Create tween for dash (must include elapsed: 0 like normal movement)
   currentTween = {
     startX: startX,
     startY: startY,
     targetX: destX,
     targetY: destY,
-    startTime: performance.now(),
-    duration: dashDuration
+    duration: dashDuration,
+    elapsed: 0
   };
   
   return true;
