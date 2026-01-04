@@ -88,6 +88,26 @@
   --level-very-hard: #D64545;
   --level-impossible: #8B45D6;
 
+  /* Minimap colors */
+  --minimap-bg: #0D0F11;
+  --minimap-fog: rgba(13, 15, 17, 0.92);
+  --minimap-grid: rgba(255, 255, 255, 0.15);
+  --minimap-stroke: rgba(0, 0, 0, 0.6);
+  --minimap-stroke-heavy: rgba(0, 0, 0, 0.7);
+  --minimap-path: #00E5E5;
+  --minimap-path-stroke: rgba(255, 255, 255, 0.5);
+  --minimap-player: #EEEEFF;
+  --minimap-npc: #44FF44;
+  --minimap-npc-guard: #00DDDD;
+  --minimap-npc-medic: #FF69B4;
+  --minimap-enemy-passive: #FFAA00;
+  --minimap-enemy-engaged: #FF4444;
+  --minimap-enemy-alpha: #FFD700;
+  --minimap-object-collect: #AA66FF;
+  --minimap-object-read: #6699FF;
+  --minimap-object-loot: #FFAA44;
+  --minimap-object-default: #BB88FF;
+
   /* Timing - Classic WoW pacing */
   --move-duration: 280ms; /* Tactical movement speed */
   --move-steps: 4;

@@ -31,7 +31,7 @@
   inset: 0;
   pointer-events: none;
   /* Each layer on its own compositing layer for Safari */
-  transform: translateZ(0);
+  transform: translate3d(0, 0, 0);
   will-change: contents;
   /* Containment for performance */
   contain: strict;

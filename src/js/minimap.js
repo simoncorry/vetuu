@@ -12,6 +12,7 @@
  */
 
 import { isRevealed as fogIsRevealed } from './fog.js';
+import { cssVar } from './utils.js';
 
 // ============================================
 // CONFIGURATION
@@ -23,24 +24,44 @@ const CONFIG = {
   maxViewRadius: 60,    // Zoomed out max (more tiles visible)
   zoomStep: 3,          // Tiles to add/remove per scroll
   
-  // Colors - matching game actor colors
-  pathColor: '#00E5E5',        // Cyan to match player
-  pathStroke: 'rgba(255, 255, 255, 0.5)',
-  npcColor: '#4CAF50',         // Green (friendly NPCs)
-  npcGuardColor: '#69d2d6',    // Cyan (guards)
-  npcMedicColor: '#E91E63',    // Pink (medics)
-  enemyPassiveColor: '#DAA520', // Yellow/gold (passive - hue-rotate 60deg)
-  enemyEngagedColor: '#e74c3c', // Red (hostile/engaged - hue-rotate -30deg)
-  enemyAlphaColor: '#FFD700',   // Gold (alpha enemies - hue-rotate 40deg)
-  fogColor: 'rgba(13, 15, 17, 0.92)',
-  
   // Sizes (in canvas pixels)
   pathMarkerSize: 2,  // Smaller than player for hierarchy
-  
   
   // Performance
   renderThrottle: 16, // ~60fps for smooth camera
 };
+
+// ============================================
+// COLORS - Cached from CSS variables
+// ============================================
+// Lazily populated on first use to ensure DOM is ready
+let COLORS = null;
+
+function getColors() {
+  if (!COLORS) {
+    COLORS = {
+      bg: cssVar('--minimap-bg'),
+      fog: cssVar('--minimap-fog'),
+      grid: cssVar('--minimap-grid'),
+      stroke: cssVar('--minimap-stroke'),
+      strokeHeavy: cssVar('--minimap-stroke-heavy'),
+      path: cssVar('--minimap-path'),
+      pathStroke: cssVar('--minimap-path-stroke'),
+      player: cssVar('--minimap-player'),
+      npc: cssVar('--minimap-npc'),
+      npcGuard: cssVar('--minimap-npc-guard'),
+      npcMedic: cssVar('--minimap-npc-medic'),
+      enemyPassive: cssVar('--minimap-enemy-passive'),
+      enemyEngaged: cssVar('--minimap-enemy-engaged'),
+      enemyAlpha: cssVar('--minimap-enemy-alpha'),
+      objectCollect: cssVar('--minimap-object-collect'),
+      objectRead: cssVar('--minimap-object-read'),
+      objectLoot: cssVar('--minimap-object-loot'),
+      objectDefault: cssVar('--minimap-object-default')
+    };
+  }
+  return COLORS;
+}
 
 // ============================================
 // STATE
@@ -541,7 +562,7 @@ function render() {
   currentVp = vp;
   
   // Clear canvas
-  ctx.fillStyle = '#0d0f11';
+  ctx.fillStyle = getColors().bg;
   ctx.fillRect(0, 0, vp.canvasW, vp.canvasH);
   
   // Draw terrain
@@ -606,7 +627,7 @@ function renderFog(vp) {
   fogCtx.clearRect(0, 0, canvasW, canvasH);
   
   // Fill with fog
-  fogCtx.fillStyle = CONFIG.fogColor;
+  fogCtx.fillStyle = getColors().fog;
   fogCtx.fillRect(0, 0, canvasW, canvasH);
   
   // Cut out revealed tiles
@@ -642,7 +663,7 @@ function renderFog(vp) {
 function renderRegions(vp) {
   if (!gameState.map.regions || !fogCtx) return;
   
-  fogCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  fogCtx.strokeStyle = getColors().grid;
   fogCtx.lineWidth = 1;
   
   for (const region of gameState.map.regions) {
@@ -678,7 +699,8 @@ function renderEntities(vp) {
   const halfSize = npcSize / 2;
   
   // Pre-set stroke style (same for all NPCs)
-  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  const colors = getColors();
+  fogCtx.strokeStyle = colors.stroke;
   fogCtx.lineWidth = 1;
   
   // Render NPCs with type-based colors on fog canvas
@@ -690,13 +712,13 @@ function renderEntities(vp) {
     if (!isInView(npc.x, npc.y, vp)) continue;
     if (!isRevealed(npc.x, npc.y)) continue;
     
-    // Color based on NPC type - use brighter colors
+    // Color based on NPC type
     if (npc.isGuard || npc.role === 'guard') {
-      fogCtx.fillStyle = '#00DDDD';  // Bright cyan
+      fogCtx.fillStyle = colors.npcGuard;
     } else if (npc.isMedic || npc.role === 'medic') {
-      fogCtx.fillStyle = '#FF69B4';  // Hot pink
+      fogCtx.fillStyle = colors.npcMedic;
     } else {
-      fogCtx.fillStyle = '#44FF44';  // Bright green
+      fogCtx.fillStyle = colors.npc;
     }
     
     const pos = worldToScreen(npc.x + 0.5, npc.y + 0.5);
@@ -723,7 +745,8 @@ function renderObjects(vp) {
   const halfSize = objSize / 2;
   
   // Pre-set stroke style (same for all objects)
-  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  const colors = getColors();
+  fogCtx.strokeStyle = colors.stroke;
   fogCtx.lineWidth = 1;
   
   for (const obj of cachedInteractables) {
@@ -740,13 +763,13 @@ function renderObjects(vp) {
     // Color based on interaction type
     const action = obj.interact.action;
     if (action === 'collect') {
-      fogCtx.fillStyle = '#AA66FF';  // Purple for collectibles
+      fogCtx.fillStyle = colors.objectCollect;
     } else if (action === 'read') {
-      fogCtx.fillStyle = '#6699FF';  // Blue for readable/lore
+      fogCtx.fillStyle = colors.objectRead;
     } else if (action === 'loot') {
-      fogCtx.fillStyle = '#FFAA44';  // Orange for loot
+      fogCtx.fillStyle = colors.objectLoot;
     } else {
-      fogCtx.fillStyle = '#BB88FF';  // Light purple default
+      fogCtx.fillStyle = colors.objectDefault;
     }
     
     // Draw object square with dark border (8-bit style)
@@ -766,7 +789,8 @@ function renderEnemies(vp) {
   const halfSize = enemySize / 2;
   
   // Pre-set stroke style (same for all enemies)
-  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  const colors = getColors();
+  fogCtx.strokeStyle = colors.strokeHeavy;
   fogCtx.lineWidth = 1;
   
   // Cache bounds for faster comparison
@@ -789,13 +813,13 @@ function renderEnemies(vp) {
     // Skip if outside canvas bounds
     if (pos.x < minX || pos.x > maxX || pos.y < minY || pos.y > maxY) continue;
     
-    // Color based on enemy state - use brighter, more saturated colors
+    // Color based on enemy state
     if (enemy.isAlpha) {
-      fogCtx.fillStyle = '#FFD700';  // Bright gold
+      fogCtx.fillStyle = colors.enemyAlpha;
     } else if (enemy.engaged || enemy.combat) {
-      fogCtx.fillStyle = '#FF4444';  // Bright red
+      fogCtx.fillStyle = colors.enemyEngaged;
     } else {
-      fogCtx.fillStyle = '#FFAA00';  // Bright orange-yellow
+      fogCtx.fillStyle = colors.enemyPassive;
     }
     
     // Draw enemy square with dark border for contrast (8-bit style)
@@ -827,8 +851,9 @@ function renderPath(vp) {
   const pathLen = cachedPath.length;
   
   // Pre-set styles
-  fogCtx.fillStyle = CONFIG.pathColor;
-  fogCtx.strokeStyle = CONFIG.pathStroke;
+  const colors = getColors();
+  fogCtx.fillStyle = colors.path;
+  fogCtx.strokeStyle = colors.pathStroke;
   fogCtx.lineWidth = 0.5;
   
   // Draw path markers as small squares on fog canvas (above fog layer)
@@ -868,16 +893,17 @@ function renderPlayer(_vp) {
   const halfTriSize = triSize / 2;
   
   // Player square - white/off-white to stand out from all other colors
-  fogCtx.fillStyle = '#EEEEFF';
+  const colors = getColors();
+  fogCtx.fillStyle = colors.player;
   fogCtx.fillRect(pos.x - halfSize, pos.y - halfSize, playerSize, playerSize);
   
   // Dark border
-  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  fogCtx.strokeStyle = colors.strokeHeavy;
   fogCtx.lineWidth = 1;
   fogCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, playerSize, playerSize);
   
   // Direction triangle indicator (6x6, dark color)
-  fogCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  fogCtx.fillStyle = colors.strokeHeavy;
   fogCtx.beginPath();
   
   // Diagonal offset for corner triangles

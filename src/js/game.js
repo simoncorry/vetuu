@@ -15,7 +15,7 @@ import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
-import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay } from './time.js';
+import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay, nowMs } from './time.js';
 import { cssVar } from './utils.js';
 import { initUI, initSettingsMenu, loadPanelState } from './ui.js';
 import { initMinimap, updateMinimap as updateMinimapNew, addMarker, removeMarker } from './minimap.js';
@@ -1102,7 +1102,7 @@ function updateLighting() {
     // Calculate intensity with flicker effects
     const baseIntensity = Math.min(1, nightIntensity * light.intensity * 0.9);
     const seed = (light.x * 7 + light.y * 13) % 100;
-    const now = Date.now();
+    const now = nowMs();
     
     // Electronic hum + surge effects
     const humFreq = 0.003 + (seed % 20) * 0.0001;
@@ -1123,7 +1123,7 @@ function updateLighting() {
     updateTorchPosition();
     const playerX = torchAnim.currentX;
     const playerY = torchAnim.currentY;
-    const now = Date.now();
+    const now = nowMs();
     
     // Torch intensity with subtle hum (reduced from 1.2 multiplier)
     const hum = Math.sin(now * 0.004) * 0.05;
@@ -1184,7 +1184,7 @@ const guardLastMove = new Map();
 const guardEls = new Map(); // Cached guard element refs
 
 function tickGuardPatrol() {
-  const now = Date.now();
+  const now = nowMs();
   
   for (const npc of state.entities.npcs) {
     if (!npc.patrol || !npc.isGuard) continue;
