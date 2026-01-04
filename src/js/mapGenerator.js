@@ -104,9 +104,9 @@ export function expandMap(originalMap) {
   const borderObjects = generateBorderObjects(newWidth, newHeight);
   expandedObjects.push(...borderObjects);
 
-  // Add scattered terrain features
-  const scatteredObjects = generateScatteredFeatures(newWidth, newHeight, offsetX, offsetY);
-  expandedObjects.push(...scatteredObjects);
+  // Scattered terrain features disabled for cleaner building
+  // const scatteredObjects = generateScatteredFeatures(newWidth, newHeight, offsetX, offsetY);
+  // expandedObjects.push(...scatteredObjects);
 
   // Add lamp posts along roads
   const lampPosts = generateRoadLampPosts(newWidth, newHeight, offsetX, offsetY);

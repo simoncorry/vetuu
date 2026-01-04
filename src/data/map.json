@@ -313,108 +313,6 @@
   ],
   "objects": [
     {
-      "id": "tent_085",
-      "type": "tent",
-      "x": 24,
-      "y": 100,
-      "solid": true,
-      "interact": {
-        "action": "talk",
-        "entityId": "npc_verdleg_chief"
-      }
-    },
-    {
-      "id": "tent_086",
-      "type": "tent",
-      "x": 27,
-      "y": 99,
-      "solid": true
-    },
-    {
-      "id": "banner_087",
-      "type": "banner",
-      "x": 26,
-      "y": 97,
-      "solid": false
-    },
-    {
-      "id": "crate_088",
-      "type": "crate",
-      "x": 29,
-      "y": 101,
-      "solid": true
-    },
-    {
-      "id": "junk_089",
-      "type": "junk",
-      "x": 22,
-      "y": 102,
-      "solid": true
-    },
-    {
-      "id": "pad_090",
-      "type": "pad",
-      "x": 104,
-      "y": 48,
-      "solid": false,
-      "interact": {
-        "action": "triggerAct3",
-        "requires": {
-          "questComplete": "q_storm_prep"
-        }
-      }
-    },
-    {
-      "id": "antenna_091",
-      "type": "antenna",
-      "x": 106,
-      "y": 46,
-      "solid": true
-    },
-    {
-      "id": "wreck_092",
-      "type": "wreck",
-      "x": 101,
-      "y": 50,
-      "solid": true,
-      "interact": {
-        "action": "loot",
-        "lootTable": "scrap_wreck"
-      }
-    },
-    {
-      "id": "glyph_096",
-      "type": "glyph",
-      "x": 114,
-      "y": 102,
-      "solid": false,
-      "interact": {
-        "action": "read",
-        "textId": "glyph_still_order"
-      }
-    },
-    {
-      "id": "pillar_097",
-      "type": "pillar",
-      "x": 112,
-      "y": 103,
-      "solid": true
-    },
-    {
-      "id": "pillar_098",
-      "type": "pillar",
-      "x": 116,
-      "y": 101,
-      "solid": true
-    },
-    {
-      "id": "bones_099",
-      "type": "bones",
-      "x": 117,
-      "y": 104,
-      "solid": false
-    },
-    {
       "id": "wall_001",
       "type": "wall",
       "x": 48,
@@ -1427,27 +1325,6 @@
       "type": "wall",
       "x": 38,
       "y": 84,
-      "solid": true
-    },
-    {
-      "id": "debris_009",
-      "type": "junk",
-      "x": 40,
-      "y": 88,
-      "solid": true
-    },
-    {
-      "id": "debris_010",
-      "type": "junk",
-      "x": 43,
-      "y": 89,
-      "solid": true
-    },
-    {
-      "id": "debris_011",
-      "type": "junk",
-      "x": 39,
-      "y": 85,
       "solid": true
     },
     {
