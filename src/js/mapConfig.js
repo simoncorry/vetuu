@@ -91,27 +91,30 @@ export function initMapConfig(originalMapData, options = {}) {
   mapConfig.originalWidth = meta.width;
   mapConfig.originalHeight = meta.height;
   
-  // Target expansion dimensions (can be overridden for story expansions)
-  mapConfig.expandedWidth = options.expandedWidth ?? 480;
-  mapConfig.expandedHeight = options.expandedHeight ?? 320;
+  // Original base center (Drycross) in the original coordinate system
+  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 56, y: 38 };
   
-  // Calculate offset to center original map in expanded map
+  // Target expansion dimensions - use a SQUARE map for symmetrical rings
+  // Default 400x400 gives base at perfect center (200, 200)
+  const targetSize = options.expandedSize ?? 400;
+  mapConfig.expandedWidth = options.expandedWidth ?? targetSize;
+  mapConfig.expandedHeight = options.expandedHeight ?? targetSize;
+  
+  // Calculate offset to CENTER THE BASE (not the original map)
+  // This ensures the base is at the center of the expanded map
   mapConfig.offset = {
-    x: Math.floor((mapConfig.expandedWidth - mapConfig.originalWidth) / 2),
-    y: Math.floor((mapConfig.expandedHeight - mapConfig.originalHeight) / 2)
+    x: Math.floor(mapConfig.expandedWidth / 2) - mapConfig.originalBaseCenter.x,
+    y: Math.floor(mapConfig.expandedHeight / 2) - mapConfig.originalBaseCenter.y
   };
   
   // Final map dimensions (after expansion)
   mapConfig.width = mapConfig.expandedWidth;
   mapConfig.height = mapConfig.expandedHeight;
   
-  // Original base center (from map data or default)
-  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 56, y: 38 };
-  
-  // Calculate base center in expanded coordinates
+  // Base center is now at the center of the expanded map
   mapConfig.baseCenter = {
-    x: mapConfig.originalBaseCenter.x + mapConfig.offset.x,
-    y: mapConfig.originalBaseCenter.y + mapConfig.offset.y
+    x: Math.floor(mapConfig.expandedWidth / 2),
+    y: Math.floor(mapConfig.expandedHeight / 2)
   };
   
   // Update ring boundaries based on available space
@@ -157,29 +160,36 @@ export function confirmExpansion(expandedMapMeta) {
 
 /**
  * Update ring boundaries based on current map dimensions.
- * Rings are scaled to fit within the available space.
+ * For a square map with centered base, rings scale to cover the map evenly.
  */
 function updateRingBoundaries() {
-  // Calculate max safe distance from base to any edge
-  const maxLeft = mapConfig.baseCenter.x;
-  const maxRight = mapConfig.width - mapConfig.baseCenter.x;
-  const maxTop = mapConfig.baseCenter.y;
-  const maxBottom = mapConfig.height - mapConfig.baseCenter.y;
-  const maxReach = Math.min(maxLeft, maxRight, maxTop, maxBottom);
+  // For a square map with centered base, max reach is the same in all directions
+  const maxReach = Math.min(
+    mapConfig.baseCenter.x,
+    mapConfig.width - mapConfig.baseCenter.x,
+    mapConfig.baseCenter.y,
+    mapConfig.height - mapConfig.baseCenter.y
+  );
   
-  // Scale rings to fit within max reach
-  // Default rings assume max reach of ~128 tiles (480x320 map)
-  const scale = maxReach / 128;
+  // Scale rings proportionally to fill the map
+  // With base at center of 400x400, maxReach = 200
+  // Rings are designed as percentages of max reach:
+  // - Safe: 0-15% (close to base)
+  // - Frontier: 15-35% (early exploration)
+  // - Wilderness: 35-60% (mid-game)
+  // - Danger: 60-85% (late-game)
+  // - Deep: 85%+ (endgame, map edges)
   
   mapConfig.rings = {
-    safe:       { min: 0,                          max: Math.round(28 * scale) },
-    frontier:   { min: Math.round(29 * scale),     max: Math.round(55 * scale) },
-    wilderness: { min: Math.round(56 * scale),     max: Math.round(85 * scale) },
-    danger:     { min: Math.round(86 * scale),     max: Math.round(110 * scale) },
-    deep:       { min: Math.round(111 * scale),    max: Infinity }
+    safe:       { min: 0,                              max: Math.round(maxReach * 0.15) },
+    frontier:   { min: Math.round(maxReach * 0.15) + 1, max: Math.round(maxReach * 0.35) },
+    wilderness: { min: Math.round(maxReach * 0.35) + 1, max: Math.round(maxReach * 0.60) },
+    danger:     { min: Math.round(maxReach * 0.60) + 1, max: Math.round(maxReach * 0.85) },
+    deep:       { min: Math.round(maxReach * 0.85) + 1, max: Infinity }
   };
   
-  console.log('[MapConfig] Ring boundaries updated (maxReach:', Math.round(maxReach), ')');
+  console.log('[MapConfig] Ring boundaries updated (maxReach:', maxReach, 'tiles)');
+  console.log('[MapConfig] Rings:', JSON.stringify(mapConfig.rings));
 }
 
 // ============================================
@@ -242,13 +252,17 @@ export function clampToMap(x, y, margin = 0) {
  * @returns {Array<{name: string, max: number, color: string}>}
  */
 export function getRingVisualization() {
-  const { rings, ringColors } = mapConfig;
+  const { rings, ringColors, baseCenter, width, height } = mapConfig;
+  
+  // Calculate max reach for drawing the deep ring boundary
+  const maxReach = Math.min(baseCenter.x, width - baseCenter.x, baseCenter.y, height - baseCenter.y);
+  
   return [
     { name: 'SAFE', max: rings.safe.max, color: ringColors.safe },
     { name: 'FRONTIER', max: rings.frontier.max, color: ringColors.frontier },
     { name: 'WILDERNESS', max: rings.wilderness.max, color: ringColors.wilderness },
     { name: 'DANGER', max: rings.danger.max, color: ringColors.danger },
-    { name: 'DEEP', max: Math.min(rings.deep.min + 20, 150), color: ringColors.deep }
+    { name: 'DEEP', max: maxReach, color: ringColors.deep }  // Draw to map edge
   ];
 }
 
