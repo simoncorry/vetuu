@@ -813,32 +813,39 @@ function generateDefaultSpawners() {
     return positions;
   }
   
-  // Helper to place spawners in map corners with overlap + road prevention
-  function placeInCorners(radius) {
+  // Helper to place spawners in map corners - wrapping around corner arcs naturally
+  function placeInCorners(radius, spawnersPerCorner = 5) {
     const positions = [];
-    const cornerOffsets = [
-      { x: 40, y: 40 },     // Top-left
-      { x: mapSize - 40, y: 40 },     // Top-right
-      { x: 40, y: mapSize - 40 },     // Bottom-left
-      { x: mapSize - 40, y: mapSize - 40 },  // Bottom-right
+    
+    // Corner definitions with angle ranges for natural arc distribution
+    // Angles point INWARD from corner toward map center
+    const corners = [
+      { x: 0, y: 0, angleStart: 0, angleEnd: Math.PI / 2 },                    // Top-left: 0° to 90°
+      { x: mapSize, y: 0, angleStart: Math.PI / 2, angleEnd: Math.PI },        // Top-right: 90° to 180°
+      { x: mapSize, y: mapSize, angleStart: Math.PI, angleEnd: Math.PI * 1.5 }, // Bottom-right: 180° to 270°
+      { x: 0, y: mapSize, angleStart: Math.PI * 1.5, angleEnd: Math.PI * 2 },  // Bottom-left: 270° to 360°
     ];
     
-    // Add multiple spawners per corner area with spacing
-    for (const corner of cornerOffsets) {
-      // Place in a small grid pattern within corner
-      const offsets = [
-        { x: 0, y: 0 },
-        { x: radius * 2.5, y: 0 },
-        { x: 0, y: radius * 2.5 },
-        { x: radius * 2.5, y: radius * 2.5 },
-      ];
-      
-      for (const off of offsets) {
-        const targetX = Math.max(10, Math.min(mapSize - 10, corner.x + off.x));
-        const targetY = Math.max(10, Math.min(mapSize - 10, corner.y + off.y));
+    for (const corner of corners) {
+      // Place spawners along an arc from corner, varying distance and angle
+      for (let i = 0; i < spawnersPerCorner; i++) {
+        // Distribute angles across the corner's arc range with some randomness
+        const angleRange = corner.angleEnd - corner.angleStart;
+        const baseAngle = corner.angleStart + (i / spawnersPerCorner) * angleRange;
+        const angle = baseAngle + (Math.random() - 0.5) * (angleRange / spawnersPerCorner) * 0.6;
+        
+        // Vary distance from corner (30-70 tiles inward)
+        const dist = 35 + Math.random() * 40 + (i % 2) * 15;
+        
+        const targetX = corner.x + Math.cos(angle) * dist;
+        const targetY = corner.y + Math.sin(angle) * dist;
+        
+        // Clamp to map bounds with margin
+        const clampedX = Math.max(15, Math.min(mapSize - 15, targetX));
+        const clampedY = Math.max(15, Math.min(mapSize - 15, targetY));
         
         // Find valid position (avoids roads AND overlaps)
-        const finalPos = findValidPosition(targetX, targetY, radius);
+        const finalPos = findValidPosition(clampedX, clampedY, radius);
         if (finalPos) {
           positions.push(finalPos);
         }
@@ -1074,8 +1081,8 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 16 corner spawners (4 per corner) - fills map corners
-  const cornerPos = placeInCorners(RADIUS.corner);
+  // Corner spawners - naturally distributed along corner arcs (5 per corner = 20 total)
+  const cornerPos = placeInCorners(RADIUS.corner, 5);
   cornerPos.forEach((pos, i) => {
     const isPack = i % 2 === 0; // Alternate pack/stray
     if (isPack) {
