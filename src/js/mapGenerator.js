@@ -24,12 +24,12 @@ const ROAD_MAIN_HALF = 1;      // Main road is 3 tiles wide (center ± 1)
 const ROAD_TOTAL_HALF = 3;     // Total footprint is 7 tiles wide (center ± 3)
 
 // Terrain types for procedural generation
-// '1' (dune) is lightest and most common, '0' and '8' are accent variations
+// Simplified: all terrain is just sand for cleaner building
 const TERRAIN = {
-  DESERT: ['1', '1', '1', '0', '8'], // 60% dune, 20% sand, 20% drySand
-  ROCK: ['2'],
-  ASH: ['6'],
-  SALT: ['7']
+  DESERT: ['0'], // Just sand
+  ROCK: ['0'],   // Disabled - use sand
+  ASH: ['0'],    // Disabled - use sand
+  SALT: ['0']    // Disabled - use sand
 };
 
 /**
