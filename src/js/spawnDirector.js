@@ -517,21 +517,15 @@ function isSpawnerInLoadedRegion(spawner) {
 export function initSpawnDirector(state) {
   currentState = state;
   
-  // Set base center from map offset
-  if (state.map?.meta?.originalOffset) {
-    const ox = state.map.meta.originalOffset.x;
-    const oy = state.map.meta.originalOffset.y;
-    // Base center (4x scaled base, centered at 56,38)
-    baseCenter = { x: 56 + ox, y: 38 + oy };
-    
-    // Define base bounds (rounded rectangle: 31-81 x 19-57)
-    baseBounds = {
-      minX: 31 + ox,
-      maxX: 81 + ox,
-      minY: 19 + oy,
-      maxY: 57 + oy
-    };
-  }
+  // Base center comes from mapConfig (already initialized)
+  // Define base bounds relative to base center (Drycross footprint ~50x38 tiles)
+  const center = getBaseCenter();
+  baseBounds = {
+    minX: center.x - 25,
+    maxX: center.x + 25,
+    minY: center.y - 19,
+    maxY: center.y + 19
+  };
   
   // Clear any existing reservations
   reservedBy.clear();
@@ -2287,7 +2281,7 @@ export function getSpawnDebugInfo() {
   return {
     playerRing: getRingForDistance(playerDistFromBase),
     playerDistFromBase: Math.round(playerDistFromBase),
-    baseCenter,
+    baseCenter: getBaseCenter(),
     baseBounds,
     activeBubble: bubble,
     counts,
