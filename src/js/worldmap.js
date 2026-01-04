@@ -312,8 +312,8 @@ export function openWorldMap() {
   // Update player position and facing
   updatePlayerPosition();
   
-  // Center on player
-  centerOnPlayer();
+  // Center on player (instant, no animation on open)
+  centerOnPlayer(false);
   
   // Initialize cursor position to player location
   if (gameState?.player) {
@@ -717,12 +717,60 @@ function populateQuestList() {
 // ============================================
 // CENTER ON PLAYER
 // ============================================
-function centerOnPlayer() {
+// Recenter animation state
+let recenterAnimationId = null;
+
+function centerOnPlayer(animate = true) {
   if (!gameState?.player) return;
   
-  mapCamX = clampCamX(gameState.player.x);
-  mapCamY = clampCamY(gameState.player.y);
-  scheduleRender();
+  const targetX = clampCamX(gameState.player.x);
+  const targetY = clampCamY(gameState.player.y);
+  
+  if (!animate) {
+    // Instant snap (used on map open)
+    mapCamX = targetX;
+    mapCamY = targetY;
+    scheduleRender();
+    return;
+  }
+  
+  // Cancel any existing animation
+  if (recenterAnimationId) {
+    cancelAnimationFrame(recenterAnimationId);
+  }
+  
+  // Animated smooth scroll
+  const startX = mapCamX;
+  const startY = mapCamY;
+  const startTime = performance.now();
+  const duration = 400; // ms
+  
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+  
+  function animateRecenter(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = easeOutCubic(progress);
+    
+    mapCamX = startX + (targetX - startX) * eased;
+    mapCamY = startY + (targetY - startY) * eased;
+    
+    scheduleRender();
+    
+    if (progress < 1) {
+      recenterAnimationId = requestAnimationFrame(animateRecenter);
+    } else {
+      recenterAnimationId = null;
+      // Update cursor position to player after animation
+      cursorTileX = gameState.player.x;
+      cursorTileY = gameState.player.y;
+      updatePositionDisplay(getViewport());
+    }
+  }
+  
+  recenterAnimationId = requestAnimationFrame(animateRecenter);
 }
 
 function updatePlayerPosition() {
