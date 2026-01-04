@@ -718,6 +718,13 @@ function drawRingOverlay() {
     maxY: (87 + offset.y) * TILE_SIZE
   };
   
+  // Debug: verify center alignment
+  const wallCenterX = (43 + 93) / 2 + offset.x;  // Should be 68 + 132 = 200
+  const wallCenterY = (49 + 87) / 2 + offset.y;  // Should be 68 + 132 = 200
+  console.log('[Ring Debug] Wall center (tiles):', wallCenterX, wallCenterY);
+  console.log('[Ring Debug] Base center from config:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
+  console.log('[Ring Debug] Match:', wallCenterX === mapConfig.baseCenter.x && wallCenterY === mapConfig.baseCenter.y);
+  
   // Draw semi-transparent fill
   ringOverlayCtx.beginPath();
   ringOverlayCtx.rect(
