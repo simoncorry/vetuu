@@ -345,42 +345,6 @@
   opacity: 0.7;
 }
 
-/* ============================================
-   BOTTOM HINT BAR
-   ============================================ */
-#worldmap-hints {
-  position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  right: calc(280px + 1rem);
-  display: flex;
-  justify-content: center;
-  gap: 1.5rem;
-  padding: 0.5rem 1rem;
-  background: rgba(20, 24, 28, 0.9);
-  border: 1px solid var(--frame-border);
-  border-radius: 6px;
-  pointer-events: none;
-}
-
-.worldmap-hint {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.worldmap-hint kbd {
-  background: var(--frame-inner);
-  border: 1px solid var(--frame-border);
-  border-radius: 3px;
-  padding: 0.1rem 0.35rem;
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  min-width: 1.2em;
-  text-align: center;
-}
 
 /* ============================================
    ZOOM INDICATOR
@@ -416,12 +380,12 @@
 }
 
 /* ============================================
-   COORDINATES INDICATOR
+   COORDINATES INDICATOR (cursor position)
    ============================================ */
 #worldmap-coords {
   position: absolute;
   top: 1rem;
-  right: calc(280px + 1rem);
+  right: 1rem;
   background: rgba(20, 24, 28, 0.9);
   border: 1px solid var(--frame-border);
   border-radius: 4px;
@@ -429,6 +393,8 @@
   font-size: 0.7rem;
   color: var(--text-secondary);
   pointer-events: none;
+  /* Monospace for stable width as numbers change */
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================
@@ -436,7 +402,7 @@
    ============================================ */
 #worldmap-center-player {
   position: absolute;
-  bottom: 4rem;
+  bottom: 1rem;
   left: 1rem;
   background: var(--frame-inner);
   border: 1px solid var(--frame-border);
@@ -449,7 +415,7 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 #worldmap-center-player:hover {
@@ -461,6 +427,11 @@
 #worldmap-center-player::before {
   content: '◎';
   font-size: 0.85rem;
+}
+
+#worldmap-center-player.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ============================================

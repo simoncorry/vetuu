@@ -119,7 +119,12 @@ let isOpen = false;
 
 // UI elements
 let coordsEl = null;
+let centerBtn = null;
 let lastCoordsText = '';
+
+// Cursor position tracking (for coords display)
+let cursorTileX = 0;
+let cursorTileY = 0;
 
 // Waypoints
 let waypoints = [];
@@ -154,6 +159,7 @@ export function initWorldMap(state) {
   
   // Cache UI element refs
   coordsEl = document.getElementById('worldmap-coords');
+  centerBtn = document.getElementById('worldmap-center-player');
   
   // Pre-render terrain
   prerenderTerrain();
@@ -256,6 +262,9 @@ function setupEventListeners() {
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseup', onMouseUp);
   
+  // Track cursor position for coords display
+  viewport.addEventListener('mousemove', onCursorMove);
+  
   // Zoom with wheel
   viewport.addEventListener('wheel', onWheel, { passive: false });
   
@@ -305,6 +314,17 @@ export function openWorldMap() {
   
   // Center on player
   centerOnPlayer();
+  
+  // Initialize cursor position to player location
+  if (gameState?.player) {
+    cursorTileX = gameState.player.x;
+    cursorTileY = gameState.player.y;
+  }
+  
+  // Ensure center button is hidden initially (camera centered on player)
+  if (centerBtn) {
+    centerBtn.classList.add('hidden');
+  }
   
   // Populate quest list
   populateQuestList();
@@ -368,6 +388,28 @@ function onResize() {
 }
 
 // ============================================
+// CURSOR POSITION TRACKING
+// ============================================
+function updateCursorPosition(clientX, clientY) {
+  const vp = getViewport();
+  if (!vp || !viewport) return;
+  
+  const rect = viewport.getBoundingClientRect();
+  const screenX = clientX - rect.left;
+  const screenY = clientY - rect.top;
+  
+  cursorTileX = mapCamX + (screenX - vp.canvasW / 2) / vp.pixelsPerTile;
+  cursorTileY = mapCamY + (screenY - vp.canvasH / 2) / vp.pixelsPerTile;
+  
+  updatePositionDisplay(vp);
+}
+
+function onCursorMove(e) {
+  if (!isOpen) return;
+  updateCursorPosition(e.clientX, e.clientY);
+}
+
+// ============================================
 // PAN (DRAG)
 // ============================================
 function onMouseDown(e) {
@@ -410,6 +452,9 @@ function onMouseMove(e) {
   lastDragX = e.clientX;
   lastDragY = e.clientY;
   lastDragTime = now;
+  
+  // Also track cursor tile position while dragging
+  updateCursorPosition(e.clientX, e.clientY);
   
   scheduleRender();
 }
@@ -801,6 +846,9 @@ function onTouchStart(e) {
     lastDragTime = performance.now();
     isDragging = true;
     stopMomentum();
+    
+    // Update cursor position for coords display
+    updateCursorPosition(touchStartX, touchStartY);
   } else if (e.touches.length === 2) {
     // Pinch zoom
     lastTouchDist = getTouchDistance(e.touches);
@@ -1275,14 +1323,26 @@ function updatePositionDisplay(vp) {
     posEl.textContent = regionName;
   }
   
-  // Update coords badge (shows map center tile, useful for mapping POIs + waypoints)
+  // Update coords badge (shows cursor/tap tile position)
   if (coordsEl) {
-    const x = Math.floor(mapCamX);
-    const y = Math.floor(mapCamY);
+    const x = Math.floor(cursorTileX);
+    const y = Math.floor(cursorTileY);
     const text = `X: ${x} Y: ${y}`;
     if (text !== lastCoordsText) {
       coordsEl.textContent = text;
       lastCoordsText = text;
+    }
+  }
+  
+  // Show/hide center button based on camera distance from player
+  if (centerBtn && gameState?.player) {
+    const dx = Math.abs(mapCamX - gameState.player.x);
+    const dy = Math.abs(mapCamY - gameState.player.y);
+    const threshold = 5; // tiles
+    if (dx > threshold || dy > threshold) {
+      centerBtn.classList.remove('hidden');
+    } else {
+      centerBtn.classList.add('hidden');
     }
   }
 }
