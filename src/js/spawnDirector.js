@@ -31,13 +31,15 @@ import { perfStart, perfEnd } from './perf.js';
 // - Wilderness: Trog territory, real danger, levels 12-25
 // - Danger: Karth patrols, elite content, levels 25-40
 // - Deep: Endgame area, levels 40-50, low density high lethality
-// Ring distances adjusted for 200x140 map (max ~125 tiles from base)
+// Ring distances adjusted for 200x140 map with base at center (100, 70)
+// Max vertical reach: ~70 tiles, Max horizontal reach: ~100 tiles
+// Rings compressed to fit the vertical constraint
 const RINGS = {
-  safe:       { min: 0,  max: 28 },    // Wide calm zone around Drycross
-  frontier:   { min: 29, max: 60 },    // Mixed threats, early packs
-  wilderness: { min: 61, max: 95 },    // Trog territory, real danger
-  danger:     { min: 96, max: 115 },   // Karth patrols, elites
-  deep:       { min: 116, max: Infinity } // Optional endgame spawns (edge of map)
+  safe:       { min: 0,  max: 24 },    // Nomads around Drycross
+  frontier:   { min: 25, max: 42 },    // Scav territory
+  wilderness: { min: 43, max: 58 },    // Trog territory, real danger
+  danger:     { min: 59, max: 68 },    // Karth patrols, elites (near vertical limit)
+  deep:       { min: 69, max: Infinity } // Endgame spawns (edge of map, mostly horizontal)
 };
 
 // ============================================
@@ -56,7 +58,7 @@ const MAX_TOTAL_ENEMIES = 10;       // Room for strays + small pack
 // NPE (New Player Experience) critter guarantees
 const NPE_CRITTER_MIN = 2;
 const NPE_CRITTER_ZONE_MIN = 14;    // Min distance from base for NPE critters (just outside walls)
-const NPE_CRITTER_ZONE_MAX = 28;    // Max distance from base for NPE critters (edge of safe ring)
+const NPE_CRITTER_ZONE_MAX = 24;    // Max distance from base for NPE critters (edge of safe ring)
 
 // Respawn timing (longer = more exploration feel)
 // Safe/Frontier: slower respawns so it doesn't feel like a shooting gallery
@@ -157,13 +159,36 @@ function defaultRoleForType(type) {
 }
 
 /**
+ * Clamp a position to stay within map bounds with margin for spawn radius.
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate  
+ * @param {number} margin - Margin from edge (for spawn radius)
+ * @returns {{x: number, y: number}} Clamped position
+ */
+function clampToMapBounds(x, y, margin = 5) {
+  const map = currentState?.map;
+  if (!map) return { x, y };
+  
+  const minX = margin;
+  const maxX = map.meta.width - 1 - margin;
+  const minY = margin;
+  const maxY = map.meta.height - 1 - margin;
+  
+  return {
+    x: Math.max(minX, Math.min(maxX, Math.round(x))),
+    y: Math.max(minY, Math.min(maxY, Math.round(y)))
+  };
+}
+
+/**
  * Adjust a spawner position to avoid roads.
  * Roads run through baseCenter.x (vertical) and baseCenter.y (horizontal).
  * Pushes positions at least ROAD_EXCLUSION_RADIUS away from road center lines.
+ * Also clamps to map bounds to prevent spawners outside valid area.
  */
 function adjustSpawnerToAvoidRoad(x, y) {
-  const roadX = baseCenter.x; // vertical road at x=236
-  const roadY = baseCenter.y; // horizontal road at y=158
+  const roadX = baseCenter.x;
+  const roadY = baseCenter.y;
   
   const distToVertical = Math.abs(x - roadX);
   const distToHorizontal = Math.abs(y - roadY);
@@ -182,7 +207,8 @@ function adjustSpawnerToAvoidRoad(x, y) {
       : roadY + ROAD_EXCLUSION_RADIUS;
   }
   
-  return { x: Math.round(x), y: Math.round(y) };
+  // Clamp to map bounds with margin for spawn radius
+  return clampToMapBounds(x, y, 8);
 }
 
 // ============================================
@@ -198,7 +224,7 @@ const MIN_ENEMY_SPACING = 3;    // Minimum tiles between any two enemy centers (
 // STATE
 // ============================================
 let currentState = null;
-let baseCenter = { x: 236, y: 158 };  // Will be set from map offset (56+180, 38+120)
+let baseCenter = { x: 100, y: 70 };  // Will be set from map offset (56+44, 38+32)
 let baseBounds = null;
 let baseBuffer = 4;
 let spawners = [];
@@ -480,7 +506,7 @@ const ENEMY_TYPES = new Proxy({}, {
 // ============================================
 // Controls which spawners are active (to avoid simulating the whole planet)
 // Base bubble covers safe + frontier rings so transition zone is always populated
-const BASE_BUBBLE_RADIUS = 75;      // Covers safe (0-28) + frontier (29-70) rings
+const BASE_BUBBLE_RADIUS = 50;      // Covers safe (0-24) + frontier (25-42) rings
 const PLAYER_BUBBLE_MARGIN = 20;    // Extra margin beyond ACTIVE_RADIUS for smooth loading
 
 /**
@@ -682,11 +708,13 @@ function bootstrapSpawns() {
 // DEFAULT SPAWNER GENERATION
 // ============================================
 // Ring-based spawn distribution for level 50 progression:
-// - SAFE (0-28): Solo nomads, levels 1-3, NPE zone
-// - FRONTIER (29-70): Solo critters + scav packs, levels 4-12
-// - WILDERNESS (71-125): Trog packs, levels 12-25
-// - DANGER (126-190): Karth packs, levels 25-40
-// - DEEP (191+): Endgame packs, levels 40-50 (optional)
+// Map is 200x140 with base at center (100, 70)
+// Max vertical reach: 70 tiles, Max horizontal reach: 100 tiles
+// - SAFE (0-24): Solo nomads, levels 1-3, NPE zone
+// - FRONTIER (25-42): Solo critters + scav packs, levels 4-12
+// - WILDERNESS (43-58): Trog packs, levels 12-25
+// - DANGER (59-68): Karth packs, levels 25-40
+// - DEEP (69+): Endgame packs, levels 40-50 (map edges)
 function generateDefaultSpawners() {
   const result = [];
   let id = 0;
@@ -758,7 +786,7 @@ function generateDefaultSpawners() {
   // Outer nomads (level 2-3, outer edge of safe ring)
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2 + Math.PI / 24;
-    const dist = 24 + Math.random() * 4; // 24-28 tiles from center (edge of safe ring)
+    const dist = 21 + Math.random() * 3; // 21-24 tiles from center (edge of safe ring)
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -787,13 +815,13 @@ function generateDefaultSpawners() {
   // FRONTIER RING: SCAVS (Mix solo + packs, Level 4-12)
   // ============================================
   // Transition zone: first packs appear, levels 4-12
-  // Frontier is 29-70 tiles from base
+  // Frontier is 25-42 tiles from base
   // 12 spawners: 6 strays + 6 packs spread across the ring
   
-  // Inner frontier strays (level 4-6) - 32-40 tiles
+  // Inner frontier strays (level 4-6) - 26-33 tiles
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
-    const dist = 32 + Math.random() * 8; // 32-40 tiles from center
+    const dist = 26 + Math.random() * 7; // 26-33 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -817,10 +845,10 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Frontier packs (level 5-10) - spread across 42-58 tiles
+  // Frontier packs (level 5-10) - spread across 34-42 tiles
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2 + Math.PI / 6; // Offset from strays
-    const dist = 42 + Math.random() * 16; // 42-58 tiles from center
+    const dist = 34 + Math.random() * 8; // 34-42 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -857,7 +885,7 @@ function generateDefaultSpawners() {
   // Inner wilderness (level 12-18)
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2;
-    const dist = 65 + Math.random() * 12; // 65-77 tiles from center
+    const dist = 44 + Math.random() * 8; // 44-52 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -888,7 +916,7 @@ function generateDefaultSpawners() {
   // Outer wilderness (level 18-25)
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2 + Math.PI / 6; // Offset from inner
-    const dist = 80 + Math.random() * 12; // 80-92 tiles from center
+    const dist = 52 + Math.random() * 6; // 52-58 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -925,7 +953,7 @@ function generateDefaultSpawners() {
   // Danger zone packs (level 25-40)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 98 + Math.random() * 12; // 98-110 tiles from center
+    const dist = 60 + Math.random() * 8; // 60-68 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -958,13 +986,13 @@ function generateDefaultSpawners() {
   // DEEP RING: ENDGAME (Packs, Level 40-50)
   // ============================================
   // Optional endgame area: levels 40-50, low density, high lethality
-  // 2 spawners in corner positions, requires Act 3
+  // 4 spawners positioned at map edges (will be clamped to valid bounds)
   
-  // Deep zone spawners (level 40-50) - positioned in corners
-  const deepAngles = [Math.PI / 4, 5 * Math.PI / 4]; // Two opposite corners
-  for (let i = 0; i < 2; i++) {
+  // Deep zone spawners (level 40-50) - positioned toward edges
+  const deepAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // Four cardinal directions
+  for (let i = 0; i < 4; i++) {
     const angle = deepAngles[i];
-    const dist = 115 + Math.random() * 8; // 115-123 tiles (edge of map)
+    const dist = 70 + Math.random() * 10; // 70-80 tiles (at/beyond edge, will be clamped)
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
