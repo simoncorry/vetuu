@@ -988,12 +988,11 @@ function initLightingCanvas(gameState) {
   createPlayerTorch();
   
   // Position canvas at camera location (matches render.js camera calculation)
-  const viewportW = cachedViewport?.clientWidth || 1200;
-  const viewportH = cachedViewport?.clientHeight || 800;
+  // Reuse viewportW/viewportH from earlier in this function
   const zoomFactor = 1.5; // Match render.js ZOOM_FACTOR
-  const camX = state.player.x * lightingTileSize + lightingTileSize / 2 - (viewportW / zoomFactor) / 2;
-  const camY = state.player.y * lightingTileSize + lightingTileSize / 2 - (viewportH / zoomFactor) / 2;
-  repositionLightCanvas(Math.max(0, camX), Math.max(0, camY));
+  const initCamX = state.player.x * lightingTileSize + lightingTileSize / 2 - (viewportW / zoomFactor) / 2;
+  const initCamY = state.player.y * lightingTileSize + lightingTileSize / 2 - (viewportH / zoomFactor) / 2;
+  repositionLightCanvas(Math.max(0, initCamX), Math.max(0, initCamY));
   
   const fullMapMB = ((mapWidthPx * mapHeightPx * 4) / (1024 * 1024)).toFixed(1);
   const viewportMB = ((lightCanvasWidth * lightCanvasHeight * 4) / (1024 * 1024)).toFixed(1);
