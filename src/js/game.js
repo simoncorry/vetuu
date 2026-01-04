@@ -6,7 +6,7 @@
 import { initRenderer, renderWorld, updateCamera, tickCamera, renderActors, renderObjects, actorTransform } from './render.js';
 import { initInput } from './input.js';
 import { initMovement, createPathTo, tickMovement } from './movement.js';
-import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo, updateNpcPosition } from './collision.js';
+import { getObjectAt, getNpcAt, buildSpatialIndex, canMoveTo, canNPCMoveTo, updateNpcPosition } from './collision.js';
 import { initFog, revealAround, renderFog, updateFogArea } from './fog.js';
 import { initDialogue, showDialogue } from './dialogue.js';
 import { initQuests, updateQuestProgress, renderQuestTracker, checkQuestConditions } from './quests.js';
@@ -1221,8 +1221,8 @@ function tickGuardPatrol() {
       continue;
     }
     
-    // Check if tile is walkable and not occupied
-    if (!canMoveTo(state, newX, newY)) continue;
+    // Check if tile is walkable and not occupied (NPCs can't walk on roads)
+    if (!canNPCMoveTo(state, newX, newY)) continue;
     if (newX === state.player.x && newY === state.player.y) continue;
     
     // Move the guard

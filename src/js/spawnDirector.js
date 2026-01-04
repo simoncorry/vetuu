@@ -9,7 +9,7 @@
  * - Creates natural mix of strays and packs
  */
 
-import { canMoveTo } from './collision.js';
+import { canMoveTo, isRoadTile } from './collision.js';
 import { hasFlag } from './save.js';
 import { distCoords, randomRange, cssVar } from './utils.js';
 import { AI } from './aiConstants.js';
@@ -289,6 +289,10 @@ function isBlockValid(cx, cy) {
   for (const tile of tiles) {
     // Check walkability
     if (!canMoveTo(currentState, tile.x, tile.y)) {
+      return false;
+    }
+    // Spawns can't happen on roads
+    if (isRoadTile(currentState, tile.x, tile.y)) {
       return false;
     }
     // Check reservation
@@ -1688,6 +1692,8 @@ function isBlockValidForSlot(cx, cy) {
   for (const tile of tiles) {
     // Walkability
     if (!canMoveTo(currentState, tile.x, tile.y)) return false;
+    // Spawns can't happen on roads
+    if (isRoadTile(currentState, tile.x, tile.y)) return false;
     // Not already reserved by another slot
     if (isReserved(tile.x, tile.y)) return false;
     // Not in base bounds

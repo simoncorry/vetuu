@@ -44,6 +44,21 @@ export function buildSpatialIndex(state) {
 }
 
 // ============================================
+// ROAD TILE CHECK
+// ============================================
+
+/**
+ * Check if a tile is a road tile.
+ * Road tiles are '3' in the legend.
+ */
+export function isRoadTile(state, x, y) {
+  const { map } = state;
+  if (!map?.ground?.[y]) return false;
+  const tileChar = map.ground[y][x];
+  return tileChar === '3';
+}
+
+// ============================================
 // MOVEMENT VALIDATION
 // ============================================
 export function canMoveTo(state, x, y) {
@@ -129,6 +144,20 @@ export function canMoveTo(state, x, y) {
     return false;
   }
 
+  return true;
+}
+
+/**
+ * Like canMoveTo but also prevents NPCs/enemies from walking on road tiles.
+ * Used for enemy AI and NPC movement.
+ */
+export function canNPCMoveTo(state, x, y) {
+  // First check basic movement
+  if (!canMoveTo(state, x, y)) return false;
+  
+  // NPCs and enemies cannot walk on roads
+  if (isRoadTile(state, x, y)) return false;
+  
   return true;
 }
 

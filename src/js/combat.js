@@ -14,7 +14,7 @@
  */
 
 import { saveGame } from './save.js';
-import { hasLineOfSight, canMoveTo, canMoveToIgnoreEnemies } from './collision.js';
+import { hasLineOfSight, canMoveTo, canMoveToIgnoreEnemies, canNPCMoveTo, isRoadTile } from './collision.js';
 import { WEAPONS, ENEMY_WEAPONS, BASIC_ATTACK_CD_MS } from './weapons.js';
 import { 
   BASIC_ATTACKS,
@@ -2183,8 +2183,8 @@ function isTileInAnyOtherFootprint(enemyId, x, y) {
  * which reduces "destBlocked", "stuck", and snap frequency.
  */
 function canEnemyMoveToRetreat(x, y, enemyId) {
-  // Basic walkability check
-  if (!canMoveTo(currentState, x, y)) return false;
+  // Basic walkability check (enemies can't walk on roads)
+  if (!canNPCMoveTo(currentState, x, y)) return false;
   
   // Don't collide with player
   const player = currentState.player;
@@ -3260,7 +3260,8 @@ function moveToGetLOS(enemy) {
 }
 
 function canEnemyMoveTo(x, y, excludeId) {
-  if (!canMoveTo(currentState, x, y)) return false;
+  // Enemies can't walk on roads
+  if (!canNPCMoveTo(currentState, x, y)) return false;
   if (x === currentState.player.x && y === currentState.player.y) return false;
 
   // Don't walk on other enemies (but can be adjacent - no gap required in combat)
@@ -5131,7 +5132,7 @@ function executeSwordShockwave(weapon, ability) {
     showDamageNumber(target.x, target.y, dmg, false);
     provokeEnemy(target);
     
-    // Knockback
+    // Knockback (enemies can't be knocked onto roads)
     if (knockback > 0 && target.hp > 0) {
       const dx = target.x - player.x;
       const dy = target.y - player.y;
@@ -5142,7 +5143,7 @@ function executeSwordShockwave(weapon, ability) {
         const newX = Math.round(target.x + nx * knockback);
         const newY = Math.round(target.y + ny * knockback);
         
-        if (canMoveTo(currentState, newX, newY)) {
+        if (canNPCMoveTo(currentState, newX, newY)) {
           target.x = newX;
           target.y = newY;
           
