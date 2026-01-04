@@ -31,12 +31,13 @@ import { perfStart, perfEnd } from './perf.js';
 // - Wilderness: Trog territory, real danger, levels 12-25
 // - Danger: Karth patrols, elite content, levels 25-40
 // - Deep: Endgame area, levels 40-50, low density high lethality
+// Ring distances adjusted for 200x140 map (max ~125 tiles from base)
 const RINGS = {
   safe:       { min: 0,  max: 28 },    // Wide calm zone around Drycross
-  frontier:   { min: 29, max: 70 },    // Mixed threats, early packs
-  wilderness: { min: 71, max: 125 },   // Trog territory, real danger
-  danger:     { min: 126, max: 190 },  // Karth patrols, elites
-  deep:       { min: 191, max: Infinity } // Optional endgame spawns
+  frontier:   { min: 29, max: 60 },    // Mixed threats, early packs
+  wilderness: { min: 61, max: 95 },    // Trog territory, real danger
+  danger:     { min: 96, max: 115 },   // Karth patrols, elites
+  deep:       { min: 116, max: Infinity } // Optional endgame spawns (edge of map)
 };
 
 // ============================================
@@ -816,10 +817,10 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Frontier packs (level 5-10) - spread across 42-65 tiles
+  // Frontier packs (level 5-10) - spread across 42-58 tiles
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2 + Math.PI / 6; // Offset from strays
-    const dist = 42 + Math.random() * 23; // 42-65 tiles from center
+    const dist = 42 + Math.random() * 16; // 42-58 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -856,7 +857,7 @@ function generateDefaultSpawners() {
   // Inner wilderness (level 12-18)
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2;
-    const dist = 82 + Math.random() * 12; // 82-94 tiles from center
+    const dist = 65 + Math.random() * 12; // 65-77 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -887,7 +888,7 @@ function generateDefaultSpawners() {
   // Outer wilderness (level 18-25)
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2 + Math.PI / 6; // Offset from inner
-    const dist = 105 + Math.random() * 15; // 105-120 tiles from center
+    const dist = 80 + Math.random() * 12; // 80-92 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -924,7 +925,7 @@ function generateDefaultSpawners() {
   // Danger zone packs (level 25-40)
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-    const dist = 140 + Math.random() * 20; // 140-160 tiles from center
+    const dist = 98 + Math.random() * 12; // 98-110 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -963,7 +964,7 @@ function generateDefaultSpawners() {
   const deepAngles = [Math.PI / 4, 5 * Math.PI / 4]; // Two opposite corners
   for (let i = 0; i < 2; i++) {
     const angle = deepAngles[i];
-    const dist = 180 + Math.random() * 15;
+    const dist = 115 + Math.random() * 8; // 115-123 tiles (edge of map)
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
