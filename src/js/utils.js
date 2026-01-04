@@ -24,6 +24,16 @@ export function distCoords(x1, y1, x2, y2) {
   return Math.hypot(x2 - x1, y2 - y1);
 }
 
+/**
+ * Squared Euclidean distance (avoids sqrt - use for comparisons)
+ * Example: if (distCoordsSq(x1,y1,x2,y2) < radius*radius) ...
+ */
+export function distCoordsSq(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  return dx * dx + dy * dy;
+}
+
 // ============================================
 // STATUS EFFECTS - APPLICATION & TICKING
 // ============================================

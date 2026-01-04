@@ -1060,7 +1060,7 @@ function onEnemyDisengage(enemy, reason, _t) {
   
   // Clear target (optional - makes "combat ended" feel more intentional)
   if (isCurrentTarget) {
-    const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+    const el = getEnemyEl(enemy.id);
     if (el) el.classList.remove('targeted');
     currentTarget = null;
     updateTargetFrame();
@@ -1455,7 +1455,7 @@ function endCombat() {
   // Clear target selection - player must explicitly re-target to fight again
   // This is important for passive enemies that retreated
   if (currentTarget) {
-    const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
+    const el = getEnemyEl(currentTarget.id);
     if (el) el.classList.remove('targeted');
     currentTarget = null;
     updateTargetFrame();
@@ -7513,13 +7513,13 @@ function selectTarget(enemy) {
   clearNpcTarget();
   
   if (currentTarget) {
-    const prevEl = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
+    const prevEl = getEnemyEl(currentTarget.id);
     if (prevEl) prevEl.classList.remove('targeted');
   }
 
   currentTarget = enemy;
 
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const el = getEnemyEl(enemy.id);
   if (el) el.classList.add('targeted');
 
   updateTargetFrame();
@@ -7635,7 +7635,7 @@ function checkTargetDistance() {
   
   // Check enemy target
   if (currentTarget && isOutsideViewport(currentTarget)) {
-    const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
+    const el = getEnemyEl(currentTarget.id);
     if (el) el.classList.remove('targeted');
     currentTarget = null;
     updateTargetFrame();
@@ -7659,7 +7659,7 @@ function checkTargetDistance() {
 
 function clearTarget() {
   if (currentTarget) {
-    const el = document.querySelector(`[data-enemy-id="${currentTarget.id}"]`);
+    const el = getEnemyEl(currentTarget.id);
     if (el) el.classList.remove('targeted');
   }
   currentTarget = null;
@@ -7830,9 +7830,12 @@ async function handleEnemyDeath(enemy) {
     }
   // Note: Respawning is now handled by the Spawn Director
 
-  const el = document.querySelector(`[data-enemy-id="${enemy.id}"]`);
+  const el = getEnemyEl(enemy.id);
   if (el) {
     el.classList.add('dying');
+    
+    // Remove from cache since we're removing the element
+    enemyEls.delete(enemy.id);
     
     // Remove on animation end, with fallback timeout in case animation doesn't fire
     const removeEl = () => {
