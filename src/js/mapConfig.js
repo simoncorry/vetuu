@@ -43,7 +43,8 @@ export const mapConfig = {
   
   // Offset where original map is placed within expanded map
   // Calculated to center the BASE at (200, 200)
-  offset: { x: 144, y: 162 },
+  // With originalBaseCenter at (96, 68): offset = (200-96, 200-68) = (104, 132)
+  offset: { x: 104, y: 132 },
   
   // Base center (Drycross) in expanded coordinates
   // For 400x400 square map, base is at exact center
@@ -94,7 +95,8 @@ export function initMapConfig(originalMapData, options = {}) {
   mapConfig.originalHeight = meta.height;
   
   // Original base center (Drycross) in the original coordinate system
-  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 56, y: 38 };
+  // Based on actual wall positions: x 71-121 (center 96), y 49-87 (center 68)
+  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 96, y: 68 };
   
   // Target expansion dimensions - use a SQUARE map for symmetrical rings
   // Default 400x400 gives base at perfect center (200, 200)
