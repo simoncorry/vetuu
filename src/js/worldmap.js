@@ -76,9 +76,11 @@ function getColors() {
 }
 
 // ============================================
-// DEBUG RING OVERLAY
+// DEBUG OVERLAYS
 // ============================================
 let showRings = false;
+let showEnemies = false;   // Toggle for enemy pins
+let showSpawners = false;  // Toggle for spawner locations
 
 // Ring boundaries now come from mapConfig via getRingVisualization()
 
@@ -1059,6 +1061,16 @@ function renderOverlay(vp) {
   // Render waypoints
   if (filters.waypoints) renderWaypoints(vp);
   
+  // Render enemy pins if enabled
+  if (showEnemies) {
+    renderEnemyPins(vp);
+  }
+  
+  // Render spawner locations if enabled
+  if (showSpawners) {
+    renderSpawnerPins(vp);
+  }
+  
   // Render debug rings if enabled
   if (showRings) {
     renderRings(vp);
@@ -1186,6 +1198,110 @@ function renderQuestMarkers(vp) {
     overlayCtx.fillRect(-size / 2, -size / 2, size, size);
     
     overlayCtx.strokeStyle = colors.stroke;
+    overlayCtx.lineWidth = 1;
+    overlayCtx.strokeRect(-size / 2, -size / 2, size, size);
+    
+    overlayCtx.restore();
+  }
+}
+
+function renderSpawnerPins(vp) {
+  if (!gameState?.spawnDirector?.spawners) return;
+  
+  const spawners = gameState.spawnDirector.spawners;
+  const ringColors = {
+    safe: '#00ff00',
+    frontier: '#ffff00',
+    wilderness: '#ff8800',
+    danger: '#ff0000',
+    deep: '#ff00ff'
+  };
+  
+  for (const spawner of spawners) {
+    // Check in view
+    if (spawner.center.x < vp.left - 5 || spawner.center.x > vp.right + 5 || 
+        spawner.center.y < vp.top - 5 || spawner.center.y > vp.bottom + 5) {
+      continue;
+    }
+    
+    const pos = tileToScreen(spawner.center.x + 0.5, spawner.center.y + 0.5);
+    if (!pos) continue;
+    
+    // Draw spawner circle with ring color
+    const color = ringColors[spawner.ring] || '#ffffff';
+    const radius = Math.max(3, spawner.spawnRadius * vp.pixelsPerTile / 4);
+    
+    // Draw spawn radius circle (faint)
+    overlayCtx.beginPath();
+    overlayCtx.arc(pos.x, pos.y, spawner.spawnRadius * vp.pixelsPerTile, 0, Math.PI * 2);
+    overlayCtx.strokeStyle = color;
+    overlayCtx.globalAlpha = 0.3;
+    overlayCtx.lineWidth = 1;
+    overlayCtx.setLineDash([4, 4]);
+    overlayCtx.stroke();
+    overlayCtx.setLineDash([]);
+    overlayCtx.globalAlpha = 1;
+    
+    // Draw center marker
+    overlayCtx.beginPath();
+    overlayCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    overlayCtx.fillStyle = color;
+    overlayCtx.fill();
+    overlayCtx.strokeStyle = 'rgba(0,0,0,0.6)';
+    overlayCtx.lineWidth = 1;
+    overlayCtx.stroke();
+    
+    // Label with spawner type
+    if (vp.pixelsPerTile > 3) {
+      overlayCtx.font = '8px monospace';
+      overlayCtx.fillStyle = '#fff';
+      overlayCtx.strokeStyle = '#000';
+      overlayCtx.lineWidth = 2;
+      const label = spawner.kind === 'pack' ? 'P' : 'S';
+      overlayCtx.strokeText(label, pos.x - 3, pos.y + 3);
+      overlayCtx.fillText(label, pos.x - 3, pos.y + 3);
+    }
+  }
+}
+
+function renderEnemyPins(vp) {
+  if (!gameState?.runtime?.activeEnemies) return;
+  
+  const enemies = gameState.runtime.activeEnemies.filter(e => e.hp > 0);
+  
+  for (const enemy of enemies) {
+    // Check fog (enemies only visible in revealed areas)
+    if (!fogIsRevealed(enemy.x, enemy.y)) continue;
+    
+    // Check in view
+    if (enemy.x < vp.left - 2 || enemy.x > vp.right + 2 || 
+        enemy.y < vp.top - 2 || enemy.y > vp.bottom + 2) {
+      continue;
+    }
+    
+    const pos = tileToScreen(enemy.x + 0.5, enemy.y + 0.5);
+    if (!pos) continue;
+    
+    // Choose color based on state
+    let color;
+    if (enemy.isAlpha) {
+      color = '#FFD700';  // Gold for alphas
+    } else if (enemy.isInCombat || enemy.isAggro) {
+      color = '#FF4444';  // Red for engaged
+    } else {
+      color = '#FFAA00';  // Orange for passive
+    }
+    
+    // Draw enemy marker (small diamond)
+    const size = 4;
+    overlayCtx.save();
+    overlayCtx.translate(pos.x, pos.y);
+    overlayCtx.rotate(Math.PI / 4);
+    
+    overlayCtx.fillStyle = color;
+    overlayCtx.fillRect(-size / 2, -size / 2, size, size);
+    
+    overlayCtx.strokeStyle = 'rgba(0,0,0,0.6)';
     overlayCtx.lineWidth = 1;
     overlayCtx.strokeRect(-size / 2, -size / 2, size, size);
     
@@ -1537,6 +1653,29 @@ export function toggleWorldMapRings() {
   showRings = !showRings;
   scheduleRender();
   return showRings;
+}
+
+// ============================================
+// ENEMY PINS TOGGLE
+// ============================================
+export function toggleWorldMapEnemies() {
+  showEnemies = !showEnemies;
+  scheduleRender();
+  console.log(`[WorldMap] Enemy pins ${showEnemies ? 'ON' : 'OFF'}`);
+  return showEnemies;
+}
+
+// ============================================
+// SPAWNER PINS TOGGLE
+// ============================================
+export function toggleWorldMapSpawners() {
+  showSpawners = !showSpawners;
+  scheduleRender();
+  console.log(`[WorldMap] Spawner pins ${showSpawners ? 'ON' : 'OFF'}`);
+  console.log('  S = Stray (solo), P = Pack');
+  console.log('  Circle color = ring (green=safe, yellow=frontier, etc.)');
+  console.log('  Dashed circle = spawn radius');
+  return showSpawners;
 }
 
 // ============================================

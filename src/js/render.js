@@ -553,11 +553,11 @@ window.VETUU_RINGS = function() {
     drawRingOverlay();
     ringOverlayCanvas.style.display = 'block';
     console.log('[Debug] Ring overlay ON - showing spawn zone boundaries');
-    console.log('  🟢 Green: SAFE (0-24 tiles)');
-    console.log('  🟡 Yellow: FRONTIER (25-42 tiles)');
-    console.log('  🟠 Orange: WILDERNESS (43-58 tiles)');
-    console.log('  🔴 Red: DANGER (59-68 tiles)');
-    console.log('  🟣 Magenta: DEEP (69+ tiles)');
+    console.log('  🟢 Green: SAFE (0-32 tiles) - Base walls at 24');
+    console.log('  🟡 Yellow: FRONTIER (33-64 tiles)');
+    console.log('  🟠 Orange: WILDERNESS (65-128 tiles)');
+    console.log('  🔴 Red: DANGER (129-192 tiles)');
+    console.log('  🟣 Magenta: DEEP (193+ tiles)');
   } else {
     ringOverlayCanvas.style.display = 'none';
     console.log('[Debug] Ring overlay OFF');
@@ -585,6 +585,30 @@ window.VETUU_RINGS = function() {
   }).catch(() => {});
   
   return ringOverlayVisible;
+};
+
+/**
+ * Toggle enemy pins on the fullscreen world map.
+ * Call from console: VETUU_ENEMIES()
+ */
+window.VETUU_ENEMIES = function() {
+  import('./worldmap.js').then(mod => {
+    if (mod.toggleWorldMapEnemies) {
+      mod.toggleWorldMapEnemies();
+    }
+  }).catch(() => {});
+};
+
+/**
+ * Toggle spawner visualization on the fullscreen world map.
+ * Call from console: VETUU_SPAWNER_DEBUG()
+ */
+window.VETUU_SPAWNER_DEBUG = function() {
+  import('./worldmap.js').then(mod => {
+    if (mod.toggleWorldMapSpawners) {
+      mod.toggleWorldMapSpawners();
+    }
+  }).catch(() => {});
 };
 
 function createRingOverlay() {
