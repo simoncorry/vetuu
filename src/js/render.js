@@ -710,17 +710,17 @@ function drawRingOverlay() {
   ringOverlayCtx.fillText('ORIGINAL MAP (200x140)', originalMap.minX + 10, originalMap.minY - 10);
   
   // Draw BASE WALLS footprint (inner walled area)
-  // Original wall coords: x 43-93, y 49-87 (after crop)
+  // Actual wall coords from map.json: x 38-94, y 48-89
   const baseWalls = {
-    minX: (43 + offset.x) * TILE_SIZE,
-    maxX: (93 + offset.x) * TILE_SIZE,
-    minY: (49 + offset.y) * TILE_SIZE,
-    maxY: (87 + offset.y) * TILE_SIZE
+    minX: (38 + offset.x) * TILE_SIZE,
+    maxX: (94 + offset.x) * TILE_SIZE,
+    minY: (48 + offset.y) * TILE_SIZE,
+    maxY: (89 + offset.y) * TILE_SIZE
   };
   
   // Debug: verify center alignment
-  const wallCenterX = (43 + 93) / 2 + offset.x;  // Should be 68 + 132 = 200
-  const wallCenterY = (49 + 87) / 2 + offset.y;  // Should be 68 + 132 = 200
+  const wallCenterX = (38 + 94) / 2 + offset.x;  // 66 + 134 = 200
+  const wallCenterY = (48 + 89) / 2 + offset.y;  // 68.5 + 132 = 200.5
   console.log('[Ring Debug] Wall center (tiles):', wallCenterX, wallCenterY);
   console.log('[Ring Debug] Base center from config:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
   console.log('[Ring Debug] Match:', wallCenterX === mapConfig.baseCenter.x && wallCenterY === mapConfig.baseCenter.y);
