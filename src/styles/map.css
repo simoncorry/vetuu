@@ -16,7 +16,7 @@
   position: absolute;
   width: calc(var(--map-width) * var(--tile-size));
   height: calc(var(--map-height) * var(--tile-size));
-  background-color: var(--sand);
+  background-color: transparent;
   transform-origin: top left;
   /* No CSS transition - camera animated via JS for Safari smoothness */
   /* Force GPU compositing layer */
