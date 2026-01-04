@@ -625,11 +625,11 @@ function drawRingOverlay() {
   
   // Ring boundaries (in tiles) - must match spawnDirector.js RINGS
   const rings = [
-    { name: 'SAFE', max: 24, color: '#00ff00' },      // Green
-    { name: 'FRONTIER', max: 42, color: '#ffff00' },  // Yellow
-    { name: 'WILDERNESS', max: 58, color: '#ff8800' }, // Orange
-    { name: 'DANGER', max: 68, color: '#ff0000' },    // Red
-    { name: 'DEEP', max: 80, color: '#ff00ff' }       // Magenta (map edge)
+    { name: 'SAFE', max: 28, color: '#00ff00' },       // Green
+    { name: 'FRONTIER', max: 55, color: '#ffff00' },   // Yellow
+    { name: 'WILDERNESS', max: 85, color: '#ff8800' }, // Orange
+    { name: 'DANGER', max: 110, color: '#ff0000' },    // Red
+    { name: 'DEEP', max: 130, color: '#ff00ff' }       // Magenta (map edge)
   ];
   
   // Clear canvas

@@ -6,25 +6,30 @@
 
 import { cssVar } from './utils.js';
 
-// Original base center in 120x80 map
+// Original base center (Drycross) in the original coordinate system
 const ORIGINAL_BASE_CENTER = { x: 56, y: 38 };
 
-// Expansion dimensions
+// Expansion dimensions (final map size after expansion)
 const EXPANDED_WIDTH = 480;
 const EXPANDED_HEIGHT = 320;
-const ORIGINAL_WIDTH = 120;
-const ORIGINAL_HEIGHT = 80;
 
-// Offset to center original map in expanded map
-export const EXPANSION_OFFSET = {
-  x: Math.floor((EXPANDED_WIDTH - ORIGINAL_WIDTH) / 2),   // 180
-  y: Math.floor((EXPANDED_HEIGHT - ORIGINAL_HEIGHT) / 2)  // 120
+// These will be calculated dynamically based on actual input map size
+// But we need defaults for road generation before expandMap is called
+let currentOffset = { x: 180, y: 120 };  // Default for 120x80 input
+let currentBaseCenter = { x: 236, y: 158 };  // Default
+
+// Export getters for dynamic values
+export function getExpansionOffset() { return currentOffset; }
+export function getBaseCenter() { return currentBaseCenter; }
+
+// Legacy exports for backwards compatibility (will use current values)
+export const EXPANSION_OFFSET = { 
+  get x() { return currentOffset.x; },
+  get y() { return currentOffset.y; }
 };
-
-// Base center in expanded coordinates (56+180, 38+120) = (236, 158)
 export const BASE_CENTER = { 
-  x: ORIGINAL_BASE_CENTER.x + EXPANSION_OFFSET.x,  // 236
-  y: ORIGINAL_BASE_CENTER.y + EXPANSION_OFFSET.y   // 158
+  get x() { return currentBaseCenter.x; },
+  get y() { return currentBaseCenter.y; }
 };
 
 // Road dimensions (used for object filtering and terrain generation)
@@ -44,12 +49,23 @@ const TERRAIN = {
  * Expand the map data 4x
  */
 export function expandMap(originalMap) {
-  const newWidth = 480;
-  const newHeight = 320;
+  const newWidth = EXPANDED_WIDTH;
+  const newHeight = EXPANDED_HEIGHT;
   
   // Calculate offset to place original map in center
   const offsetX = Math.floor((newWidth - originalMap.meta.width) / 2);
   const offsetY = Math.floor((newHeight - originalMap.meta.height) / 2);
+  
+  // Update dynamic values for this expansion
+  currentOffset = { x: offsetX, y: offsetY };
+  currentBaseCenter = { 
+    x: ORIGINAL_BASE_CENTER.x + offsetX, 
+    y: ORIGINAL_BASE_CENTER.y + offsetY 
+  };
+  
+  console.log('[MapGenerator] Expanding map:', originalMap.meta.width, 'x', originalMap.meta.height, '→', newWidth, 'x', newHeight);
+  console.log('[MapGenerator] Offset:', offsetX, offsetY);
+  console.log('[MapGenerator] Base center:', currentBaseCenter.x, currentBaseCenter.y);
 
   // Generate expanded ground
   const expandedGround = [];
