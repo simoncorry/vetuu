@@ -127,6 +127,41 @@ window.VETUU_UI_DEBUG = function() {
   return { TILE_SIZE, ZOOM_FACTOR, viewport: vp };
 };
 
+/**
+ * Debug: Check actual loaded map state
+ * Call from console: VETUU_MAP_DEBUG()
+ */
+window.VETUU_MAP_DEBUG = function() {
+  if (!currentState?.map) {
+    console.log('[Map Debug] No map loaded');
+    return null;
+  }
+  
+  const meta = currentState.map.meta;
+  const ground = currentState.map.ground;
+  const player = currentState.player;
+  
+  console.log('=== MAP DEBUG ===');
+  console.log('Meta dimensions:', meta.width, 'x', meta.height);
+  console.log('Original offset:', meta.originalOffset);
+  console.log('Ground rows:', ground?.length);
+  console.log('First row length:', ground?.[0]?.length);
+  console.log('');
+  console.log('Player position:', player?.x, player?.y);
+  console.log('Expected base center:', 56 + (meta.originalOffset?.x || 0), 38 + (meta.originalOffset?.y || 0));
+  console.log('');
+  console.log('Is player inside map?', 
+    player?.x >= 0 && player?.x < meta.width && 
+    player?.y >= 0 && player?.y < meta.height);
+  
+  return {
+    meta,
+    groundRows: ground?.length,
+    groundCols: ground?.[0]?.length,
+    player: { x: player?.x, y: player?.y }
+  };
+};
+
 let viewport = null;
 let world = null;
 let groundCanvas = null;
@@ -570,10 +605,23 @@ function drawRingOverlay() {
   if (!ringOverlayCtx || !currentState) return;
   
   // Get base center from map offset
-  const ox = currentState.map.meta.originalOffset?.x || 44;
-  const oy = currentState.map.meta.originalOffset?.y || 32;
-  const baseCenterX = (56 + ox) * TILE_SIZE;
-  const baseCenterY = (38 + oy) * TILE_SIZE;
+  // The "base" (Drycross) is at tile (56, 38) in the original coordinate system
+  // originalOffset shifts all coordinates, so base center = (56 + ox, 38 + oy)
+  const ox = currentState.map.meta.originalOffset?.x || 0;
+  const oy = currentState.map.meta.originalOffset?.y || 0;
+  const baseCenterTileX = 56 + ox;
+  const baseCenterTileY = 38 + oy;
+  
+  // Convert to canvas pixels
+  const baseCenterX = baseCenterTileX * TILE_SIZE;
+  const baseCenterY = baseCenterTileY * TILE_SIZE;
+  
+  // Debug info (only log once per toggle)
+  console.log('[Ring Debug] Map meta:', currentState.map.meta.width, 'x', currentState.map.meta.height);
+  console.log('[Ring Debug] Original offset:', ox, oy);
+  console.log('[Ring Debug] Base center tile:', baseCenterTileX, baseCenterTileY);
+  console.log('[Ring Debug] Base center px:', baseCenterX, baseCenterY);
+  console.log('[Ring Debug] Canvas size:', ringOverlayCanvas.width, 'x', ringOverlayCanvas.height);
   
   // Ring boundaries (in tiles) - must match spawnDirector.js RINGS
   const rings = [
