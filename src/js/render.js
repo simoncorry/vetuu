@@ -679,12 +679,15 @@ function drawRingOverlay() {
   // Draw base footprint (wall boundaries)
   // Original wall coords: x 71-121, y 49-87
   const offset = mapConfig.offset;
+  console.log('[Ring Debug] Drawing base footprint, offset:', offset);
+  
   const baseWalls = {
     minX: (71 + offset.x) * TILE_SIZE,
     maxX: (121 + offset.x) * TILE_SIZE,
     minY: (49 + offset.y) * TILE_SIZE,
     maxY: (87 + offset.y) * TILE_SIZE
   };
+  console.log('[Ring Debug] Base walls px:', baseWalls);
   
   ringOverlayCtx.beginPath();
   ringOverlayCtx.rect(
