@@ -675,4 +675,34 @@ function drawRingOverlay() {
   ringOverlayCtx.strokeStyle = '#ff0000';
   ringOverlayCtx.lineWidth = 2;
   ringOverlayCtx.stroke();
+  
+  // Draw base footprint (wall boundaries)
+  // Original wall coords: x 71-121, y 49-87
+  const offset = mapConfig.offset;
+  const baseWalls = {
+    minX: (71 + offset.x) * TILE_SIZE,
+    maxX: (121 + offset.x) * TILE_SIZE,
+    minY: (49 + offset.y) * TILE_SIZE,
+    maxY: (87 + offset.y) * TILE_SIZE
+  };
+  
+  ringOverlayCtx.beginPath();
+  ringOverlayCtx.rect(
+    baseWalls.minX,
+    baseWalls.minY,
+    baseWalls.maxX - baseWalls.minX,
+    baseWalls.maxY - baseWalls.minY
+  );
+  ringOverlayCtx.strokeStyle = '#00ffff';  // Cyan
+  ringOverlayCtx.lineWidth = 3;
+  ringOverlayCtx.setLineDash([]);
+  ringOverlayCtx.stroke();
+  
+  // Label the base footprint
+  ringOverlayCtx.font = 'bold 12px monospace';
+  ringOverlayCtx.fillStyle = '#00ffff';
+  ringOverlayCtx.strokeStyle = '#000';
+  ringOverlayCtx.lineWidth = 2;
+  ringOverlayCtx.strokeText('BASE WALLS', baseWalls.minX + 5, baseWalls.minY - 5);
+  ringOverlayCtx.fillText('BASE WALLS', baseWalls.minX + 5, baseWalls.minY - 5);
 }
