@@ -15,7 +15,7 @@
     "tiles": {
       "0": {
         "name": "sand",
-        "color": "#C9A870",
+        "color": "transparent",
         "walkable": true
       },
       "1": {
