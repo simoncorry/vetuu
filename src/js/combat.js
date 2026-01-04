@@ -3071,17 +3071,26 @@ function toggleAutoAttack() {
     return;
   }
   
-  // If no target, find nearest enemy
+  // If no target, find nearest VISIBLE enemy (in viewport, not in fog)
   if (!currentTarget || currentTarget.hp <= 0) {
-    const nearbyEnemy = findNearestEnemy();
+    const nearbyEnemy = findNearestVisibleEnemy();
     if (nearbyEnemy) {
       selectTarget(nearbyEnemy);
       logCombat(`Targeting ${nearbyEnemy.name}`);
     } else {
-      logCombat('No enemies nearby');
+      logCombat('No enemies in sight.');
       return;
     }
   }
+  
+  // Check distance and determine weapon to use
+  const player = currentState.player;
+  const flags = window.__vetuuFlags || {};
+  const hasRifle = !!flags.rifle_unlocked;
+  const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
+  
+  // Determine attack range: rifle (6) if unlocked, otherwise melee (2)
+  const attackRange = hasRifle ? 6 : 2;
   
   // Start auto-attacking current target
   const result = setAutoAttackIntent(currentTarget);
@@ -3100,7 +3109,36 @@ function toggleAutoAttack() {
   autoAttackEnabled = true;
   inCombat = true;
   updateAutoAttackUI(true);
-  tryExecuteCombatIntent();
+  
+  // If out of range, path to target
+  if (dist > attackRange) {
+    moveToAttackRange(currentTarget, attackRange, 'basic');
+  } else {
+    tryExecuteCombatIntent();
+  }
+}
+
+/**
+ * Find the nearest visible enemy (in viewport, not hidden by fog)
+ * Used when clicking auto-attack with no current target
+ */
+function findNearestVisibleEnemy() {
+  const player = currentState.player;
+  const enemies = currentState.runtime.activeEnemies || [];
+  
+  // Filter to visible enemies (in viewport and not in fog)
+  const visible = enemies.filter(e => e.hp > 0 && isActorVisible(e));
+  
+  if (visible.length === 0) return null;
+  
+  // Sort by distance
+  visible.sort((a, b) => {
+    const distA = distCoords(a.x, a.y, player.x, player.y);
+    const distB = distCoords(b.x, b.y, player.x, player.y);
+    return distA - distB;
+  });
+  
+  return visible[0];
 }
 
 /**
@@ -7969,8 +8007,8 @@ function startSwingTimerAnimation() {
  * Update swing timer visual state classes (called every tick, lightweight)
  */
 function updateSwingTimerUI() {
-  const weaponSlot = document.getElementById('weapon-toggle-slot');
-  if (!weaponSlot) return;
+  const autoSlot = document.getElementById('auto-attack-slot');
+  if (!autoSlot) return;
   
   // Initialize if needed
   if (!swingTimerInitialized) {
@@ -7981,9 +8019,9 @@ function updateSwingTimerUI() {
   const state = getSwingTimerState();
   
   // Only update classes, not the animation (CSS handles that)
-  weaponSlot.classList.toggle('auto-attacking', isAutoAttacking);
-  weaponSlot.classList.toggle('swing-cooldown', isAutoAttacking && !state.isReady);
-  weaponSlot.classList.toggle('swing-ready', isAutoAttacking && state.isReady);
+  autoSlot.classList.toggle('auto-attacking', isAutoAttacking);
+  autoSlot.classList.toggle('swing-cooldown', isAutoAttacking && !state.isReady);
+  autoSlot.classList.toggle('swing-ready', isAutoAttacking && state.isReady);
 }
 
 function logCombat(msg) {

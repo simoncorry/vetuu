@@ -707,7 +707,7 @@
 
 .action-slot.active {
   border-color: var(--accent);
-  box-shadow: 0 0 8px var(--accent-dim);
+  /* Clean look - no glow, swing timer SVG handles visual feedback */
 }
 
 /* Disabled state - when targeting friendly NPC */
@@ -855,18 +855,18 @@
 .auto-slot:hover {
   border-color: var(--accent);
   background: rgba(105, 210, 214, 0.15);
-  box-shadow: 0 0 8px var(--accent-dim);
+  /* No glow - swing timer SVG stroke provides visual feedback */
 }
 
 .auto-slot .slot-icon {
   font-size: 1.4rem;
 }
 
-/* Auto-attack active state */
+/* Auto-attack active state - swing timer SVG stroke handles the animation */
 .auto-slot.active {
   border-color: var(--success);
   background: rgba(105, 210, 214, 0.15);
-  box-shadow: 0 0 8px var(--success);
+  /* No box-shadow glow - the SVG stroke animation provides feedback */
 }
 
 /* Melee ability slots */
