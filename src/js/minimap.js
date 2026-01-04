@@ -40,24 +40,24 @@ let COLORS = null;
 function getColors() {
   if (!COLORS) {
     COLORS = {
-      bg: cssVar('--minimap-bg'),
-      fog: cssVar('--minimap-fog'),
-      grid: cssVar('--minimap-grid'),
-      stroke: cssVar('--minimap-stroke'),
-      strokeHeavy: cssVar('--minimap-stroke-heavy'),
-      path: cssVar('--minimap-path'),
-      pathStroke: cssVar('--minimap-path-stroke'),
-      player: cssVar('--minimap-player'),
-      npc: cssVar('--minimap-npc'),
-      npcGuard: cssVar('--minimap-npc-guard'),
-      npcMedic: cssVar('--minimap-npc-medic'),
-      enemyPassive: cssVar('--minimap-enemy-passive'),
-      enemyEngaged: cssVar('--minimap-enemy-engaged'),
-      enemyAlpha: cssVar('--minimap-enemy-alpha'),
-      objectCollect: cssVar('--minimap-object-collect'),
-      objectRead: cssVar('--minimap-object-read'),
-      objectLoot: cssVar('--minimap-object-loot'),
-      objectDefault: cssVar('--minimap-object-default')
+      bg: cssVar('--minimap-bg') || '#0D0F11',
+      fog: cssVar('--minimap-fog') || 'rgba(13, 15, 17, 0.92)',
+      grid: cssVar('--minimap-grid') || 'rgba(255, 255, 255, 0.15)',
+      stroke: cssVar('--minimap-stroke') || 'rgba(0, 0, 0, 0.6)',
+      strokeHeavy: cssVar('--minimap-stroke-heavy') || 'rgba(0, 0, 0, 0.7)',
+      path: cssVar('--minimap-path') || '#00E5E5',
+      pathStroke: cssVar('--minimap-path-stroke') || 'rgba(255, 255, 255, 0.5)',
+      player: cssVar('--minimap-player') || '#EEEEFF',
+      npc: cssVar('--minimap-npc') || '#44FF44',
+      npcGuard: cssVar('--minimap-npc-guard') || '#00DDDD',
+      npcMedic: cssVar('--minimap-npc-medic') || '#FF69B4',
+      enemyPassive: cssVar('--minimap-enemy-passive') || '#FFAA00',
+      enemyEngaged: cssVar('--minimap-enemy-engaged') || '#FF4444',
+      enemyAlpha: cssVar('--minimap-enemy-alpha') || '#FFD700',
+      objectCollect: cssVar('--minimap-object-collect') || '#AA66FF',
+      objectRead: cssVar('--minimap-object-read') || '#6699FF',
+      objectLoot: cssVar('--minimap-object-loot') || '#FFAA44',
+      objectDefault: cssVar('--minimap-object-default') || '#BB88FF'
     };
   }
   return COLORS;
