@@ -17,30 +17,14 @@ import { nowMs } from './time.js';
 import { normalizeHealthKeys, clampHP } from './entityCompat.js';
 import { addEnemyElement } from './combat.js';
 import { perfStart, perfEnd } from './perf.js';
+import { mapConfig, getRingForDistance as getRingFromConfig } from './mapConfig.js';
 
 // ============================================
-// CONSTANTS - DISTANCE RINGS
+// RING/CENTER ACCESS (via mapConfig)
 // ============================================
-// World scale: Map is 480×320 (4x original), base at center (~240, 160)
-// Max radius from center to corner: ~288 tiles
-// Rings define difficulty zones based on distance from base
-//
-// Design goals:
-// - Safe: Calm NPE zone, enough space to learn (20-40s walk before real danger)
-// - Frontier: Mixed threats, early packs, levels 4-12
-// - Wilderness: Trog territory, real danger, levels 12-25
-// - Danger: Karth patrols, elite content, levels 25-40
-// - Deep: Endgame area, levels 40-50, low density high lethality
-// Ring distances for 480x320 expanded map with base at ~(196, 128)
-// Max vertical reach: ~128 tiles, Max horizontal reach: ~196 tiles
-// Rings designed to provide smooth progression
-const RINGS = {
-  safe:       { min: 0,  max: 28 },    // Nomads around Drycross
-  frontier:   { min: 29, max: 55 },    // Scav territory
-  wilderness: { min: 56, max: 85 },    // Trog territory, real danger
-  danger:     { min: 86, max: 110 },   // Karth patrols, elites
-  deep:       { min: 111, max: Infinity } // Endgame spawns (map edges)
-};
+// Rings and baseCenter are now defined in mapConfig.js and auto-scale based on map dimensions.
+function getRings() { return mapConfig.rings; }
+function getBaseCenter() { return mapConfig.baseCenter; }
 
 // ============================================
 // CONSTANTS - DENSITY & SPAWNING
@@ -182,13 +166,13 @@ function clampToMapBounds(x, y, margin = 5) {
 
 /**
  * Adjust a spawner position to avoid roads.
- * Roads run through baseCenter.x (vertical) and baseCenter.y (horizontal).
+ * Roads run through getBaseCenter().x (vertical) and getBaseCenter().y (horizontal).
  * Pushes positions at least ROAD_EXCLUSION_RADIUS away from road center lines.
  * Also clamps to map bounds to prevent spawners outside valid area.
  */
 function adjustSpawnerToAvoidRoad(x, y) {
-  const roadX = baseCenter.x;
-  const roadY = baseCenter.y;
+  const roadX = getBaseCenter().x;
+  const roadY = getBaseCenter().y;
   
   const distToVertical = Math.abs(x - roadX);
   const distToHorizontal = Math.abs(y - roadY);
@@ -224,7 +208,6 @@ const MIN_ENEMY_SPACING = 3;    // Minimum tiles between any two enemy centers (
 // STATE
 // ============================================
 let currentState = null;
-let baseCenter = { x: 100, y: 70 };  // Will be set from map offset (56+44, 38+32)
 let baseBounds = null;
 let baseBuffer = 4;
 let spawners = [];
@@ -516,7 +499,7 @@ function isSpawnerInLoadedRegion(spawner) {
   const player = currentState?.player;
   if (!player) return false;
   
-  const distFromBase = distCoords(spawner.center.x, spawner.center.y, baseCenter.x, baseCenter.y);
+  const distFromBase = distCoords(spawner.center.x, spawner.center.y, getBaseCenter().x, getBaseCenter().y);
   const distFromPlayer = distCoords(spawner.center.x, spawner.center.y, player.x, player.y);
   
   // In base bubble (always active)
@@ -567,7 +550,7 @@ export function initSpawnDirector(state) {
   const totalSlots = spawners.reduce((sum, s) => sum + s.slots.length, 0);
   const validSlots = spawners.reduce((sum, s) => sum + s.slots.filter(sl => sl.spawnX !== null).length, 0);
   console.log(`[SpawnDirector] Initialized with ${spawners.length} spawners, ${validSlots}/${totalSlots} valid slots`);
-  console.log(`[SpawnDirector] Base center: (${baseCenter.x}, ${baseCenter.y}), Player at: (${currentState.player.x}, ${currentState.player.y})`);
+  console.log(`[SpawnDirector] Base center: (${getBaseCenter().x}, ${getBaseCenter().y}), Player at: (${currentState.player.x}, ${currentState.player.y})`);
 }
 
 function initializeSpawners(state) {
@@ -731,8 +714,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 20; i++) {
     const angle = (i / 20) * Math.PI * 2;
     const dist = 14 + Math.random() * 5; // 14-19 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_inner_${id++}`,
@@ -759,8 +742,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 16; i++) {
     const angle = (i / 16) * Math.PI * 2 + Math.PI / 32; // Offset from inner ring
     const dist = 20 + Math.random() * 4; // 20-24 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_mid_${id++}`,
@@ -787,8 +770,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2 + Math.PI / 24;
     const dist = 21 + Math.random() * 3; // 21-24 tiles from center (edge of safe ring)
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_outer_${id++}`,
@@ -822,8 +805,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
     const dist = 30 + Math.random() * 10; // 30-40 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_frontier_stray_${id++}`,
@@ -849,8 +832,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2 + Math.PI / 6; // Offset from strays
     const dist = 42 + Math.random() * 13; // 42-55 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_frontier_${id++}`,
@@ -886,8 +869,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2;
     const dist = 58 + Math.random() * 12; // 58-70 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_trog_inner_${id++}`,
@@ -917,8 +900,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2 + Math.PI / 6; // Offset from inner
     const dist = 72 + Math.random() * 13; // 72-85 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_trog_outer_${id++}`,
@@ -954,8 +937,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
     const dist = 88 + Math.random() * 22; // 88-110 tiles from center
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_karth_${id++}`,
@@ -993,8 +976,8 @@ function generateDefaultSpawners() {
   for (let i = 0; i < 4; i++) {
     const angle = deepAngles[i];
     const dist = 112 + Math.random() * 15; // 112-127 tiles (map edges)
-    const rawX = baseCenter.x + Math.cos(angle) * dist;
-    const rawY = baseCenter.y + Math.sin(angle) * dist;
+    const rawX = getBaseCenter().x + Math.cos(angle) * dist;
+    const rawY = getBaseCenter().y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_pack_deep_${id++}`,
@@ -1437,7 +1420,7 @@ function ensureNpeCritters(now, counts) {
   const npeCritters = enemies.filter(e => 
     e.hp > 0 && 
     e.isNpeCritter && 
-    distCoords(e.x, e.y, baseCenter.x, baseCenter.y) <= RINGS.safe.max
+    distCoords(e.x, e.y, getBaseCenter().x, getBaseCenter().y) <= getRings().safe.max
   );
   
   if (npeCritters.length >= NPE_CRITTER_MIN) return [];
@@ -1481,7 +1464,7 @@ function isSpawnerEligible(spawner, now, counts) {
   if (playerDist > ACTIVE_RADIUS + spawner.spawnRadius + 10) return false;
   
   // C) Ring constraints (based on spawner center distance from base)
-  const spawnerDistFromBase = distCoords(spawner.center.x, spawner.center.y, baseCenter.x, baseCenter.y);
+  const spawnerDistFromBase = distCoords(spawner.center.x, spawner.center.y, getBaseCenter().x, getBaseCenter().y);
   const spawnerRing = getRingForDistance(spawnerDistFromBase);
   
   if (spawner.ring && spawner.ring !== spawnerRing) {
@@ -1537,7 +1520,7 @@ function chooseSpawner(eligible, _counts) {
     let weight = 1.0;
     
     // Base weight by ring and kind
-    const spawnerDist = distCoords(spawner.center.x, spawner.center.y, baseCenter.x, baseCenter.y);
+    const spawnerDist = distCoords(spawner.center.x, spawner.center.y, getBaseCenter().x, getBaseCenter().y);
     const ring = getRingForDistance(spawnerDist);
     const ringWeights = RING_WEIGHTS[ring] || RING_WEIGHTS.frontier;
     
@@ -2250,10 +2233,10 @@ export function onEnemyDeath(enemy) {
 // UTILITY FUNCTIONS
 // ============================================
 function getRingForDistance(dist) {
-  if (dist <= RINGS.safe.max) return 'safe';
-  if (dist <= RINGS.frontier.max) return 'frontier';
-  if (dist <= RINGS.wilderness.max) return 'wilderness';
-  if (dist <= RINGS.danger.max) return 'danger';
+  if (dist <= getRings().safe.max) return 'safe';
+  if (dist <= getRings().frontier.max) return 'frontier';
+  if (dist <= getRings().wilderness.max) return 'wilderness';
+  if (dist <= getRings().danger.max) return 'danger';
   return 'deep';
 }
 
@@ -2272,8 +2255,8 @@ function isInsideBaseBounds(x, y) {
  */
 function isNearRoad(x, y) {
   // Road center lines (in expanded map coordinates)
-  const roadCenterX = baseCenter.x;
-  const roadCenterY = baseCenter.y;
+  const roadCenterX = getBaseCenter().x;
+  const roadCenterY = getBaseCenter().y;
   
   // Check distance to vertical road (N-S)
   const distToVerticalRoad = Math.abs(x - roadCenterX);
@@ -2297,7 +2280,7 @@ export function getSpawnDebugInfo() {
   const player = currentState?.player;
   if (!player) return null;
   
-  const playerDistFromBase = distCoords(player.x, player.y, baseCenter.x, baseCenter.y);
+  const playerDistFromBase = distCoords(player.x, player.y, getBaseCenter().x, getBaseCenter().y);
   const bubble = getActiveBubble(player);
   const counts = countEnemiesInBubble(bubble);
   
@@ -2317,13 +2300,7 @@ export function getSpawners() {
   return spawners;
 }
 
-export function getBaseCenter() {
-  return baseCenter;
-}
-
-export function getRings() {
-  return RINGS;
-}
+export { getBaseCenter, getRings };
 
 // getEnemyTypes() is defined earlier with lazy CSS variable loading
 // and ENEMY_TYPES is a Proxy that calls it
@@ -2433,7 +2410,7 @@ function debugPlayerRing() {
   if (!currentState) return 'No state available';
   
   const player = currentState.player;
-  const dist = distCoords(player.x, player.y, baseCenter.x, baseCenter.y);
+  const dist = distCoords(player.x, player.y, getBaseCenter().x, getBaseCenter().y);
   const ring = getRingForDistance(dist);
   
   return {
@@ -2455,7 +2432,7 @@ function debugSpawnSystem() {
   
   const now = nowMs();
   const player = currentState.player;
-  const playerDist = distCoords(player.x, player.y, baseCenter.x, baseCenter.y);
+  const playerDist = distCoords(player.x, player.y, getBaseCenter().x, getBaseCenter().y);
   const bubble = getActiveBubble(player);
   const counts = countEnemiesInBubble(bubble);
   
@@ -2527,7 +2504,7 @@ function debugSpawnerMap() {
       kind: s.kind,
       levelRange: s.levelRange,
       center: `(${s.center.x}, ${s.center.y})`,
-      distFromBase: Math.round(distCoords(s.center.x, s.center.y, baseCenter.x, baseCenter.y)),
+      distFromBase: Math.round(distCoords(s.center.x, s.center.y, getBaseCenter().x, getBaseCenter().y)),
       enemyPool: s.enemyPool,
       packSize: s.packSize,
       aliveCount: s.aliveCount
@@ -2613,7 +2590,7 @@ function debugPopulation() {
   const packsByRing = { safe: new Set(), frontier: new Set(), wilderness: new Set(), danger: new Set(), deep: new Set() };
   
   for (const e of alive) {
-    const dist = distCoords(e.spawnX || e.x, e.spawnY || e.y, baseCenter.x, baseCenter.y);
+    const dist = distCoords(e.spawnX || e.x, e.spawnY || e.y, getBaseCenter().x, getBaseCenter().y);
     const ring = getRingForDistance(dist);
     byRing[ring]++;
     if (e.packId) packsByRing[ring].add(e.packId);

@@ -1,37 +1,22 @@
 /**
  * VETUU — Map Generator
- * Procedurally expands the base map 4x (120x80 → 480x320)
- * Drycross base centered at (240, 168) in expanded map
+ * Procedurally expands the base map to target dimensions.
+ * Uses mapConfig for all dimension calculations.
  */
 
 import { cssVar } from './utils.js';
+import { mapConfig, confirmExpansion } from './mapConfig.js';
 
-// Original base center (Drycross) in the original coordinate system
-const ORIGINAL_BASE_CENTER = { x: 56, y: 38 };
-
-// Expansion dimensions (final map size after expansion)
-const EXPANDED_WIDTH = 480;
-const EXPANDED_HEIGHT = 320;
-
-// These will be calculated dynamically based on actual input map size
-// But we need defaults for road generation before expandMap is called
-let currentOffset = { x: 180, y: 120 };  // Default for 120x80 input
-let currentBaseCenter = { x: 236, y: 158 };  // Default
-let currentOriginalWidth = 120;   // Will be updated by expandMap
-let currentOriginalHeight = 80;   // Will be updated by expandMap
-
-// Export getters for dynamic values
-export function getExpansionOffset() { return currentOffset; }
-export function getBaseCenter() { return currentBaseCenter; }
-
-// Legacy exports for backwards compatibility (will use current values)
+// Legacy exports for backwards compatibility (use mapConfig directly when possible)
+export function getExpansionOffset() { return mapConfig.offset; }
+export function getBaseCenter() { return mapConfig.baseCenter; }
 export const EXPANSION_OFFSET = { 
-  get x() { return currentOffset.x; },
-  get y() { return currentOffset.y; }
+  get x() { return mapConfig.offset.x; },
+  get y() { return mapConfig.offset.y; }
 };
 export const BASE_CENTER = { 
-  get x() { return currentBaseCenter.x; },
-  get y() { return currentBaseCenter.y; }
+  get x() { return mapConfig.baseCenter.x; },
+  get y() { return mapConfig.baseCenter.y; }
 };
 
 // Road dimensions (used for object filtering and terrain generation)
@@ -48,28 +33,18 @@ const TERRAIN = {
 };
 
 /**
- * Expand the map data 4x
+ * Expand the map data to target dimensions from mapConfig.
  */
 export function expandMap(originalMap) {
-  const newWidth = EXPANDED_WIDTH;
-  const newHeight = EXPANDED_HEIGHT;
-  
-  // Calculate offset to place original map in center
-  const offsetX = Math.floor((newWidth - originalMap.meta.width) / 2);
-  const offsetY = Math.floor((newHeight - originalMap.meta.height) / 2);
-  
-  // Update dynamic values for this expansion
-  currentOffset = { x: offsetX, y: offsetY };
-  currentBaseCenter = { 
-    x: ORIGINAL_BASE_CENTER.x + offsetX, 
-    y: ORIGINAL_BASE_CENTER.y + offsetY 
-  };
-  currentOriginalWidth = originalMap.meta.width;
-  currentOriginalHeight = originalMap.meta.height;
+  // Use dimensions from mapConfig (already initialized by game.js)
+  const newWidth = mapConfig.expandedWidth;
+  const newHeight = mapConfig.expandedHeight;
+  const offsetX = mapConfig.offset.x;
+  const offsetY = mapConfig.offset.y;
   
   console.log('[MapGenerator] Expanding map:', originalMap.meta.width, 'x', originalMap.meta.height, '→', newWidth, 'x', newHeight);
   console.log('[MapGenerator] Offset:', offsetX, offsetY);
-  console.log('[MapGenerator] Base center:', currentBaseCenter.x, currentBaseCenter.y);
+  console.log('[MapGenerator] Base center:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
 
   // Generate expanded ground
   const expandedGround = [];
@@ -137,14 +112,19 @@ export function expandMap(originalMap) {
   const lampPosts = generateRoadLampPosts(newWidth, newHeight, offsetX, offsetY);
   expandedObjects.push(...lampPosts);
 
+  const expandedMeta = {
+    ...originalMap.meta,
+    width: newWidth,
+    height: newHeight,
+    expanded: true,
+    originalOffset: { x: offsetX, y: offsetY }
+  };
+  
+  // Confirm expansion in mapConfig
+  confirmExpansion(expandedMeta);
+  
   return {
-    meta: {
-      ...originalMap.meta,
-      width: newWidth,
-      height: newHeight,
-      expanded: true,
-      originalOffset: { x: offsetX, y: offsetY }
-    },
+    meta: expandedMeta,
     legend: originalMap.legend,
     ground: expandedGround,
     objects: expandedObjects
@@ -352,7 +332,7 @@ function generateScatteredFeatures(width, height, offsetX, offsetY) {
     // Skip if in original map area or too close to base center
     const distFromCenter = Math.hypot(x - centerX, y - centerY);
     if (distFromCenter < 50) continue;
-    if (x >= offsetX && x < offsetX + currentOriginalWidth && y >= offsetY && y < offsetY + currentOriginalHeight) continue;
+    if (x >= offsetX && x < offsetX + mapConfig.originalWidth && y >= offsetY && y < offsetY + mapConfig.originalHeight) continue;
     
     // Skip if on road footprint (7 tiles wide = 3 from center + buffer)
     if (Math.abs(x - centerX) <= ROAD_TOTAL_HALF + 2 || Math.abs(y - centerY) <= ROAD_TOTAL_HALF + 2) continue;
@@ -483,18 +463,13 @@ function seededRandom(seed) {
  * Convert original coordinates to expanded coordinates
  */
 export function toExpandedCoords(origX, origY) {
-  // Offset to center the original map
-  const offsetX = Math.floor((480 - 120) / 2);
-  const offsetY = Math.floor((320 - 80) / 2);
-  return { x: origX + offsetX, y: origY + offsetY };
+  return { x: origX + mapConfig.offset.x, y: origY + mapConfig.offset.y };
 }
 
 /**
  * Convert expanded coordinates to original (if within bounds)
  */
 export function toOriginalCoords(expX, expY) {
-  const offsetX = Math.floor((480 - 120) / 2);
-  const offsetY = Math.floor((320 - 80) / 2);
-  return { x: expX - offsetX, y: expY - offsetY };
+  return { x: expX - mapConfig.offset.x, y: expY - mapConfig.offset.y };
 }
 

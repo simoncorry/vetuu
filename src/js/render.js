@@ -11,6 +11,7 @@ import { hasFlag } from './save.js';
 import { getNpcQuestMarker } from './quests.js';
 import { SPRITES } from './sprites.js';
 import { isRevealed } from './fog.js';
+import { mapConfig, getRingVisualization } from './mapConfig.js';
 
 // ============================================
 // RENDERING CONSTANTS (exported for use across modules)
@@ -604,33 +605,21 @@ function createRingOverlay() {
 function drawRingOverlay() {
   if (!ringOverlayCtx || !currentState) return;
   
-  // Get base center from map offset
-  // The "base" (Drycross) is at tile (56, 38) in the original coordinate system
-  // originalOffset shifts all coordinates, so base center = (56 + ox, 38 + oy)
-  const ox = currentState.map.meta.originalOffset?.x || 0;
-  const oy = currentState.map.meta.originalOffset?.y || 0;
-  const baseCenterTileX = 56 + ox;
-  const baseCenterTileY = 38 + oy;
+  // Get base center from mapConfig (single source of truth)
+  const baseCenterTileX = mapConfig.baseCenter.x;
+  const baseCenterTileY = mapConfig.baseCenter.y;
   
   // Convert to canvas pixels
   const baseCenterX = baseCenterTileX * TILE_SIZE;
   const baseCenterY = baseCenterTileY * TILE_SIZE;
   
   // Debug info (only log once per toggle)
-  console.log('[Ring Debug] Map meta:', currentState.map.meta.width, 'x', currentState.map.meta.height);
-  console.log('[Ring Debug] Original offset:', ox, oy);
+  console.log('[Ring Debug] Map:', mapConfig.width, 'x', mapConfig.height);
   console.log('[Ring Debug] Base center tile:', baseCenterTileX, baseCenterTileY);
   console.log('[Ring Debug] Base center px:', baseCenterX, baseCenterY);
-  console.log('[Ring Debug] Canvas size:', ringOverlayCanvas.width, 'x', ringOverlayCanvas.height);
   
-  // Ring boundaries (in tiles) - must match spawnDirector.js RINGS
-  const rings = [
-    { name: 'SAFE', max: 28, color: '#00ff00' },       // Green
-    { name: 'FRONTIER', max: 55, color: '#ffff00' },   // Yellow
-    { name: 'WILDERNESS', max: 85, color: '#ff8800' }, // Orange
-    { name: 'DANGER', max: 110, color: '#ff0000' },    // Red
-    { name: 'DEEP', max: 130, color: '#ff00ff' }       // Magenta (map edge)
-  ];
+  // Ring boundaries from mapConfig (auto-scaled based on map size)
+  const rings = getRingVisualization();
   
   // Clear canvas
   ringOverlayCtx.clearRect(0, 0, ringOverlayCanvas.width, ringOverlayCanvas.height);

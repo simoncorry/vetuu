@@ -14,6 +14,7 @@ import { initCombat, handleTargeting, renderEnemies, playerSpecial, checkPending
 import { initSpawnDirector, getSpawnDebugInfo } from './spawnDirector.js';
 import { loadGame, saveGame, saveFlag, loadFlags, hasFlag } from './save.js';
 import { expandMap } from './mapGenerator.js';
+import { initMapConfig, mapConfig } from './mapConfig.js';
 import { getMaxHP, getHPPercent, setMaxHP, normalizeHealthKeys, clampHP } from './entityCompat.js';
 import { initDayCycle, updateDayCycle, updateShadowCSS, getTimeOfDay, getNightIntensity, isDeepNight, formatTimeOfDay, nowMs } from './time.js';
 import { cssVar } from './utils.js';
@@ -79,9 +80,12 @@ async function loadData() {
     fetch('data/items.json').then(r => r.json())
   ]);
 
-  // Expand the map 4x
+  // Initialize map config BEFORE expansion (sets up dimensions and base center)
+  initMapConfig(mapData);
+  
+  // Expand the map to target dimensions
   const expandedMap = expandMap(mapData);
-  const offset = expandedMap.meta.originalOffset;
+  const offset = mapConfig.offset;
 
   state.map.meta = expandedMap.meta;
   state.map.legend = expandedMap.legend;

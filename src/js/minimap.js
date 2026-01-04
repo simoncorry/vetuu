@@ -13,6 +13,7 @@
 
 import { isRevealed as fogIsRevealed } from './fog.js';
 import { cssVar } from './utils.js';
+import { mapConfig, getRingVisualization } from './mapConfig.js';
 
 // ============================================
 // CONFIGURATION
@@ -68,14 +69,7 @@ function getColors() {
 // ============================================
 let showRings = false;
 
-// Ring boundaries (in tiles) - must match spawnDirector.js RINGS
-const RING_BOUNDARIES = [
-  { name: 'SAFE', max: 28, color: '#00ff00' },       // Green
-  { name: 'FRONTIER', max: 55, color: '#ffff00' },   // Yellow
-  { name: 'WILDERNESS', max: 85, color: '#ff8800' }, // Orange
-  { name: 'DANGER', max: 110, color: '#ff0000' },    // Red
-  { name: 'DEEP', max: 130, color: '#ff00ff' }       // Magenta
-];
+// Ring boundaries now come from mapConfig via getRingVisualization()
 
 // ============================================
 // STATE
@@ -1001,18 +995,17 @@ function isInView(x, y, vp) {
 function renderRings(vp) {
   if (!fogCtx || !gameState?.map) return;
   
-  // Get base center from map offset
-  const ox = gameState.map.meta.originalOffset?.x || 44;
-  const oy = gameState.map.meta.originalOffset?.y || 32;
-  const baseCenterX = 56 + ox;
-  const baseCenterY = 38 + oy;
+  // Get base center from mapConfig (single source of truth)
+  const baseCenterX = mapConfig.baseCenter.x;
+  const baseCenterY = mapConfig.baseCenter.y;
   
   // Convert base center to screen position
   const baseScreen = worldToScreen(baseCenterX, baseCenterY);
   if (!baseScreen) return;
   
-  // Draw each ring boundary
-  for (const ring of RING_BOUNDARIES) {
+  // Draw each ring boundary from mapConfig
+  const rings = getRingVisualization();
+  for (const ring of rings) {
     const radiusPx = ring.max * vp.pixelsPerTile;
     
     // Draw circle
