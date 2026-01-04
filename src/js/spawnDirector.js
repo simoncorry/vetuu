@@ -54,8 +54,8 @@ const MAX_TOTAL_ENEMIES = 10;       // Room for strays + small pack
 
 // NPE (New Player Experience) critter guarantees
 const NPE_CRITTER_MIN = 2;
-const NPE_CRITTER_ZONE_MIN = 10;    // Min distance from base for NPE critters (wider safe zone)
-const NPE_CRITTER_ZONE_MAX = 24;    // Max distance from base for NPE critters (matches new safe ring)
+const NPE_CRITTER_ZONE_MIN = 14;    // Min distance from base for NPE critters (just outside walls)
+const NPE_CRITTER_ZONE_MAX = 28;    // Max distance from base for NPE critters (edge of safe ring)
 
 // Respawn timing (longer = more exploration feel)
 // Safe/Frontier: slower respawns so it doesn't feel like a shooting gallery
@@ -478,8 +478,9 @@ const ENEMY_TYPES = new Proxy({}, {
 // LOADED REGION MODEL
 // ============================================
 // Controls which spawners are active (to avoid simulating the whole planet)
-const BASE_BUBBLE_RADIUS = 50;      // Always keep base area populated
-const PLAYER_BUBBLE_MARGIN = 15;    // Extra margin beyond ACTIVE_RADIUS
+// Base bubble covers safe + frontier rings so transition zone is always populated
+const BASE_BUBBLE_RADIUS = 75;      // Covers safe (0-28) + frontier (29-70) rings
+const PLAYER_BUBBLE_MARGIN = 20;    // Extra margin beyond ACTIVE_RADIUS for smooth loading
 
 /**
  * Check if a spawner is in a "loaded" region (base bubble or player bubble).
@@ -693,20 +694,21 @@ function generateDefaultSpawners() {
   // SAFE RING: NOMADS ONLY (Solo, Level 1-3)
   // ============================================
   // NPE zone: passive wanderers, high density for early leveling
-  // 72 spawners spread across the safe ring (32 inner + 24 mid + 16 outer)
+  // Safe ring is 0-28 tiles from base. Base walls end at ~12 tiles.
+  // 48 spawners spread across the safe ring (20 inner + 16 mid + 12 outer)
   
-  // Inner nomads (level 1, closest to base but OUTSIDE base walls)
-  // Base extends ~25 tiles from center, so start at 32+ to be safely outside
-  for (let i = 0; i < 32; i++) {
-    const angle = (i / 32) * Math.PI * 2;
-    const dist = 32 + Math.random() * 6; // 32-38 tiles from center
+  // Inner nomads (level 1, just outside base walls)
+  // Base walls at ~12 tiles, so start at 14+ to be safely outside
+  for (let i = 0; i < 20; i++) {
+    const angle = (i / 20) * Math.PI * 2;
+    const dist = 14 + Math.random() * 5; // 14-19 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_inner_${id++}`,
       kind: 'stray',
-      ring: 'safe',  // FIXED: Was incorrectly 'frontier'
+      ring: 'safe',
       center: adjusted,
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -724,19 +726,19 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Mid nomads (level 1-2, further from base)
-  for (let i = 0; i < 24; i++) {
-    const angle = (i / 24) * Math.PI * 2 + Math.PI / 48; // Offset from inner ring
-    const dist = 44 + Math.random() * 8; // 44-52 tiles from center
+  // Mid nomads (level 1-2)
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2 + Math.PI / 32; // Offset from inner ring
+    const dist = 20 + Math.random() * 4; // 20-24 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_mid_${id++}`,
       kind: 'stray',
-      ring: 'safe',  // FIXED: Was incorrectly 'frontier'
+      ring: 'safe',
       center: adjusted,
-      spawnRadius: 5,
+      spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['nomad'],
       levelRange: [1, 2],
@@ -752,17 +754,17 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Outer nomads (level 2-3, outer ring)
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2 + Math.PI / 32;
-    const dist = 56 + Math.random() * 10; // 56-66 tiles from center
+  // Outer nomads (level 2-3, outer edge of safe ring)
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2 + Math.PI / 24;
+    const dist = 24 + Math.random() * 4; // 24-28 tiles from center (edge of safe ring)
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
     result.push({
       id: `sp_nomad_outer_${id++}`,
       kind: 'stray',
-      ring: 'safe',  // FIXED: Was incorrectly 'frontier'
+      ring: 'safe',
       center: adjusted,
       spawnRadius: 5,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -784,12 +786,13 @@ function generateDefaultSpawners() {
   // FRONTIER RING: SCAVS (Mix solo + packs, Level 4-12)
   // ============================================
   // Transition zone: first packs appear, levels 4-12
-  // 8 spawners (reduced from 11)
+  // Frontier is 29-70 tiles from base
+  // 12 spawners: 6 strays + 6 packs spread across the ring
   
-  // Frontier solo strays (level 4-6) - placed at cardinal directions
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2;
-    const dist = 55 + Math.random() * 10; // 55-65 tiles from center
+  // Inner frontier strays (level 4-6) - 32-40 tiles
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const dist = 32 + Math.random() * 8; // 32-40 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -813,10 +816,10 @@ function generateDefaultSpawners() {
     });
   }
   
-  // Frontier packs (level 4-8, small packs) - placed at diagonal directions
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4; // Offset to diagonals
-    const dist = 60 + Math.random() * 8; // 60-68 tiles from center
+  // Frontier packs (level 5-10) - spread across 42-65 tiles
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 + Math.PI / 6; // Offset from strays
+    const dist = 42 + Math.random() * 23; // 42-65 tiles from center
     const rawX = baseCenter.x + Math.cos(angle) * dist;
     const rawY = baseCenter.y + Math.sin(angle) * dist;
     const adjusted = adjustSpawnerToAvoidRoad(rawX, rawY);
@@ -829,9 +832,9 @@ function generateDefaultSpawners() {
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
       enemyPool: ['scav_ranged', 'scav_melee'],  // Fallback if template fails
-      levelRange: [4, 8],
+      levelRange: [5, 10],
       packSize: { min: 2, max: 4 },
-      alpha: { chance: 0.15, max: 1 },
+      alpha: { chance: 0.20, max: 1 },
       aggroType: 'conditional',
       aggroRadius: 6,
       leashRadius: 14,
@@ -840,7 +843,7 @@ function generateDefaultSpawners() {
       maxAlive: 1,
       lastSpawnAt: -Infinity,
       aliveCount: 0,
-      minDistanceToOtherPacks: 24 // Increased from 16
+      minDistanceToOtherPacks: 20
     });
   }
   
