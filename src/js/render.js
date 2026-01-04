@@ -609,9 +609,9 @@ function drawRingOverlay() {
   const baseCenterTileX = mapConfig.baseCenter.x;
   const baseCenterTileY = mapConfig.baseCenter.y;
   
-  // Convert to canvas pixels
-  const baseCenterX = baseCenterTileX * TILE_SIZE;
-  const baseCenterY = baseCenterTileY * TILE_SIZE;
+  // Convert to canvas pixels (center of the tile, not corner)
+  const baseCenterX = baseCenterTileX * TILE_SIZE + TILE_SIZE / 2;
+  const baseCenterY = baseCenterTileY * TILE_SIZE + TILE_SIZE / 2;
   
   // Debug info (only log once per toggle)
   console.log('[Ring Debug] Map:', mapConfig.width, 'x', mapConfig.height);
