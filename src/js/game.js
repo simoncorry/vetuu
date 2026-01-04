@@ -939,8 +939,11 @@ function initLightingCanvas(gameState) {
     position: absolute;
     top: 0;
     left: 0;
+    width: ${lightCanvasWidth}px;
+    height: ${lightCanvasHeight}px;
     pointer-events: none;
     z-index: 15;
+    transform: translate3d(0, 0, 0);
     will-change: transform;
     contain: strict;
   `;
@@ -984,8 +987,13 @@ function initLightingCanvas(gameState) {
   // Create DOM-based player torch (follows player with CSS transitions)
   createPlayerTorch();
   
-  // Position canvas at player location
-  repositionLightCanvas(state.player.x * lightingTileSize, state.player.y * lightingTileSize);
+  // Position canvas at camera location (matches render.js camera calculation)
+  const viewportW = cachedViewport?.clientWidth || 1200;
+  const viewportH = cachedViewport?.clientHeight || 800;
+  const zoomFactor = 1.5; // Match render.js ZOOM_FACTOR
+  const camX = state.player.x * lightingTileSize + lightingTileSize / 2 - (viewportW / zoomFactor) / 2;
+  const camY = state.player.y * lightingTileSize + lightingTileSize / 2 - (viewportH / zoomFactor) / 2;
+  repositionLightCanvas(Math.max(0, camX), Math.max(0, camY));
   
   const fullMapMB = ((mapWidthPx * mapHeightPx * 4) / (1024 * 1024)).toFixed(1);
   const viewportMB = ((lightCanvasWidth * lightCanvasHeight * 4) / (1024 * 1024)).toFixed(1);
@@ -994,14 +1002,16 @@ function initLightingCanvas(gameState) {
 }
 
 /**
- * Reposition the lighting canvas to center around a world position.
- * @param {number} centerX - Center X in world pixels
- * @param {number} centerY - Center Y in world pixels
+ * Reposition the lighting canvas to cover the visible camera area.
+ * @param {number} camX - Camera X in world pixels (top-left of visible area)
+ * @param {number} camY - Camera Y in world pixels (top-left of visible area)
  */
-function repositionLightCanvas(centerX, centerY) {
-  // Calculate new canvas offset (top-left corner in world pixels)
-  let newOffsetX = centerX - lightCanvasWidth / 2;
-  let newOffsetY = centerY - lightCanvasHeight / 2;
+function repositionLightCanvas(camX, camY) {
+  // Position canvas to cover camera view with buffer
+  // Canvas should start slightly before camera position (buffer)
+  const bufferPx = LIGHT_BUFFER_TILES * lightingTileSize;
+  let newOffsetX = camX - bufferPx;
+  let newOffsetY = camY - bufferPx;
   
   // Clamp to map bounds
   newOffsetX = Math.max(0, Math.min(newOffsetX, mapWidthPx - lightCanvasWidth));
@@ -1010,8 +1020,8 @@ function repositionLightCanvas(centerX, centerY) {
   // Round to tile boundaries for clean rendering
   lightCanvasOffsetX = Math.floor(newOffsetX / lightingTileSize) * lightingTileSize;
   lightCanvasOffsetY = Math.floor(newOffsetY / lightingTileSize) * lightingTileSize;
-  lightLastCenterX = centerX;
-  lightLastCenterY = centerY;
+  lightLastCenterX = camX;
+  lightLastCenterY = camY;
   
   // Position the canvas in world coordinates (GPU-accelerated)
   lightCanvas.style.transform = `translate3d(${lightCanvasOffsetX}px, ${lightCanvasOffsetY}px, 0)`;
@@ -1115,10 +1125,13 @@ function updateLighting() {
     return;
   }
   
-  // Check if we need to reposition the canvas based on player movement
-  const playerCenterX = state.player.x * lightingTileSize + lightingTileSize / 2;
-  const playerCenterY = state.player.y * lightingTileSize + lightingTileSize / 2;
-  checkLightRepositionNeeded(playerCenterX, playerCenterY);
+  // Check if we need to reposition the canvas based on camera movement
+  const viewportW = cachedViewport?.clientWidth || 1200;
+  const viewportH = cachedViewport?.clientHeight || 800;
+  const zoomFactor = 1.5; // Match render.js ZOOM_FACTOR
+  const camX = state.player.x * lightingTileSize + lightingTileSize / 2 - (viewportW / zoomFactor) / 2;
+  const camY = state.player.y * lightingTileSize + lightingTileSize / 2 - (viewportH / zoomFactor) / 2;
+  checkLightRepositionNeeded(Math.max(0, camX), Math.max(0, camY));
   
   // Canvas-relative visible area (entire canvas since it's now viewport-sized)
   const canvasW = lightCanvas.width;
