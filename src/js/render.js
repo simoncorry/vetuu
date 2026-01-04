@@ -676,18 +676,47 @@ function drawRingOverlay() {
   ringOverlayCtx.lineWidth = 2;
   ringOverlayCtx.stroke();
   
-  // Draw base footprint (wall boundaries)
-  // Original wall coords: x 71-121, y 49-87
   const offset = mapConfig.offset;
-  console.log('[Ring Debug] Drawing base footprint, offset:', offset);
   
+  // Draw ORIGINAL MAP footprint (the 200x140 source map area)
+  const originalMap = {
+    minX: offset.x * TILE_SIZE,
+    maxX: (offset.x + mapConfig.originalWidth) * TILE_SIZE,
+    minY: offset.y * TILE_SIZE,
+    maxY: (offset.y + mapConfig.originalHeight) * TILE_SIZE
+  };
+  
+  ringOverlayCtx.beginPath();
+  ringOverlayCtx.rect(
+    originalMap.minX,
+    originalMap.minY,
+    originalMap.maxX - originalMap.minX,
+    originalMap.maxY - originalMap.minY
+  );
+  ringOverlayCtx.fillStyle = 'rgba(255, 165, 0, 0.1)';  // Orange tint
+  ringOverlayCtx.fill();
+  ringOverlayCtx.strokeStyle = '#ffa500';  // Orange
+  ringOverlayCtx.lineWidth = 3;
+  ringOverlayCtx.setLineDash([15, 10]);
+  ringOverlayCtx.stroke();
+  
+  // Label
+  ringOverlayCtx.setLineDash([]);
+  ringOverlayCtx.font = 'bold 14px monospace';
+  ringOverlayCtx.fillStyle = '#ffa500';
+  ringOverlayCtx.strokeStyle = '#000';
+  ringOverlayCtx.lineWidth = 2;
+  ringOverlayCtx.strokeText('ORIGINAL MAP (200x140)', originalMap.minX + 10, originalMap.minY - 10);
+  ringOverlayCtx.fillText('ORIGINAL MAP (200x140)', originalMap.minX + 10, originalMap.minY - 10);
+  
+  // Draw BASE WALLS footprint (inner walled area)
+  // Original wall coords: x 71-121, y 49-87
   const baseWalls = {
     minX: (71 + offset.x) * TILE_SIZE,
     maxX: (121 + offset.x) * TILE_SIZE,
     minY: (49 + offset.y) * TILE_SIZE,
     maxY: (87 + offset.y) * TILE_SIZE
   };
-  console.log('[Ring Debug] Base walls px:', baseWalls);
   
   // Draw semi-transparent fill
   ringOverlayCtx.beginPath();

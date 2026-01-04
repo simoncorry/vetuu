@@ -1417,9 +1417,36 @@ function renderRings(vp) {
   overlayCtx.lineWidth = 2;
   overlayCtx.stroke();
   
-  // Draw base footprint (wall boundaries)
-  // Original wall coords: x 71-121, y 49-87
   const offset = mapConfig.offset;
+  
+  // Draw ORIGINAL MAP footprint (the 200x140 source map area)
+  const origMapMin = tileToScreen(offset.x, offset.y);
+  const origMapMax = tileToScreen(offset.x + mapConfig.originalWidth, offset.y + mapConfig.originalHeight);
+  
+  if (origMapMin && origMapMax) {
+    const width = origMapMax.x - origMapMin.x;
+    const height = origMapMax.y - origMapMin.y;
+    
+    overlayCtx.beginPath();
+    overlayCtx.rect(origMapMin.x, origMapMin.y, width, height);
+    overlayCtx.fillStyle = 'rgba(255, 165, 0, 0.1)';
+    overlayCtx.fill();
+    overlayCtx.strokeStyle = '#ffa500';
+    overlayCtx.lineWidth = 2;
+    overlayCtx.setLineDash([8, 5]);
+    overlayCtx.stroke();
+    
+    overlayCtx.setLineDash([]);
+    overlayCtx.font = 'bold 10px monospace';
+    overlayCtx.fillStyle = '#ffa500';
+    overlayCtx.strokeStyle = '#000';
+    overlayCtx.lineWidth = 2;
+    overlayCtx.strokeText('ORIGINAL MAP', origMapMin.x + 5, origMapMin.y - 5);
+    overlayCtx.fillText('ORIGINAL MAP', origMapMin.x + 5, origMapMin.y - 5);
+  }
+  
+  // Draw BASE WALLS footprint (inner walled area)
+  // Original wall coords: x 71-121, y 49-87
   const baseWallsMin = tileToScreen(71 + offset.x, 49 + offset.y);
   const baseWallsMax = tileToScreen(121 + offset.x, 87 + offset.y);
   
