@@ -748,8 +748,8 @@ if (typeof window !== 'undefined') {
 // ============================================
 // REGENERATION CONSTANTS
 // ============================================
-// Combat state: 5s after last hostile action (taking or dealing damage)
-const COMBAT_TIMEOUT = 5000;                // 5s to be considered "out of combat"
+// Combat state: 2s after last hostile action (taking or dealing damage)
+const COMBAT_TIMEOUT = 2000;                // 2s to be considered "out of combat"
 
 // Health Regeneration
 // In-combat: DISABLED (maintains fight tension)
@@ -1559,7 +1559,7 @@ function acquireClosestEnemyInRange({ maxRange, requireLOS = false }) {
 // ============================================
 // REGENERATION SYSTEM
 // ============================================
-// Combat state: 5s after last hostile action (taking or dealing damage)
+// Combat state: 2s after last hostile action (taking or dealing damage)
 // Health: Disabled in-combat, 10s full heal out-of-combat
 // Sense: 30s full in-combat, 5s full out-of-combat
 // ============================================
