@@ -689,6 +689,7 @@ function drawRingOverlay() {
   };
   console.log('[Ring Debug] Base walls px:', baseWalls);
   
+  // Draw semi-transparent fill
   ringOverlayCtx.beginPath();
   ringOverlayCtx.rect(
     baseWalls.minX,
@@ -696,16 +697,20 @@ function drawRingOverlay() {
     baseWalls.maxX - baseWalls.minX,
     baseWalls.maxY - baseWalls.minY
   );
+  ringOverlayCtx.fillStyle = 'rgba(0, 255, 255, 0.15)';  // Cyan with transparency
+  ringOverlayCtx.fill();
+  
+  // Draw thick border
   ringOverlayCtx.strokeStyle = '#00ffff';  // Cyan
-  ringOverlayCtx.lineWidth = 3;
+  ringOverlayCtx.lineWidth = 5;
   ringOverlayCtx.setLineDash([]);
   ringOverlayCtx.stroke();
   
   // Label the base footprint
-  ringOverlayCtx.font = 'bold 12px monospace';
+  ringOverlayCtx.font = 'bold 16px monospace';
   ringOverlayCtx.fillStyle = '#00ffff';
   ringOverlayCtx.strokeStyle = '#000';
-  ringOverlayCtx.lineWidth = 2;
-  ringOverlayCtx.strokeText('BASE WALLS', baseWalls.minX + 5, baseWalls.minY - 5);
-  ringOverlayCtx.fillText('BASE WALLS', baseWalls.minX + 5, baseWalls.minY - 5);
+  ringOverlayCtx.lineWidth = 3;
+  ringOverlayCtx.strokeText('BASE WALLS', baseWalls.minX + 10, baseWalls.minY - 10);
+  ringOverlayCtx.fillText('BASE WALLS', baseWalls.minX + 10, baseWalls.minY - 10);
 }
