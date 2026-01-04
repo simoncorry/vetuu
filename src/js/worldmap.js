@@ -720,8 +720,8 @@ function populateQuestList() {
 function centerOnPlayer() {
   if (!gameState?.player) return;
   
-  mapCamX = gameState.player.x;
-  mapCamY = gameState.player.y;
+  mapCamX = clampCamX(gameState.player.x);
+  mapCamY = clampCamY(gameState.player.y);
   scheduleRender();
 }
 
