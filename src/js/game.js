@@ -726,25 +726,15 @@ function hardReset() {
 // GAME LOOP
 // ============================================
 // ============================================
-// CANVAS-BASED LIGHTING SYSTEM (Viewport-based for memory efficiency)
+// CANVAS-BASED LIGHTING SYSTEM
 // ============================================
 let lightCanvas = null;
 let lightCtx = null;
 let staticLights = [];
 let lightingTileSize = 24;
+let cameraX = 0;
+let cameraY = 0;
 let cachedViewport = null; // Cached viewport element for lighting
-
-// Viewport-based canvas tracking (like fog system)
-const LIGHT_BUFFER_TILES = 20;          // Extra tiles around viewport (larger = less repositioning)
-const LIGHT_REPOSITION_THRESHOLD = 15;  // Tiles moved before repositioning canvas
-let lightCanvasOffsetX = 0;             // Canvas position in world pixels
-let lightCanvasOffsetY = 0;
-let lightCanvasWidth = 0;               // Canvas dimensions in pixels
-let lightCanvasHeight = 0;
-let lightLastCenterX = 0;               // Last camera center for threshold check
-let lightLastCenterY = 0;
-let mapWidthPx = 0;                     // Full map size in pixels (for clamping)
-let mapHeightPx = 0;
 
 // Pre-rendered light stamps (offscreen canvases) for performance
 // Key = radius, Value = { canvas, size }
@@ -914,37 +904,24 @@ function initLightingCanvas(gameState) {
   
   // Use global TILE_SIZE (24) to match renderer
   lightingTileSize = 24; 
-  mapWidthPx = gameState.map.meta.width * lightingTileSize;
-  mapHeightPx = gameState.map.meta.height * lightingTileSize;
+  const width = gameState.map.meta.width * lightingTileSize;
+  const height = gameState.map.meta.height * lightingTileSize;
   
-  // Calculate viewport-sized canvas dimensions (MUCH smaller than full map)
-  const viewportW = cachedViewport?.clientWidth || 1200;
-  const viewportH = cachedViewport?.clientHeight || 800;
-  const bufferPx = LIGHT_BUFFER_TILES * lightingTileSize;
-  
-  // Canvas size = viewport + buffer on each side (rounded up to tile boundaries)
-  lightCanvasWidth = Math.ceil((viewportW + bufferPx * 2) / lightingTileSize) * lightingTileSize;
-  lightCanvasHeight = Math.ceil((viewportH + bufferPx * 2) / lightingTileSize) * lightingTileSize;
-  
-  // Clamp to map size (for small maps)
-  lightCanvasWidth = Math.min(lightCanvasWidth, mapWidthPx);
-  lightCanvasHeight = Math.min(lightCanvasHeight, mapHeightPx);
-  
-  // Create viewport-sized lighting canvas
+  // Create lighting canvas (full map size for smooth rendering)
   lightCanvas = document.createElement('canvas');
   lightCanvas.id = 'lighting-canvas';
-  lightCanvas.width = lightCanvasWidth;
-  lightCanvas.height = lightCanvasHeight;
+  lightCanvas.width = width;
+  lightCanvas.height = height;
   lightCanvas.style.cssText = `
     position: absolute;
     top: 0;
     left: 0;
-    width: ${lightCanvasWidth}px;
-    height: ${lightCanvasHeight}px;
+    width: ${width}px;
+    height: ${height}px;
     pointer-events: none;
     z-index: 15;
     transform: translate3d(0, 0, 0);
-    will-change: transform;
+    will-change: contents;
     contain: strict;
   `;
   
@@ -987,59 +964,7 @@ function initLightingCanvas(gameState) {
   // Create DOM-based player torch (follows player with CSS transitions)
   createPlayerTorch();
   
-  // Position canvas at camera location (matches render.js camera calculation)
-  // Reuse viewportW/viewportH from earlier in this function
-  const zoomFactor = 1.5; // Match render.js ZOOM_FACTOR
-  const initCamX = state.player.x * lightingTileSize + lightingTileSize / 2 - (viewportW / zoomFactor) / 2;
-  const initCamY = state.player.y * lightingTileSize + lightingTileSize / 2 - (viewportH / zoomFactor) / 2;
-  repositionLightCanvas(Math.max(0, initCamX), Math.max(0, initCamY));
-  
-  const fullMapMB = ((mapWidthPx * mapHeightPx * 4) / (1024 * 1024)).toFixed(1);
-  const viewportMB = ((lightCanvasWidth * lightCanvasHeight * 4) / (1024 * 1024)).toFixed(1);
-  console.log(`[Lighting] Viewport canvas: ${lightCanvasWidth}×${lightCanvasHeight}px (${viewportMB}MB) vs full map ${mapWidthPx}×${mapHeightPx}px (${fullMapMB}MB)`);
-  console.log(`[Lighting] ${staticLights.length} static lights, ${lightStamps.size} unique stamps`);
-}
-
-/**
- * Reposition the lighting canvas to cover the visible camera area.
- * @param {number} camX - Camera X in world pixels (top-left of visible area)
- * @param {number} camY - Camera Y in world pixels (top-left of visible area)
- */
-function repositionLightCanvas(camX, camY) {
-  // Position canvas to cover camera view with buffer
-  // Canvas should start slightly before camera position (buffer)
-  const bufferPx = LIGHT_BUFFER_TILES * lightingTileSize;
-  let newOffsetX = camX - bufferPx;
-  let newOffsetY = camY - bufferPx;
-  
-  // Clamp to map bounds
-  newOffsetX = Math.max(0, Math.min(newOffsetX, mapWidthPx - lightCanvasWidth));
-  newOffsetY = Math.max(0, Math.min(newOffsetY, mapHeightPx - lightCanvasHeight));
-  
-  // Round to tile boundaries for clean rendering
-  lightCanvasOffsetX = Math.floor(newOffsetX / lightingTileSize) * lightingTileSize;
-  lightCanvasOffsetY = Math.floor(newOffsetY / lightingTileSize) * lightingTileSize;
-  lightLastCenterX = camX;
-  lightLastCenterY = camY;
-  
-  // Position the canvas in world coordinates (GPU-accelerated)
-  lightCanvas.style.transform = `translate3d(${lightCanvasOffsetX}px, ${lightCanvasOffsetY}px, 0)`;
-}
-
-/**
- * Check if lighting canvas needs repositioning based on camera center.
- * @returns {boolean} True if repositioned
- */
-function checkLightRepositionNeeded(centerX, centerY) {
-  const thresholdPx = LIGHT_REPOSITION_THRESHOLD * lightingTileSize;
-  const dx = Math.abs(centerX - lightLastCenterX);
-  const dy = Math.abs(centerY - lightLastCenterY);
-  
-  if (dx > thresholdPx || dy > thresholdPx) {
-    repositionLightCanvas(centerX, centerY);
-    return true;
-  }
-  return false;
+  console.log(`[Lighting] Canvas initialized: ${width}×${height}px, ${staticLights.length} static lights, ${lightStamps.size} unique stamps`);
 }
 
 // DOM torch provides subtle warm color tint (canvas does actual darkness-cutting)
@@ -1124,44 +1049,53 @@ function updateLighting() {
     return;
   }
   
-  // Check if we need to reposition the canvas based on camera movement
-  const viewportW = cachedViewport?.clientWidth || 1200;
-  const viewportH = cachedViewport?.clientHeight || 800;
-  const zoomFactor = 1.5; // Match render.js ZOOM_FACTOR
-  const camX = state.player.x * lightingTileSize + lightingTileSize / 2 - (viewportW / zoomFactor) / 2;
-  const camY = state.player.y * lightingTileSize + lightingTileSize / 2 - (viewportH / zoomFactor) / 2;
-  checkLightRepositionNeeded(Math.max(0, camX), Math.max(0, camY));
+  // Get viewport info for culling (use cached element)
+  const viewWidth = cachedViewport?.clientWidth || 800;
+  const viewHeight = cachedViewport?.clientHeight || 600;
   
-  // Canvas-relative visible area (entire canvas since it's now viewport-sized)
-  const canvasW = lightCanvas.width;
-  const canvasH = lightCanvas.height;
+  // Calculate camera position (same logic as render.js)
+  const playerCenterX = state.player.x * lightingTileSize + lightingTileSize / 2;
+  const playerCenterY = state.player.y * lightingTileSize + lightingTileSize / 2;
+  cameraX = Math.max(0, Math.min(playerCenterX - viewWidth / 2, lightCanvas.width - viewWidth));
+  cameraY = Math.max(0, Math.min(playerCenterY - viewHeight / 2, lightCanvas.height - viewHeight));
   
-  // World coordinates of canvas bounds
-  const worldLeft = lightCanvasOffsetX;
-  const worldRight = lightCanvasOffsetX + canvasW;
-  const worldTop = lightCanvasOffsetY;
-  const worldBottom = lightCanvasOffsetY + canvasH;
+  // Calculate visible area with margin
+  const margin = 200;
+  const visibleLeft = cameraX - margin;
+  const visibleRight = cameraX + viewWidth + margin;
+  const visibleTop = cameraY - margin;
+  const visibleBottom = cameraY + viewHeight + margin;
   
-  // Clear entire canvas (it's now viewport-sized, so this is fast)
-  lightCtx.clearRect(0, 0, canvasW, canvasH);
+  // Clear only visible portion for performance
+  lightCtx.clearRect(
+    Math.max(0, visibleLeft),
+    Math.max(0, visibleTop),
+    Math.min(lightCanvas.width, visibleRight - visibleLeft),
+    Math.min(lightCanvas.height, visibleBottom - visibleTop)
+  );
   
-  // Fill with darkness
+  // Fill visible area with darkness
   lightCtx.fillStyle = `rgba(10, 15, 30, ${nightIntensity})`;
-  lightCtx.fillRect(0, 0, canvasW, canvasH);
+  lightCtx.fillRect(
+    Math.max(0, visibleLeft),
+    Math.max(0, visibleTop),
+    Math.min(lightCanvas.width, visibleRight - visibleLeft),
+    Math.min(lightCanvas.height, visibleBottom - visibleTop)
+  );
   
   // Cut out light circles using destination-out
   lightCtx.globalCompositeOperation = 'destination-out';
   
   // Draw static lights using pre-rendered stamps (much faster than creating gradients)
   for (const light of staticLights) {
-    // Cull lights outside canvas bounds
+    // Cull lights outside visible area
     const stamp = getLightStamp(light.radius);
     const halfSize = stamp.size / 2;
     
-    if (light.x < worldLeft - halfSize || 
-        light.x > worldRight + halfSize ||
-        light.y < worldTop - halfSize || 
-        light.y > worldBottom + halfSize) {
+    if (light.x < visibleLeft - halfSize || 
+        light.x > visibleRight + halfSize ||
+        light.y < visibleTop - halfSize || 
+        light.y > visibleBottom + halfSize) {
       continue;
     }
     
@@ -1179,9 +1113,9 @@ function updateLighting() {
     
     const intensity = Math.min(1, baseIntensity * (1 + hum + surge));
     
-    // Draw stamp at canvas-relative position (world position - canvas offset)
+    // Draw stamp with globalAlpha for intensity control
     lightCtx.globalAlpha = intensity;
-    lightCtx.drawImage(stamp.canvas, light.x - halfSize - lightCanvasOffsetX, light.y - halfSize - lightCanvasOffsetY);
+    lightCtx.drawImage(stamp.canvas, light.x - halfSize, light.y - halfSize);
   }
   
   // Draw player torch using pre-rendered stamp
@@ -1195,10 +1129,9 @@ function updateLighting() {
     const hum = Math.sin(now * 0.004) * 0.05;
     const torchIntensity = Math.min(1, nightIntensity * 0.95 * (1 + hum));
     
-    // Draw at canvas-relative position
     const halfSize = torchStamp.size / 2;
     lightCtx.globalAlpha = torchIntensity;
-    lightCtx.drawImage(torchStamp.canvas, playerX - halfSize - lightCanvasOffsetX, playerY - halfSize - lightCanvasOffsetY);
+    lightCtx.drawImage(torchStamp.canvas, playerX - halfSize, playerY - halfSize);
   }
   
   // Reset alpha
