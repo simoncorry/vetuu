@@ -33,19 +33,21 @@ export const mapConfig = {
   originalHeight: 140,
   
   // Expanded map dimensions (after mapGenerator expansion)
-  width: 480,
-  height: 320,
+  // Default to 400x400 square - actual values set by initMapConfig
+  width: 400,
+  height: 400,
   
   // Target expansion dimensions (what we expand TO)
-  expandedWidth: 480,
-  expandedHeight: 320,
+  expandedWidth: 400,
+  expandedHeight: 400,
   
   // Offset where original map is placed within expanded map
-  offset: { x: 140, y: 90 },
+  // Calculated to center the BASE at (200, 200)
+  offset: { x: 144, y: 162 },
   
   // Base center (Drycross) in expanded coordinates
-  // Calculated as: originalBaseCenter + offset
-  baseCenter: { x: 196, y: 128 },
+  // For 400x400 square map, base is at exact center
+  baseCenter: { x: 200, y: 200 },
   
   // Original base center in the source map coordinate system
   // This is where Drycross is in the map.json data
@@ -135,23 +137,20 @@ export function initMapConfig(originalMapData, options = {}) {
  * Update map config after expansion (called by mapGenerator).
  * This confirms the actual dimensions after expansion is complete.
  * 
+ * NOTE: We do NOT recalculate baseCenter here - it was already set
+ * correctly in initMapConfig to be at the center of the map.
+ * 
  * @param {object} expandedMapMeta - The meta from the expanded map
  */
 export function confirmExpansion(expandedMapMeta) {
   mapConfig.width = expandedMapMeta.width;
   mapConfig.height = expandedMapMeta.height;
   
-  if (expandedMapMeta.originalOffset) {
-    mapConfig.offset = { ...expandedMapMeta.originalOffset };
-    
-    // Recalculate base center with confirmed offset
-    mapConfig.baseCenter = {
-      x: mapConfig.originalBaseCenter.x + mapConfig.offset.x,
-      y: mapConfig.originalBaseCenter.y + mapConfig.offset.y
-    };
-  }
+  // baseCenter is already correctly set to map center in initMapConfig
+  // Don't override it with offset-based calculation
   
   console.log('[MapConfig] Expansion confirmed:', mapConfig.width, 'x', mapConfig.height);
+  console.log('[MapConfig] Base center remains at:', mapConfig.baseCenter.x, mapConfig.baseCenter.y);
 }
 
 // ============================================
