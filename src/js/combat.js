@@ -60,6 +60,153 @@ const ENEMY_CONFIGS = {
   ironcross_guard: { weapon: 'guard_rifle', aiType: 'guard', hp: 2.0 }
 };
 
+// ============================================
+// ROLE-BASED AI CONFIGURATIONS
+// ============================================
+// Role is a tactical brain overlay on top of enemy.type
+// type = visuals, base stats, weapon, legacy config
+// role = tactical AI decisions, engage priority, preferred ranges
+//
+// Role           | Base AI | Priority | Range   | Special              | Notes
+// ---------------------------------------------------------------------------
+// melee_chaser   | melee   | 2        | 1       | opportunity swipe    | Anti-kite pressure
+// melee_flanker  | melee   | 1        | 1       | none                 | Surround/pinch
+// ranged_skirmisher | ranged | 1      | 3-6     | flank step           | Baseline ranged
+// ranged_suppressor | ranged | 3      | 3-6     | cast-bias            | Punishes long casts
+// ranged_marksman   | ranged | 4      | 4-6     | aim shot (telegraph) | Spike threat
+// ranged_grenadier  | ranged | 2      | 3-6     | grenade AoE (telegraph) | Forces movement
+const ROLE_CONFIGS = {
+  // Melee roles
+  melee_chaser: { 
+    engagePriority: 2, 
+    kind: 'melee',
+    surroundChance: 0.15,  // Less flanking, more direct pressure
+    chaseBias: 1.0         // Always advance aggressively
+  },
+  melee_flanker: { 
+    engagePriority: 1, 
+    kind: 'melee',
+    surroundChance: 0.35,  // More flanking/surround behavior
+    chaseBias: 0.75        // Sometimes reposition instead of chase
+  },
+
+  // Ranged roles
+  ranged_skirmisher: { 
+    engagePriority: 1, 
+    kind: 'ranged', 
+    preferredMin: 3, 
+    preferredMax: 6, 
+    flankChance: 0.25 
+  },
+  ranged_suppressor: { 
+    engagePriority: 3, 
+    kind: 'ranged', 
+    preferredMin: 3, 
+    preferredMax: 6, 
+    castBias: 0.35  // More likely to attack when player is casting
+  },
+  ranged_marksman: { 
+    engagePriority: 4,  // High priority - wins slots often
+    kind: 'ranged', 
+    preferredMin: 4, 
+    preferredMax: 6, 
+    aimMs: 600  // Telegraph duration before shot
+  },
+  ranged_grenadier: { 
+    engagePriority: 2, 
+    kind: 'ranged', 
+    preferredMin: 3, 
+    preferredMax: 6, 
+    grenadeMs: 700,      // Telegraph duration before explosion
+    grenadeCdMs: 3200,   // Cooldown between grenades
+    grenadeRadius: 2     // AoE radius in tiles
+  }
+};
+
+/**
+ * Get role config for an enemy.
+ * @param {object} enemy - Enemy entity
+ * @returns {object|null} Role config or null if no role
+ */
+function getRoleConfig(enemy) {
+  const role = enemy.role;
+  return (role && ROLE_CONFIGS[role]) ? ROLE_CONFIGS[role] : null;
+}
+
+/**
+ * Get engagement metadata from enemy's role.
+ * Used when acquiring attacker slots.
+ * @param {object} enemy - Enemy entity
+ * @returns {{ priority: number, kind: string, packId: string|null }}
+ */
+function getEngageMeta(enemy) {
+  const rc = getRoleConfig(enemy);
+  return {
+    priority: rc?.engagePriority ?? 1,
+    kind: rc?.kind ?? (enemy.combatType || 'melee'),
+    packId: enemy.packId ?? null
+  };
+}
+
+// ============================================
+// PACK STATE REGISTRY (coordination for special abilities)
+// ============================================
+// Prevents "four shamans all grenade at once" - throttles pack-wide specials
+const packState = new Map(); // packId -> { lastGrenadeAt: number, lastAimAt: number }
+
+/**
+ * Get or create pack state for coordination.
+ * @param {string|null} packId - Pack identifier
+ * @returns {object|null} Pack state or null if no pack
+ */
+function getPackState(packId) {
+  if (!packId) return null;
+  if (!packState.has(packId)) {
+    packState.set(packId, { lastGrenadeAt: 0, lastAimAt: 0 });
+  }
+  return packState.get(packId);
+}
+
+/**
+ * Check if pack can use a grenade (throttle).
+ * @param {string|null} packId - Pack identifier
+ * @param {number} t - Current timestamp
+ * @returns {boolean} True if grenade is allowed
+ */
+function canPackGrenade(packId, t) {
+  const ps = getPackState(packId);
+  if (!ps) return true; // Solo enemies can always grenade
+  return t - ps.lastGrenadeAt > 1200; // 1.2s between pack grenades
+}
+
+/**
+ * Check if pack can use aim shot (throttle).
+ * @param {string|null} packId - Pack identifier
+ * @param {number} t - Current timestamp
+ * @returns {boolean} True if aim shot is allowed
+ */
+function canPackAim(packId, t) {
+  const ps = getPackState(packId);
+  if (!ps) return true; // Solo enemies can always aim
+  return t - ps.lastAimAt > 800; // 0.8s between pack aim shots
+}
+
+/**
+ * Record that pack used a grenade.
+ */
+function recordPackGrenade(packId, t) {
+  const ps = getPackState(packId);
+  if (ps) ps.lastGrenadeAt = t;
+}
+
+/**
+ * Record that pack used an aim shot.
+ */
+function recordPackAim(packId, t) {
+  const ps = getPackState(packId);
+  if (ps) ps.lastAimAt = t;
+}
+
 // Timing constants
 const DEFAULT_MOVE_COOLDOWN = 400;
 const GCD_MS = 1500; // Global cooldown - 1.5s lockout between abilities
@@ -683,33 +830,77 @@ function markCombatEvent(t = nowMs()) {
 let lastMeleeAttacker = null;
 
 // ============================================
-// ATTACKER SLOT SYSTEM (lease-based, max 2)
+// ATTACKER SLOT SYSTEM (lease-based, max 2, with priority preemption)
 // ============================================
-// Uses Map(id → expiresAt) instead of Set to prevent deadlocks.
+// Uses Map(id → { expiresAt, priority, kind, acquiredAt, packId }) for priority-based slot management.
+// Higher priority enemies can preempt lower priority ones.
 // Leases expire automatically if not renewed (attack executed).
 const ATTACKER_LEASE_MS = 1200; // Lease duration - must attack within this time
-let attackerSlots = new Map(); // Map<enemyId, leaseExpiresAt>
+// Map<enemyId, { expiresAt:number, priority:number, kind:string, acquiredAt:number, packId:string|null }>
+let attackerSlots = new Map();
 
 /**
- * Acquire an attacker slot (lease-based).
+ * Acquire an attacker slot (lease-based with priority preemption).
  * Returns true if slot acquired or renewed.
+ * @param {object} enemy - Enemy trying to acquire slot
+ * @param {number} t - Current timestamp
+ * @param {object} meta - { priority, kind, packId } - role-based engagement metadata
  */
-function acquireAttackerSlot(enemy, t = nowMs()) {
+function acquireAttackerSlot(enemy, t = nowMs(), meta = {}) {
   cleanupAttackerSlots(t);
   
+  const priority = meta.priority ?? 1;
+  const kind = meta.kind ?? 'melee';
+  const packId = meta.packId ?? enemy.packId ?? null;
+  
   // Already has slot? Renew lease
-  if (attackerSlots.has(enemy.id)) {
-    attackerSlots.set(enemy.id, t + ATTACKER_LEASE_MS);
+  const existing = attackerSlots.get(enemy.id);
+  if (existing) {
+    existing.expiresAt = t + ATTACKER_LEASE_MS;
+    existing.priority = priority;
+    existing.kind = kind;
+    existing.packId = packId;
     return true;
   }
   
   // Room for more attackers?
   if (attackerSlots.size < MAX_ENGAGED_ENEMIES) {
-    attackerSlots.set(enemy.id, t + ATTACKER_LEASE_MS);
+    attackerSlots.set(enemy.id, {
+      expiresAt: t + ATTACKER_LEASE_MS,
+      priority,
+      kind,
+      acquiredAt: t,
+      packId
+    });
     return true;
   }
   
-  // No slots available
+  // No slots available: allow preemption if we're higher priority
+  let worstId = null;
+  let worst = null;
+  for (const [id, slot] of attackerSlots) {
+    if (
+      !worst ||
+      slot.priority < worst.priority ||
+      (slot.priority === worst.priority && slot.acquiredAt < worst.acquiredAt)
+    ) {
+      worst = slot;
+      worstId = id;
+    }
+  }
+  
+  if (worst && priority > worst.priority) {
+    attackerSlots.delete(worstId);
+    attackerSlots.set(enemy.id, {
+      expiresAt: t + ATTACKER_LEASE_MS,
+      priority,
+      kind,
+      acquiredAt: t,
+      packId
+    });
+    return true;
+  }
+  
   return false;
 }
 
@@ -724,9 +915,9 @@ function releaseAttackerSlot(enemy) {
  * Check if enemy has an active attacker slot.
  */
 function hasAttackerSlot(enemy, t = nowMs()) {
-  const expiresAt = attackerSlots.get(enemy.id);
-  if (!expiresAt) return false;
-  if (t >= expiresAt) {
+  const slot = attackerSlots.get(enemy.id);
+  if (!slot) return false;
+  if (t >= slot.expiresAt) {
     attackerSlots.delete(enemy.id);
     return false;
   }
@@ -737,9 +928,9 @@ function hasAttackerSlot(enemy, t = nowMs()) {
  * Clean up expired/invalid attacker slots.
  */
 function cleanupAttackerSlots(t = nowMs()) {
-  for (const [id, expiresAt] of attackerSlots) {
+  for (const [id, slot] of attackerSlots) {
     // Expired lease
-    if (t >= expiresAt) {
+    if (!slot || t >= slot.expiresAt) {
       attackerSlots.delete(id);
       continue;
     }
@@ -776,12 +967,14 @@ function cleanupAttackerSlots(t = nowMs()) {
 function getAttackerSlotsDebug(t = nowMs()) {
   cleanupAttackerSlots(t);
   const slots = [];
-  for (const [id, expiresAt] of attackerSlots) {
+  for (const [id, slot] of attackerSlots) {
     const enemy = currentState?.runtime?.activeEnemies?.find(e => e.id === id);
     slots.push({
       id,
       name: enemy?.name || '?',
-      remainingMs: Math.max(0, expiresAt - t)
+      priority: slot.priority,
+      kind: slot.kind,
+      remainingMs: Math.max(0, slot.expiresAt - t)
     });
   }
   return { count: attackerSlots.size, max: MAX_ENGAGED_ENEMIES, slots };
@@ -2396,10 +2589,18 @@ function aggroPack(enemy, t = nowMs()) {
 function aiMelee(enemy, weapon, dist, hasLOS, t, inSettle = false) {
   const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
   
+  // Get role-based behavior modifiers
+  const roleConfig = getRoleConfig(enemy);
+  const surroundChance = roleConfig?.surroundChance ?? 0.3;
+  const chaseBias = roleConfig?.chaseBias ?? 0.85;
+  
+  // Track adjacency for opportunity swipes (melee anti-kite)
+  trackMeleeAdjacency(enemy, t);
+  
   // Can we attack?
   if (dist <= weapon.range && hasLOS) {
-    // Check if it's our turn to attack (rotate through melee attackers)
-    if (canMeleeAttack(enemy, t)) {
+    // Check if it's our turn to attack (with role-based priority)
+    if (canMeleeAttack(enemy, t, getEngageMeta(enemy))) {
       // Spawn settle blocks attacks but not positioning
       if (inSettle) {
         // Just hold position, don't attack yet
@@ -2410,16 +2611,23 @@ function aiMelee(enemy, weapon, dist, hasLOS, t, inSettle = false) {
         lastMeleeAttacker = enemy.id;
       }
     } else {
-      // Not our turn - only reposition occasionally, not constantly
-      if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.3) {
+      // Not our turn - reposition based on role
+      // Chasers stay put more, flankers reposition more
+      if (isExpired(enemy.moveCooldown, t) && Math.random() < surroundChance) {
         moveToSurroundPosition(enemy);
         enemy.moveCooldown = t + moveCD * 1.5;
       }
     }
   } else if (hasLOS) {
     // Have LOS but not in range - advance toward player
+    // Chasers always advance, flankers sometimes reposition
     if (isExpired(enemy.moveCooldown, t)) {
-      moveTowardPlayer(enemy);
+      if (Math.random() < chaseBias) {
+        moveTowardPlayer(enemy);
+      } else {
+        // Flankers sometimes try to get a better angle
+        moveToSurroundPosition(enemy);
+      }
       enemy.moveCooldown = t + moveCD;
     }
   } else {
@@ -2434,16 +2642,19 @@ function aiMelee(enemy, weapon, dist, hasLOS, t, inSettle = false) {
 /**
  * Check if enemy can engage (acquire attacker slot).
  * Uses lease-based system to prevent deadlocks.
+ * @param {object} enemy - Enemy trying to engage
+ * @param {number} t - Current timestamp  
+ * @param {object|null} meta - Optional { priority, kind, packId } from role config
  */
-function canEnemyEngage(enemy, t = nowMs()) {
-  return acquireAttackerSlot(enemy, t);
+function canEnemyEngage(enemy, t = nowMs(), meta = null) {
+  return acquireAttackerSlot(enemy, t, meta || undefined);
 }
 
 /**
  * Legacy compatibility wrapper.
  */
-function canMeleeAttack(enemy, t = nowMs()) {
-  return canEnemyEngage(enemy, t);
+function canMeleeAttack(enemy, t = nowMs(), meta = null) {
+  return canEnemyEngage(enemy, t, meta);
 }
 
 // Move to a position that surrounds the player
@@ -2571,17 +2782,44 @@ function aiRanged(enemy, weapon, dist, hasLOS, t, inSettle = false) {
   const moveCD = weapon.moveSpeed || DEFAULT_MOVE_COOLDOWN;
   const attackRange = weapon.range || RANGED_RANGE;
   
-  // If player is too close (within melee range), retreat immediately
+  // Get role-based behavior modifiers
+  const role = enemy.role;
+  const roleConfig = getRoleConfig(enemy);
+  const preferredMin = roleConfig?.preferredMin ?? RANGED_MIN_DISTANCE;
+  const preferredMax = roleConfig?.preferredMax ?? attackRange;
+  const flankChance = roleConfig?.flankChance ?? 0.3;
+  
+  // ============================================
+  // MARKSMAN: Aim Shot Telegraph
+  // ============================================
+  if (role === 'ranged_marksman') {
+    const result = aiMarksmanBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfig, moveCD, preferredMin, preferredMax);
+    if (result) return; // Marksman handled the tick
+  }
+  
+  // ============================================
+  // GRENADIER: Grenade Telegraph
+  // ============================================
+  if (role === 'ranged_grenadier') {
+    const result = aiGrenadierBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfig, moveCD, preferredMin, preferredMax);
+    if (result) return; // Grenadier handled the tick
+  }
+  
+  // ============================================
+  // STANDARD RANGED BEHAVIOR (with role-based banding)
+  // ============================================
+  
+  // If player is too close (below preferred min), retreat immediately
   // This is critical for ranged enemies to maintain their distance band
-  if (dist < RANGED_MIN_DISTANCE && isExpired(enemy.moveCooldown, t)) {
+  if (dist < preferredMin && isExpired(enemy.moveCooldown, t)) {
     moveAwayFromPlayer(enemy);
     enemy.moveCooldown = t + moveCD;
     return;
   }
   
-  // In attack range with LOS - check if we can engage (max 2 attackers)
-  if (dist <= attackRange && dist >= RANGED_MIN_DISTANCE && hasLOS) {
-    if (canEnemyEngage(enemy, t)) {
+  // In attack range with LOS - check if we can engage (with role-based priority)
+  if (dist <= preferredMax && dist >= preferredMin && hasLOS) {
+    if (canEnemyEngage(enemy, t, getEngageMeta(enemy))) {
       // Spawn settle blocks attacks
       if (inSettle) {
         return;
@@ -2591,7 +2829,7 @@ function aiRanged(enemy, weapon, dist, hasLOS, t, inSettle = false) {
       }
     } else {
       // Can't engage - find a different angle/position and wait
-      if (isExpired(enemy.moveCooldown, t) && Math.random() < 0.3) {
+      if (isExpired(enemy.moveCooldown, t) && Math.random() < flankChance) {
         moveToFlankPosition(enemy);
         enemy.moveCooldown = t + moveCD * 1.5;
       }
@@ -2608,11 +2846,251 @@ function aiRanged(enemy, weapon, dist, hasLOS, t, inSettle = false) {
     return;
   }
   
-  // Out of range with LOS - advance to preferred distance
-  if (dist > attackRange && isExpired(enemy.moveCooldown, t) && Math.random() < 0.6) {
-    moveTowardPlayerRanged(enemy, attackRange);
+  // Outside preferred max with LOS - advance to preferred distance
+  if (dist > preferredMax && isExpired(enemy.moveCooldown, t) && Math.random() < 0.6) {
+    moveTowardPlayerRanged(enemy, preferredMax);
     enemy.moveCooldown = t + moveCD;
   }
+}
+
+// ============================================
+// MARKSMAN BEHAVIOR - Aim Shot with Telegraph
+// ============================================
+/**
+ * Marksman AI: If in range + LOS, start aiming (telegraph).
+ * When aim completes, fire a powerful shot.
+ * If LOS breaks during aim, cancel.
+ * @returns {boolean} True if marksman handled the tick
+ */
+function aiMarksmanBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfig, moveCD, preferredMin, preferredMax) {
+  const aimMs = roleConfig?.aimMs ?? 600;
+  
+  // Initialize aim state if needed
+  if (enemy.aimingUntil === undefined) enemy.aimingUntil = 0;
+  
+  // Currently aiming?
+  if (enemy.aimingUntil > t) {
+    // Check if LOS broke - cancel aim
+    if (!hasLOS) {
+      enemy.aimingUntil = 0;
+      enemy.isAiming = false;
+      updateEnemyAimingVisual(enemy, false);
+      return false; // Fall through to normal behavior
+    }
+    
+    // Still aiming - wait
+    return true;
+  }
+  
+  // Aim just completed?
+  if (enemy.isAiming && enemy.aimingUntil <= t && enemy.aimingUntil > 0) {
+    enemy.isAiming = false;
+    updateEnemyAimingVisual(enemy, false);
+    
+    // Fire the aimed shot (if still in range + LOS)
+    if (dist <= preferredMax && dist >= preferredMin && hasLOS && !inSettle) {
+      if (isExpired(enemy.cooldownUntil, t)) {
+        enemyAttack(enemy, weapon, t);
+        enemy.aimingUntil = 0;
+      }
+    }
+    return true;
+  }
+  
+  // Not aiming - should we start?
+  if (dist <= preferredMax && dist >= preferredMin && hasLOS && !inSettle) {
+    // Check pack throttle
+    if (!canPackAim(enemy.packId, t)) {
+      return false; // Let another pack member go first
+    }
+    
+    // Try to acquire slot
+    if (canEnemyEngage(enemy, t, getEngageMeta(enemy)) && isExpired(enemy.cooldownUntil, t)) {
+      // Start aiming
+      enemy.aimingUntil = t + aimMs;
+      enemy.isAiming = true;
+      recordPackAim(enemy.packId, t);
+      updateEnemyAimingVisual(enemy, true);
+      return true;
+    }
+  }
+  
+  return false; // Fall through to normal ranged behavior
+}
+
+/**
+ * Update visual indicator for aiming (e.g., red glow)
+ */
+function updateEnemyAimingVisual(enemy, isAiming) {
+  const el = getEnemyEl(enemy.id);
+  if (el) {
+    el.classList.toggle('aiming', isAiming);
+  }
+}
+
+// ============================================
+// GRENADIER BEHAVIOR - Grenade Telegraph AoE
+// ============================================
+/**
+ * Grenadier AI: Throw grenades at player position with telegraph.
+ * Player can dodge during telegraph. Only 1 active grenade per pack.
+ * @returns {boolean} True if grenadier handled the tick
+ */
+function aiGrenadierBehavior(enemy, weapon, dist, hasLOS, t, inSettle, roleConfig, moveCD, preferredMin, preferredMax) {
+  const grenadeMs = roleConfig?.grenadeMs ?? 700;
+  const grenadeCdMs = roleConfig?.grenadeCdMs ?? 3200;
+  const grenadeRadius = roleConfig?.grenadeRadius ?? 2;
+  
+  // Initialize grenade state if needed
+  if (enemy.grenadeCooldownUntil === undefined) enemy.grenadeCooldownUntil = 0;
+  if (enemy.grenadeTelegraphUntil === undefined) enemy.grenadeTelegraphUntil = 0;
+  if (enemy.grenadeTarget === undefined) enemy.grenadeTarget = null;
+  
+  // Currently telegraphing grenade?
+  if (enemy.grenadeTelegraphUntil > t && enemy.grenadeTarget) {
+    // Show telegraph at target location
+    updateGrenadeTelegraph(enemy, true);
+    return true;
+  }
+  
+  // Telegraph just completed?
+  if (enemy.grenadeTarget && enemy.grenadeTelegraphUntil <= t && enemy.grenadeTelegraphUntil > 0) {
+    // Explode at target location
+    executeGrenadeExplosion(enemy, enemy.grenadeTarget, grenadeRadius, weapon, t);
+    enemy.grenadeTarget = null;
+    enemy.grenadeTelegraphUntil = 0;
+    enemy.grenadeCooldownUntil = t + grenadeCdMs;
+    updateGrenadeTelegraph(enemy, false);
+    return true;
+  }
+  
+  // Not throwing - should we start?
+  if (dist <= preferredMax && dist >= preferredMin && hasLOS && !inSettle) {
+    // Check cooldown
+    if (t < enemy.grenadeCooldownUntil) {
+      return false; // On cooldown, use normal behavior
+    }
+    
+    // Check pack throttle
+    if (!canPackGrenade(enemy.packId, t)) {
+      return false; // Another pack member is grenading
+    }
+    
+    // Start grenade telegraph
+    const player = currentState.player;
+    enemy.grenadeTarget = { x: player.x, y: player.y }; // Lock target position
+    enemy.grenadeTelegraphUntil = t + grenadeMs;
+    recordPackGrenade(enemy.packId, t);
+    updateGrenadeTelegraph(enemy, true);
+    return true;
+  }
+  
+  return false; // Fall through to normal ranged behavior
+}
+
+/**
+ * Update grenade telegraph visual (circle on ground)
+ */
+function updateGrenadeTelegraph(enemy, show) {
+  // Remove existing telegraph
+  const existingTelegraph = document.querySelector(`[data-grenade-owner="${enemy.id}"]`);
+  if (existingTelegraph) {
+    existingTelegraph.remove();
+  }
+  
+  if (show && enemy.grenadeTarget) {
+    const actorLayer = document.getElementById('actor-layer');
+    if (actorLayer) {
+      const telegraph = document.createElement('div');
+      telegraph.className = 'grenade-telegraph';
+      telegraph.setAttribute('data-grenade-owner', enemy.id);
+      telegraph.style.cssText = `
+        position: absolute;
+        left: ${(enemy.grenadeTarget.x - 2) * TILE_SIZE}px;
+        top: ${(enemy.grenadeTarget.y - 2) * TILE_SIZE}px;
+        width: ${5 * TILE_SIZE}px;
+        height: ${5 * TILE_SIZE}px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 100, 0, 0.4) 0%, rgba(255, 50, 0, 0.2) 70%, transparent 100%);
+        border: 2px solid rgba(255, 100, 0, 0.8);
+        pointer-events: none;
+        z-index: 15;
+        animation: grenade-pulse 0.3s ease-in-out infinite alternate;
+      `;
+      actorLayer.appendChild(telegraph);
+    }
+  }
+}
+
+/**
+ * Execute grenade explosion - damage all enemies in radius
+ */
+function executeGrenadeExplosion(enemy, target, radius, weapon, t) {
+  const player = currentState.player;
+  const dist = distCoords(player.x, player.y, target.x, target.y);
+  
+  // Remove telegraph visual
+  updateGrenadeTelegraph(enemy, false);
+  
+  // Show explosion effect
+  showExplosionEffect(target.x, target.y, radius);
+  
+  // Check if player is in blast radius
+  if (dist <= radius) {
+    // Calculate damage (reduced based on distance from center)
+    const falloff = 1 - (dist / (radius + 1)) * 0.5; // 50% falloff at edge
+    const baseDamage = weapon.baseDamage || 10;
+    
+    const { damage } = computeDamage({
+      attacker: enemy,
+      defender: player,
+      defenderConfig: null,
+      baseDamage: Math.floor(baseDamage * falloff * 0.8), // Slightly reduced AoE damage
+      skillMult: 1,
+      damageType: null,
+      forceNoCrit: true,
+      source: "enemy",
+      attackId: "grenade",
+      attackerName: enemy.name || enemy.type
+    });
+    
+    // Apply damage to player
+    player.hp = Math.max(0, player.hp - damage);
+    showDamageNumber(player.x, player.y, damage, false);
+    logCombat(`${enemy.name}'s grenade hits you for ${damage}!`);
+    updatePlayerHealthBar();
+    
+    if (player.hp <= 0) {
+      handlePlayerDeath();
+    }
+  }
+}
+
+/**
+ * Show explosion visual effect
+ */
+function showExplosionEffect(x, y, radius) {
+  const actorLayer = document.getElementById('actor-layer');
+  if (!actorLayer) return;
+  
+  const explosion = document.createElement('div');
+  explosion.className = 'grenade-explosion';
+  explosion.style.cssText = `
+    position: absolute;
+    left: ${(x - radius) * TILE_SIZE}px;
+    top: ${(y - radius) * TILE_SIZE}px;
+    width: ${(radius * 2 + 1) * TILE_SIZE}px;
+    height: ${(radius * 2 + 1) * TILE_SIZE}px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 200, 50, 0.9) 0%, rgba(255, 100, 0, 0.6) 50%, transparent 100%);
+    pointer-events: none;
+    z-index: 20;
+    animation: explosion-burst 0.4s ease-out forwards;
+  `;
+  actorLayer.appendChild(explosion);
+  
+  // Remove after animation
+  setTimeout(() => explosion.remove(), 400);
 }
 
 // ============================================
@@ -6118,6 +6596,117 @@ function clearCombatIntent() {
  * - If in BASIC auto-attack: keep attacking (allows kiting)
  *   → Player is just repositioning while fighting
  */
+// ============================================
+// OPPORTUNITY SWIPE (MELEE ANTI-KITE)
+// ============================================
+// When a melee enemy is adjacent to the player and the player moves away,
+// the enemy gets a quick low-damage "opportunity swipe" attack.
+// This makes melee enemies feel "sticky" without hard-rooting the player.
+
+const OP_SWIPE_WINDOW_MS = 450;     // Window after being adjacent to trigger
+const OP_SWIPE_COOLDOWN_MS = 1400;  // Cooldown between opportunity swipes
+const OP_SWIPE_DAMAGE_MULT = 0.5;   // 50% of normal damage
+
+/**
+ * Track that a melee enemy is adjacent to the player.
+ * Called from aiMelee when enemy is in attack range.
+ */
+function trackMeleeAdjacency(enemy, t) {
+  if (enemy.wasAdjacentAt === undefined) enemy.wasAdjacentAt = 0;
+  const dist = distCoords(enemy.x, enemy.y, currentState.player.x, currentState.player.y);
+  if (dist <= 1) {
+    enemy.wasAdjacentAt = t;
+  }
+}
+
+/**
+ * Check for opportunity swipes when player moves.
+ * Called from movement.js on move completion.
+ * @param {number} prevX - Previous player X position
+ * @param {number} prevY - Previous player Y position
+ */
+export function checkOpportunitySwipes(prevX, prevY) {
+  if (!currentState?.runtime?.activeEnemies) return;
+  if (isGhostMode || playerImmunityActive) return;
+  
+  const t = nowMs();
+  const player = currentState.player;
+  const newDist = (ex, ey) => distCoords(ex, ey, player.x, player.y);
+  const prevDist = (ex, ey) => distCoords(ex, ey, prevX, prevY);
+  
+  for (const enemy of currentState.runtime.activeEnemies) {
+    if (enemy.hp <= 0) continue;
+    if (!enemy.role || !enemy.role.startsWith('melee_')) continue;
+    
+    // Initialize fields if needed
+    if (enemy.wasAdjacentAt === undefined) enemy.wasAdjacentAt = 0;
+    if (enemy.opSwipeCdUntil === undefined) enemy.opSwipeCdUntil = 0;
+    
+    // Check conditions for opportunity swipe:
+    // 1. Enemy was adjacent before move (dist <= 1)
+    // 2. Enemy is NOT adjacent after move (dist >= 2)
+    // 3. Within the timing window (wasAdjacentAt + window > now)
+    // 4. Off cooldown
+    const wasPrevAdjacent = prevDist(enemy.x, enemy.y) <= 1;
+    const isNowFar = newDist(enemy.x, enemy.y) >= 2;
+    const inWindow = t - enemy.wasAdjacentAt < OP_SWIPE_WINDOW_MS;
+    const offCooldown = t >= enemy.opSwipeCdUntil;
+    
+    if (wasPrevAdjacent && isNowFar && inWindow && offCooldown) {
+      // Execute opportunity swipe!
+      executeOpportunitySwipe(enemy, t);
+    }
+  }
+}
+
+/**
+ * Execute an opportunity swipe attack.
+ */
+function executeOpportunitySwipe(enemy, t) {
+  const config = ENEMY_CONFIGS[enemy.type] || ENEMY_CONFIGS.nomad;
+  const weapon = ENEMY_WEAPONS[config.weapon];
+  
+  if (!weapon) return;
+  
+  // Calculate reduced damage
+  const baseDamage = weapon.baseDamage || 8;
+  const { damage } = computeDamage({
+    attacker: enemy,
+    defender: currentState.player,
+    defenderConfig: null,
+    baseDamage: Math.floor(baseDamage * OP_SWIPE_DAMAGE_MULT),
+    skillMult: weapon.multiplier || 1,
+    damageType: weapon.damageType || null,
+    forceNoCrit: true,
+    source: "enemy",
+    attackId: "opportunity_swipe",
+    attackerName: enemy.name || enemy.type
+  });
+  
+  // Apply damage
+  const player = currentState.player;
+  player.hp = Math.max(0, player.hp - damage);
+  
+  // Visual feedback - quick swipe toward player's previous position
+  showMeleeSwipe(enemy.x, enemy.y, player.x, player.y, getColors().meleeEnemy, false);
+  showDamageNumber(player.x, player.y, damage, false);
+  
+  // Combat log
+  logCombat(`${enemy.name} swipes at you as you retreat for ${damage}!`);
+  
+  // Update UI
+  updatePlayerHealthBar();
+  markCombatEvent();
+  
+  // Set cooldown
+  enemy.opSwipeCdUntil = t + OP_SWIPE_COOLDOWN_MS;
+  
+  // Check for player death
+  if (player.hp <= 0) {
+    handlePlayerDeath();
+  }
+}
+
 export function cancelCombatPursuit() {
   // Clear any pending movement for attack
   pendingAttack = null;

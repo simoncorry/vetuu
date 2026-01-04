@@ -182,3 +182,79 @@
   100% { opacity: 0; }
 }
 
+/* ============================================
+   ROLE-BASED ENEMY EFFECTS
+   Marksman aiming, Grenadier telegraphs
+   ============================================ */
+
+/* Marksman aiming indicator - red glow, charging up */
+.aiming {
+  outline: 2px solid rgba(255, 50, 50, 0.9) !important;
+  box-shadow: 0 0 16px rgba(255, 50, 50, 0.6), 0 0 32px rgba(255, 0, 0, 0.3);
+  animation: aim-charge 0.6s ease-in-out;
+}
+
+.aiming::before {
+  content: '🎯';
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  font-size: 14px;
+  animation: aim-pulse 0.3s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes aim-charge {
+  0% {
+    filter: brightness(1);
+    outline-width: 1px;
+  }
+  50% {
+    filter: brightness(1.3);
+    outline-width: 3px;
+  }
+  100% {
+    filter: brightness(1.5);
+    outline-width: 2px;
+  }
+}
+
+@keyframes aim-pulse {
+  0% { transform: translate3d(-50%, 0, 0) scale3d(1, 1, 1); }
+  100% { transform: translate3d(-50%, -2px, 0) scale3d(1.1, 1.1, 1); }
+}
+
+/* Grenade telegraph - pulsing danger zone */
+.grenade-telegraph {
+  animation: grenade-pulse 0.3s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+
+@keyframes grenade-pulse {
+  0% {
+    opacity: 0.6;
+    transform: scale3d(1, 1, 1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale3d(1.05, 1.05, 1);
+  }
+}
+
+/* Grenade explosion burst */
+@keyframes explosion-burst {
+  0% {
+    opacity: 1;
+    transform: scale3d(0.5, 0.5, 1);
+  }
+  30% {
+    opacity: 1;
+    transform: scale3d(1.2, 1.2, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale3d(1.5, 1.5, 1);
+  }
+}
+

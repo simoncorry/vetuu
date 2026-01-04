@@ -7,7 +7,7 @@
  * Always use translate3d() for transforms, never translate().
  */
 
-import { tryExecuteCombatIntent, cancelCombatPursuit, cancelChanneledAbilities } from './combat.js';
+import { tryExecuteCombatIntent, cancelCombatPursuit, cancelChanneledAbilities, checkOpportunitySwipes } from './combat.js';
 import { actorTransform, TILE_SIZE } from './render.js';
 
 // ============================================
@@ -195,6 +195,13 @@ function startMove(targetX, targetY) {
   // Cancel any channeled abilities (Blade Flurry, Charged Shot)
   // These abilities refund their cooldown when cancelled by movement
   cancelChanneledAbilities();
+  
+  // Store previous position for opportunity swipe check
+  const prevX = state.player.x;
+  const prevY = state.player.y;
+  
+  // Check for opportunity swipes from melee enemies (anti-kite mechanic)
+  checkOpportunitySwipes(prevX, prevY);
   
   // Check if this is a diagonal move
   const dx = targetX - state.player.x;

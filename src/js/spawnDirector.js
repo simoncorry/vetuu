@@ -86,6 +86,75 @@ const ACT3_MODIFIERS = {
 // Keep spawns 9 tiles away from road center lines
 const ROAD_EXCLUSION_RADIUS = 9;
 
+// ============================================
+// SPAWN TEMPLATES - Composition-aware pack rosters
+// ============================================
+// Templates define role + type combinations for packs
+// This creates intentional frontline + backline + special compositions
+const SPAWN_TEMPLATES = {
+  frontier_pack: {
+    kind: 'pack',
+    pickRoster: (rng) => ([
+      { role: 'ranged_skirmisher', type: rng.pick(['scav_ranged']) },
+      { role: 'melee_flanker', type: rng.pick(['scav_melee', 'nomad']) },
+      { role: 'melee_chaser', type: rng.pick(['scav_melee']) }
+    ])
+  },
+
+  wilderness_pack: {
+    kind: 'pack',
+    pickRoster: (_rng) => ([
+      { role: 'ranged_grenadier', type: 'trog_shaman' },
+      { role: 'melee_chaser', type: 'trog_warrior' },
+      { role: 'melee_flanker', type: 'trog_warrior' },
+      { role: 'ranged_skirmisher', type: 'trog_shaman' }
+    ])
+  },
+
+  karth_patrol: {
+    kind: 'pack',
+    pickRoster: (_rng) => ([
+      { role: 'ranged_marksman', type: 'karth_grunt' },
+      { role: 'ranged_suppressor', type: 'karth_grunt' },
+      { role: 'melee_chaser', type: 'karth_officer' }
+    ])
+  },
+  
+  // Deep zone gets elite composition
+  deep_patrol: {
+    kind: 'pack',
+    pickRoster: (_rng) => ([
+      { role: 'ranged_marksman', type: 'karth_grunt' },
+      { role: 'ranged_grenadier', type: 'karth_grunt' },
+      { role: 'melee_chaser', type: 'karth_officer' },
+      { role: 'ranged_suppressor', type: 'karth_grunt' }
+    ])
+  }
+};
+
+// Simple RNG helper for template roster selection
+const templateRng = {
+  pick: (arr) => arr[Math.floor(Math.random() * arr.length)]
+};
+
+/**
+ * Get default role for an enemy type.
+ * Used when spawning enemies without explicit role assignment.
+ * @param {string} type - Enemy type (e.g., 'scav_ranged', 'trog_warrior')
+ * @returns {string} Default role
+ */
+function defaultRoleForType(type) {
+  // Ranged types default to skirmisher
+  if (type === 'scav_ranged' || type === 'trog_shaman' || type === 'karth_grunt') {
+    return 'ranged_skirmisher';
+  }
+  // Melee types default to flanker
+  if (type === 'trog_warrior' || type === 'scav_melee' || type === 'karth_officer' || type === 'nomad') {
+    return 'melee_flanker';
+  }
+  return 'melee_flanker';
+}
+
 /**
  * Adjust a spawner position to avoid roads.
  * Roads run through baseCenter.x (vertical) and baseCenter.y (horizontal).
@@ -637,7 +706,7 @@ function generateDefaultSpawners() {
     result.push({
       id: `sp_nomad_inner_${id++}`,
       kind: 'stray',
-      ring: 'frontier',
+      ring: 'safe',  // FIXED: Was incorrectly 'frontier'
       center: adjusted,
       spawnRadius: 4,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -665,7 +734,7 @@ function generateDefaultSpawners() {
     result.push({
       id: `sp_nomad_mid_${id++}`,
       kind: 'stray',
-      ring: 'frontier',
+      ring: 'safe',  // FIXED: Was incorrectly 'frontier'
       center: adjusted,
       spawnRadius: 5,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -693,7 +762,7 @@ function generateDefaultSpawners() {
     result.push({
       id: `sp_nomad_outer_${id++}`,
       kind: 'stray',
-      ring: 'frontier',
+      ring: 'safe',  // FIXED: Was incorrectly 'frontier'
       center: adjusted,
       spawnRadius: 5,
       noSpawnRadius: NO_SPAWN_RADIUS,
@@ -755,10 +824,11 @@ function generateDefaultSpawners() {
       id: `sp_pack_frontier_${id++}`,
       kind: 'pack',
       ring: 'frontier',
+      templateId: 'frontier_pack',  // Role-based roster template
       center: adjusted,
       spawnRadius: 8,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['scav_ranged', 'scav_melee'],
+      enemyPool: ['scav_ranged', 'scav_melee'],  // Fallback if template fails
       levelRange: [4, 8],
       packSize: { min: 2, max: 4 },
       alpha: { chance: 0.15, max: 1 },
@@ -791,10 +861,11 @@ function generateDefaultSpawners() {
       id: `sp_pack_trog_inner_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
+      templateId: 'wilderness_pack',  // Role-based roster template
       center: adjusted,
       spawnRadius: 10,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['trog_warrior', 'trog_shaman'],
+      enemyPool: ['trog_warrior', 'trog_shaman'],  // Fallback
       levelRange: [12, 18],
       packSize: { min: 3, max: 5 },
       alpha: { chance: 0.35, max: 1 },
@@ -821,10 +892,11 @@ function generateDefaultSpawners() {
       id: `sp_pack_trog_outer_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
+      templateId: 'wilderness_pack',  // Role-based roster template
       center: adjusted,
       spawnRadius: 12,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['trog_warrior', 'trog_shaman'],
+      enemyPool: ['trog_warrior', 'trog_shaman'],  // Fallback
       levelRange: [18, 25],
       packSize: { min: 3, max: 5 },
       alpha: { chance: 0.45, max: 1 },
@@ -857,10 +929,11 @@ function generateDefaultSpawners() {
       id: `sp_pack_karth_${id++}`,
       kind: 'pack',
       ring: 'danger',
+      templateId: 'karth_patrol',  // Role-based roster template
       center: adjusted,
       spawnRadius: 14,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['karth_grunt', 'karth_officer'],
+      enemyPool: ['karth_grunt', 'karth_officer'],  // Fallback
       levelRange: [25, 40],
       packSize: { min: 3, max: 5 },
       alpha: { chance: 0.4, max: 1 },
@@ -895,10 +968,11 @@ function generateDefaultSpawners() {
       id: `sp_pack_deep_${id++}`,
       kind: 'pack',
       ring: 'deep',
+      templateId: 'deep_patrol',  // Role-based roster template
       center: adjusted,
       spawnRadius: 16,
       noSpawnRadius: NO_SPAWN_RADIUS,
-      enemyPool: ['karth_grunt', 'karth_officer'],
+      enemyPool: ['karth_grunt', 'karth_officer'],  // Fallback
       levelRange: [40, 50],
       packSize: { min: 3, max: 5 },
       alpha: { chance: 0.6, max: 1 },
@@ -1013,21 +1087,64 @@ function fillPackSlots(spawner, now, immediate) {
   // Generate pack ID
   const packId = `pack_${Math.floor(now)}_${Math.random().toString(36).substr(2, 5)}`;
   
-  // Determine alphas
-  let alphaSlots = 0;
-  if (spawner.alpha) {
-    for (let i = 0; i < packSize && alphaSlots < spawner.alpha.max; i++) {
-      if (Math.random() < spawner.alpha.chance) alphaSlots++;
+  // ============================================
+  // BUILD ROSTER (template-based or fallback)
+  // ============================================
+  let roster = [];
+  if (spawner.templateId && SPAWN_TEMPLATES[spawner.templateId]) {
+    // Use template to build role-based roster
+    roster = SPAWN_TEMPLATES[spawner.templateId].pickRoster(templateRng);
+    // Clamp to actual pack size
+    roster = roster.slice(0, packSize);
+    // If template roster is smaller than packSize, fill with fallback
+    while (roster.length < packSize) {
+      const type = spawner.enemyPool[Math.floor(Math.random() * spawner.enemyPool.length)];
+      roster.push({ type, role: defaultRoleForType(type) });
     }
+  } else {
+    // Fallback: random types from enemyPool with default roles
+    roster = Array.from({ length: packSize }, () => {
+      const type = spawner.enemyPool[Math.floor(Math.random() * spawner.enemyPool.length)];
+      return { type, role: defaultRoleForType(type) };
+    });
+  }
+  
+  // ============================================
+  // ALPHA ASSIGNMENT (prefer melee frontliners)
+  // ============================================
+  let alphaCount = 0;
+  if (spawner.alpha) {
+    for (let i = 0; i < packSize && alphaCount < spawner.alpha.max; i++) {
+      if (Math.random() < spawner.alpha.chance) alphaCount++;
+    }
+  }
+  
+  // Sort roster to put melee roles first for alpha assignment
+  // This makes alphas feel like "tank/bruiser leaders"
+  if (alphaCount > 0) {
+    roster.sort((a, b) => {
+      const aIsMelee = a.role?.startsWith('melee_') ? 0 : 1;
+      const bIsMelee = b.role?.startsWith('melee_') ? 0 : 1;
+      return aIsMelee - bIsMelee;
+    });
+  }
+  
+  // Mark alphas on roster entries
+  for (let i = 0; i < alphaCount && i < roster.length; i++) {
+    roster[i].isAlpha = true;
   }
   
   // Spawn enemies in slots
   let spawnedCount = 0;
   for (let i = 0; i < slotsToUse.length; i++) {
     const slot = slotsToUse[i];
-    const isAlpha = i < alphaSlots;
+    const rosterEntry = roster[i] || { type: spawner.enemyPool[0], role: null };
     
-    const enemy = spawnEnemyInSlot(spawner, slot, now, { packId, isAlpha });
+    const enemy = spawnEnemyInSlot(spawner, slot, now, { 
+      packId, 
+      isAlpha: rosterEntry.isAlpha || false,
+      rosterEntry 
+    });
     if (enemy) {
       slot.aliveEnemyId = enemy.id;
       slot.lastSpawnAt = now;
@@ -1044,15 +1161,17 @@ function fillPackSlots(spawner, now, immediate) {
  * Spawn a single enemy in a slot.
  */
 function spawnEnemyInSlot(spawner, slot, now, options = {}) {
-  const { packId = null, isAlpha = false } = options;
+  const { packId = null, isAlpha = false, rosterEntry = null } = options;
   
-  // Pick enemy type and level
-  const enemyType = spawner.enemyPool[Math.floor(Math.random() * spawner.enemyPool.length)];
+  // Use roster entry if provided (template-based), otherwise fall back to random
+  const enemyType = rosterEntry?.type ?? spawner.enemyPool[Math.floor(Math.random() * spawner.enemyPool.length)];
+  const role = rosterEntry?.role ?? defaultRoleForType(enemyType);
   const level = randomRange(spawner.levelRange[0], spawner.levelRange[1]);
   
   // Create the enemy
   const enemy = createEnemyFromSlot(spawner, slot, {
     type: enemyType,
+    role,  // Include role in roster entry
     level,
     isAlpha,
     packId
@@ -1087,6 +1206,7 @@ function createEnemyFromSlot(spawner, slot, rosterEntry, t) {
     id: `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     name: typeDef.name,
     type: rosterEntry.type,
+    role: rosterEntry.role || defaultRoleForType(rosterEntry.type),  // Role-based AI behavior
     level,
     
     // Position from slot (authoritative)
@@ -1144,7 +1264,18 @@ function createEnemyFromSlot(spawner, slot, rosterEntry, t) {
     isAware: false,
     isRetreating: false,
     nextAttackAt: 0,
-    moveCooldown: 0
+    moveCooldown: 0,
+    
+    // Role-based special ability state (for marksman/grenadier)
+    aimingUntil: 0,
+    isAiming: false,
+    grenadeCooldownUntil: 0,
+    grenadeTelegraphUntil: 0,
+    grenadeTarget: null,
+    
+    // Anti-kite state (for melee)
+    wasAdjacentAt: 0,
+    opSwipeCdUntil: 0
   };
   
   // Apply alpha modifications
