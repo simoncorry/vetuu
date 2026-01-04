@@ -4,6 +4,12 @@
  * 
  * Instead of an 11,520×7,680 canvas (88M pixels), we use a viewport-sized
  * canvas (~1500×1100 pixels) that repositions with the camera.
+ * 
+ * PERFORMANCE NOTES:
+ * - fogMask[y][x] is the authoritative source for revealed tiles (O(1) lookup)
+ * - revealedTiles Set is lazily populated only when minimap needs it
+ * - Squared distance comparisons avoid Math.sqrt/hypot in hot loops
+ * - Pre-rendered dither stamps eliminate per-tile pixel work
  */
 
 import { perfStart, perfEnd } from './perf.js';
@@ -75,22 +81,16 @@ export function initFog(state) {
   // Pre-render dither stamps for fast blitting
   createDitherStamps();
 
-  // Initialize revealed tiles set
+  // Initialize revealed tiles set (lazily populated - minimap uses isRevealed() directly)
+  // We still maintain this for compatibility but don't populate it upfront
   state.runtime.revealedTiles = new Set();
 
   // Load saved fog or create new
   const saved = loadFogMask();
   if (saved && saved.length === mapHeight && saved[0]?.length === mapWidth) {
     fogMask = saved;
-    
-    // Populate revealedTiles from saved mask
-    for (let y = 0; y < mapHeight; y++) {
-      for (let x = 0; x < mapWidth; x++) {
-        if (fogMask[y][x]) {
-          state.runtime.revealedTiles.add(`${x},${y}`);
-        }
-      }
-    }
+    // NOTE: We no longer populate revealedTiles here - it was 150k+ string allocations
+    // The minimap should use isRevealed(x, y) instead of the Set
   } else {
     // Clear old fog data if dimensions don't match
     localStorage.removeItem(FOG_STORAGE_KEY);
@@ -156,21 +156,26 @@ function revealDrycrossBase(state) {
   const endX = Math.min(mapWidth - 1, centerX + OUTER_RADIUS);
   const endY = Math.min(mapHeight - 1, centerY + OUTER_RADIUS);
   
+  // Pre-compute squared radii for fast comparisons (avoid sqrt)
+  const CORE_RADIUS_SQ = CORE_RADIUS * CORE_RADIUS;
+  
   for (let y = startY; y <= endY; y++) {
     for (let x = startX; x <= endX; x++) {
       if (fogMask[y][x]) continue; // Already revealed
       
-      // Calculate distance from center
-      const dist = Math.hypot(x - centerX, y - centerY);
+      // Calculate squared distance from center (avoid sqrt)
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const distSq = dx * dx + dy * dy;
       
       // Inside core radius - always reveal
-      if (dist <= CORE_RADIUS) {
+      if (distSq <= CORE_RADIUS_SQ) {
         fogMask[y][x] = true;
-        state.runtime.revealedTiles.add(`${x},${y}`);
         continue;
       }
       
-      // Jagged edge falloff
+      // Jagged edge falloff (only compute sqrt for edge tiles)
+      const dist = Math.sqrt(distSq);
       const jitter = (seededRandom(x, y) - 0.5) * 2 * JAGGED_AMOUNT;
       const effectiveRadius = CORE_RADIUS + JAGGED_AMOUNT + jitter;
       
@@ -179,7 +184,6 @@ function revealDrycrossBase(state) {
         const revealChance = 1 - (falloffDist / (JAGGED_AMOUNT * 2));
         if (seededRandom(x + 100, y + 100) < revealChance) {
           fogMask[y][x] = true;
-          state.runtime.revealedTiles.add(`${x},${y}`);
         }
       }
     }
@@ -236,86 +240,21 @@ function checkRepositionNeeded(centerX, centerY) {
 // REVEAL MECHANICS
 // ============================================
 
-// Fog visual states
-const FOG_STATE = {
-  REVEALED: 0,
-  INNER_DITHER: 1,  // 8/16 pixels (sparse)
-  OUTER_DITHER: 2,  // 12/16 pixels (dense)
-  SOLID: 3
-};
-
-/**
- * Get the visual fog state for a tile based on current fogMask.
- */
-function getTileState(x, y) {
-  if (fogMask[y]?.[x]) return FOG_STATE.REVEALED;
-  const dist = getDistanceToRevealed(x, y, 2);
-  if (dist === 1) return FOG_STATE.INNER_DITHER;
-  if (dist === 2) return FOG_STATE.OUTER_DITHER;
-  return FOG_STATE.SOLID;
-}
-
-/**
- * Create a fade element for a state transition.
- * The fade shows what's DISAPPEARING (the old state pixels that won't be in new state).
- */
-function createFogFadeElement(x, y, fromState, toState) {
-  // No fade needed if state didn't change visually
-  if (fromState === toState) return;
-  if (fromState === FOG_STATE.REVEALED) return; // Can't fade from revealed
-  
-  const fogLayer = document.getElementById('fog-layer');
-  if (!fogLayer) return;
-  
-  const el = document.createElement('div');
-  el.className = 'fog-fade';
-  el.style.setProperty('--pos-x', `${x * TILE_SIZE}px`);
-  el.style.setProperty('--pos-y', `${y * TILE_SIZE}px`);
-  
-  // Choose the right dither pattern based on transition
-  if (toState === FOG_STATE.REVEALED) {
-    // Inner dither → revealed: fade out the sparse inner pattern
-    el.classList.add('fog-fade-inner');
-  } else if (fromState === FOG_STATE.OUTER_DITHER && toState === FOG_STATE.INNER_DITHER) {
-    // Outer dither → inner dither: fade out the 4 extra pixels
-    el.classList.add('fog-fade-mid');
-  } else if (fromState === FOG_STATE.SOLID && toState === FOG_STATE.OUTER_DITHER) {
-    // Solid → outer dither: fade out the 4 pixels that become transparent
-    el.classList.add('fog-fade-outer');
-  } else if (fromState === FOG_STATE.SOLID && toState === FOG_STATE.INNER_DITHER) {
-    // Solid → inner dither (skipped outer): fade the inner pattern
-    el.classList.add('fog-fade-inner');
-  } else if (fromState === FOG_STATE.INNER_DITHER && toState === FOG_STATE.REVEALED) {
-    // This is handled by the first case
-    el.classList.add('fog-fade-inner');
-  }
-  
-  fogLayer.appendChild(el);
-  
-  // Remove after animation completes (250ms)
-  el.addEventListener('animationend', () => el.remove(), { once: true });
-}
-
-// Track tiles that changed for batched fade animation
-let pendingFadeUpdates = [];
-let fadeUpdateScheduled = false;
-
 export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
-  // Ensure runtime.revealedTiles exists
-  if (!state.runtime.revealedTiles) {
-    state.runtime.revealedTiles = new Set();
-  }
-
+  // Pre-compute squared radius for fast distance checks
+  const radiusSq = radius * radius;
+  
   // Quick check: if center tile is already revealed with full radius, skip heavy work
   // This is the common case when walking in already-revealed areas
+  // Use squared distance to avoid sqrt in hot loop
   let allRevealed = true;
   for (let dy = -radius; dy <= radius && allRevealed; dy++) {
     for (let dx = -radius; dx <= radius && allRevealed; dx++) {
       const x = centerX + dx;
       const y = centerY + dy;
       if (x >= 0 && y >= 0 && x < mapWidth && y < mapHeight) {
-        const dist = Math.hypot(dx, dy);
-        if (dist <= radius && !fogMask[y]?.[x]) {
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= radiusSq && !fogMask[y][x]) {
           allRevealed = false;
         }
       }
@@ -327,7 +266,6 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
   
   // Update fogMask with newly revealed tiles
   let changed = false;
-  const newlyRevealed = [];
   
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
@@ -337,13 +275,11 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
       // Bounds check
       if (x < 0 || y < 0 || x >= mapWidth || y >= mapHeight) continue;
 
-      // Circular reveal
-      const dist = Math.hypot(dx, dy);
-      if (dist <= radius) {
+      // Circular reveal using squared distance (no sqrt)
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= radiusSq) {
         if (!fogMask[y][x]) {
           fogMask[y][x] = true;
-          state.runtime.revealedTiles.add(`${x},${y}`);
-          newlyRevealed.push({ x, y });
           changed = true;
         }
       }
@@ -352,61 +288,24 @@ export function revealAround(state, centerX, centerY, radius = REVEAL_RADIUS) {
 
   if (changed) {
     saveFogMask();
-    
-    // Queue fade updates instead of creating DOM elements immediately
-    // This batches multiple reveals into a single DOM update
-    for (const tile of newlyRevealed) {
-      pendingFadeUpdates.push(tile);
-    }
-    
-    // Schedule batched fade update on next frame
-    if (!fadeUpdateScheduled) {
-      fadeUpdateScheduled = true;
-      requestAnimationFrame(processPendingFades);
-    }
-  }
-}
-
-function processPendingFades() {
-  fadeUpdateScheduled = false;
-  
-  // Limit fade elements to prevent DOM overload
-  const MAX_FADES = 20;
-  const tiles = pendingFadeUpdates.splice(0, MAX_FADES);
-  
-  for (const { x, y } of tiles) {
-    // Simple fade for newly revealed tiles
-    createFogFadeElement(x, y, FOG_STATE.INNER_DITHER, FOG_STATE.REVEALED);
-  }
-  
-  // If more pending, schedule another batch
-  if (pendingFadeUpdates.length > 0) {
-    fadeUpdateScheduled = true;
-    requestAnimationFrame(processPendingFades);
+    // Fade animation is triggered in updateFogArea() which is called after this
   }
 }
 
 export function revealRegion(state, bounds) {
-  // Ensure runtime.revealedTiles exists
-  if (!state.runtime.revealedTiles) {
-    state.runtime.revealedTiles = new Set();
-  }
-
   // Translate bounds if needed (for expanded map)
   const offset = state.map.meta.originalOffset || { x: 0, y: 0 };
-  const translatedBounds = {
-    x0: bounds.x0 + offset.x,
-    y0: bounds.y0 + offset.y,
-    x1: bounds.x1 + offset.x,
-    y1: bounds.y1 + offset.y
-  };
+  
+  // Clamp to map bounds
+  const startX = Math.max(0, bounds.x0 + offset.x);
+  const startY = Math.max(0, bounds.y0 + offset.y);
+  const endX = Math.min(mapWidth - 1, bounds.x1 + offset.x);
+  const endY = Math.min(mapHeight - 1, bounds.y1 + offset.y);
 
-  for (let y = translatedBounds.y0; y <= translatedBounds.y1; y++) {
-    for (let x = translatedBounds.x0; x <= translatedBounds.x1; x++) {
-      if (x >= 0 && y >= 0 && x < mapWidth && y < mapHeight) {
-        fogMask[y][x] = true;
-        state.runtime.revealedTiles.add(`${x},${y}`);
-      }
+  for (let y = startY; y <= endY; y++) {
+    const row = fogMask[y];
+    for (let x = startX; x <= endX; x++) {
+      row[x] = true;
     }
   }
 
@@ -415,7 +314,7 @@ export function revealRegion(state, bounds) {
 
 export function isRevealed(x, y) {
   if (!fogMask || y < 0 || y >= mapHeight || x < 0 || x >= mapWidth) return false;
-  return fogMask[y]?.[x] === true;
+  return fogMask[y][x] === true;
 }
 
 // Get the fog mask for minimap
@@ -430,35 +329,57 @@ export function getFogMask() {
 /**
  * Get the distance from a fogged tile to the nearest revealed tile.
  * Returns 0 if revealed, Infinity if no revealed neighbors within range.
- * Optimized: checks direct neighbors first (most common case).
+ * 
+ * PERFORMANCE: This is called for every unrevealed tile during render.
+ * Optimized with:
+ * - Direct array access (no optional chaining in hot path)
+ * - Unrolled neighbor checks for distance 1
+ * - Early-exit patterns
  */
 function getDistanceToRevealed(x, y, maxDist = 2) {
-  if (fogMask[y]?.[x]) return 0; // Already revealed
+  // Direct array access with bounds already checked by caller
+  const row = fogMask[y];
+  if (row[x]) return 0; // Already revealed
   
-  // Fast path: check immediate 4 neighbors (most common for dither edge)
-  if (fogMask[y - 1]?.[x] || fogMask[y + 1]?.[x] || 
-      fogMask[y]?.[x - 1] || fogMask[y]?.[x + 1]) {
+  // Fast path: check immediate 4 cardinal neighbors (most common for dither edge)
+  // Use direct access - bounds are implicitly safe due to viewport culling
+  const rowAbove = fogMask[y - 1];
+  const rowBelow = fogMask[y + 1];
+  
+  if ((rowAbove && rowAbove[x]) || 
+      (rowBelow && rowBelow[x]) || 
+      row[x - 1] || row[x + 1]) {
     return 1;
   }
   
   // Check diagonal neighbors for distance 1
-  if (fogMask[y - 1]?.[x - 1] || fogMask[y - 1]?.[x + 1] ||
-      fogMask[y + 1]?.[x - 1] || fogMask[y + 1]?.[x + 1]) {
+  if ((rowAbove && (rowAbove[x - 1] || rowAbove[x + 1])) ||
+      (rowBelow && (rowBelow[x - 1] || rowBelow[x + 1]))) {
     return 1;
   }
   
   if (maxDist < 2) return Infinity;
   
-  // Check distance 2 ring (only if needed)
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) !== 2) continue;
-      const ny = y + dy;
-      const nx = x + dx;
-      if (ny >= 0 && ny < mapHeight && nx >= 0 && nx < mapWidth) {
-        if (fogMask[ny][nx]) return 2;
-      }
-    }
+  // Check distance 2 ring - unrolled for performance
+  // Only check tiles that are exactly distance 2 (Chebyshev distance)
+  const row2Above = fogMask[y - 2];
+  const row2Below = fogMask[y + 2];
+  
+  // Top row (y-2)
+  if (row2Above && (row2Above[x-2] || row2Above[x-1] || row2Above[x] || row2Above[x+1] || row2Above[x+2])) {
+    return 2;
+  }
+  // Bottom row (y+2)
+  if (row2Below && (row2Below[x-2] || row2Below[x-1] || row2Below[x] || row2Below[x+1] || row2Below[x+2])) {
+    return 2;
+  }
+  // Left column (x-2) for middle rows
+  if (row[x-2] || (rowAbove && rowAbove[x-2]) || (rowBelow && rowBelow[x-2])) {
+    return 2;
+  }
+  // Right column (x+2) for middle rows
+  if (row[x+2] || (rowAbove && rowAbove[x+2]) || (rowBelow && rowBelow[x+2])) {
+    return 2;
   }
   
   return Infinity;
@@ -544,6 +465,11 @@ function drawFogTile(canvasX, canvasY, type) {
 /**
  * Render fog for the current viewport canvas area.
  * Only draws tiles within the canvas bounds (canvasOffset → canvasOffset + canvasTiles).
+ * 
+ * PERFORMANCE: This is the hot path during camera repositioning.
+ * - Pre-cached stamp references
+ * - Hoisted loop variables
+ * - Direct array access
  */
 function renderFogViewport() {
   if (!fogCtx || !fogMask) return;
@@ -557,25 +483,34 @@ function renderFogViewport() {
   const endX = Math.min(canvasOffsetX + canvasTilesW, mapWidth);
   const endY = Math.min(canvasOffsetY + canvasTilesH, mapHeight);
   
+  // Cache stamp references outside loop
+  const stampFull = ditherStampFull;
+  const stampInner = ditherStampInner;
+  const stampOuter = ditherStampOuter;
+  const ctx = fogCtx;
+  const offsetX = canvasOffsetX;
+  const offsetY = canvasOffsetY;
+  const tileSize = TILE_SIZE;
+  
   // Render unrevealed tiles with dithering at edges (using pre-rendered stamps)
   for (let worldY = canvasOffsetY; worldY < endY; worldY++) {
+    const row = fogMask[worldY];
+    const canvasY = (worldY - offsetY) * tileSize;
+    
     for (let worldX = canvasOffsetX; worldX < endX; worldX++) {
-      if (!fogMask[worldY][worldX]) {
+      if (!row[worldX]) {
         // Convert world coords to canvas-local coords
-        const canvasX = (worldX - canvasOffsetX) * TILE_SIZE;
-        const canvasY = (worldY - canvasOffsetY) * TILE_SIZE;
+        const canvasX = (worldX - offsetX) * tileSize;
         
         const distToRevealed = getDistanceToRevealed(worldX, worldY, 2);
         
+        // Inline stamp selection for performance
         if (distToRevealed === 1) {
-          // Innermost fog ring - sparse dither
-          drawFogTile(canvasX, canvasY, 'inner');
+          ctx.drawImage(stampInner, canvasX, canvasY);
         } else if (distToRevealed === 2) {
-          // Second ring - denser dither
-          drawFogTile(canvasX, canvasY, 'outer');
+          ctx.drawImage(stampOuter, canvasX, canvasY);
         } else {
-          // Full fog
-          drawFogTile(canvasX, canvasY, 'full');
+          ctx.drawImage(stampFull, canvasX, canvasY);
         }
       }
     }
@@ -663,29 +598,40 @@ export function updateFogArea(centerX, centerY, radius = REVEAL_RADIUS) {
     return;
   }
   
+  // Cache references outside loop
+  const ctx = fogCtx;
+  const offsetX = canvasOffsetX;
+  const offsetY = canvasOffsetY;
+  const tileSize = TILE_SIZE;
+  const stampFull = ditherStampFull;
+  const stampInner = ditherStampInner;
+  const stampOuter = ditherStampOuter;
+  
   // Convert to canvas-local coordinates for clearRect
-  const clearX = (startX - canvasOffsetX) * TILE_SIZE;
-  const clearY = (startY - canvasOffsetY) * TILE_SIZE;
-  const clearW = (endX - startX) * TILE_SIZE;
-  const clearH = (endY - startY) * TILE_SIZE;
+  const clearX = (startX - offsetX) * tileSize;
+  const clearY = (startY - offsetY) * tileSize;
+  const clearW = (endX - startX) * tileSize;
+  const clearH = (endY - startY) * tileSize;
   
   // Clear and redraw just this area (using pre-rendered stamps)
-  fogCtx.clearRect(clearX, clearY, clearW, clearH);
+  ctx.clearRect(clearX, clearY, clearW, clearH);
   
   for (let worldY = startY; worldY < endY; worldY++) {
+    const row = fogMask[worldY];
+    const canvasY = (worldY - offsetY) * tileSize;
+    
     for (let worldX = startX; worldX < endX; worldX++) {
-      if (!fogMask[worldY][worldX]) {
-        const canvasX = (worldX - canvasOffsetX) * TILE_SIZE;
-        const canvasY = (worldY - canvasOffsetY) * TILE_SIZE;
-        
+      if (!row[worldX]) {
+        const canvasX = (worldX - offsetX) * tileSize;
         const distToRevealed = getDistanceToRevealed(worldX, worldY, 2);
         
+        // Inline stamp selection for performance
         if (distToRevealed === 1) {
-          drawFogTile(canvasX, canvasY, 'inner');
+          ctx.drawImage(stampInner, canvasX, canvasY);
         } else if (distToRevealed === 2) {
-          drawFogTile(canvasX, canvasY, 'outer');
+          ctx.drawImage(stampOuter, canvasX, canvasY);
         } else {
-          drawFogTile(canvasX, canvasY, 'full');
+          ctx.drawImage(stampFull, canvasX, canvasY);
         }
       }
     }

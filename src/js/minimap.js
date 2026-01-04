@@ -11,6 +11,8 @@
  * - NPC/enemy markers
  */
 
+import { isRevealed as fogIsRevealed } from './fog.js';
+
 // ============================================
 // CONFIGURATION
 // ============================================
@@ -22,9 +24,6 @@ const CONFIG = {
   zoomStep: 3,          // Tiles to add/remove per scroll
   
   // Colors - matching game actor colors
-  playerColor: '#00E5E5',      // Cyan for minimap visibility
-  playerGlow: 'rgba(0, 229, 229, 0.4)',
-  playerStroke: 'rgba(255, 255, 255, 0.7)',
   pathColor: '#00E5E5',        // Cyan to match player
   pathStroke: 'rgba(255, 255, 255, 0.5)',
   npcColor: '#4CAF50',         // Green (friendly NPCs)
@@ -36,8 +35,6 @@ const CONFIG = {
   fogColor: 'rgba(13, 15, 17, 0.92)',
   
   // Sizes (in canvas pixels)
-  playerSize: 5,
-  entitySize: 4,
   pathMarkerSize: 2,  // Smaller than player for hierarchy
   
   
@@ -55,7 +52,6 @@ let fogCtx = null;
 let container = null;
 
 let viewRadius = CONFIG.defaultViewRadius;
-let renderScheduled = false;
 let resizeObserver = null;
 let animationFrameId = null;
 
@@ -64,12 +60,29 @@ let cameraX = 0;
 let cameraY = 0;
 let lastFrameTime = 0;
 
+// Player facing direction (for minimap indicator)
+// 0 = right, 1 = down-right, 2 = down, 3 = down-left, 4 = left, 5 = up-left, 6 = up, 7 = up-right
+let playerFacing = 2; // Default to down/south
+let lastPlayerX = 0;
+let lastPlayerY = 0;
+
 // Smoothing - pixels per second approach for frame-rate independence
 const CAMERA_SPEED = 8; // tiles per second base speed
 
 // Cached references
 let gameState = null;
 let terrainImageData = null;
+
+// Performance: cached interactable objects (filtered once, not every frame)
+let cachedInteractables = null;
+
+// Performance: cached path module reference (avoid dynamic import in render loop)
+let movementModule = null;
+
+// Performance: dirty flag to skip unnecessary renders
+let needsRender = true;
+let lastCameraX = 0;
+let lastCameraY = 0;
 
 // ============================================
 // INITIALIZATION
@@ -134,9 +147,23 @@ export function initMinimap(state) {
 function startRenderLoop() {
   if (animationFrameId) return;
   
+  // Pre-load movement module to avoid dynamic import in render loop
+  import('./movement.js').then(mod => {
+    movementModule = mod;
+  }).catch(() => {});
+  
   function loop(timestamp) {
     updateCamera(timestamp);
-    render();
+    
+    // Only render if camera moved or render was explicitly requested
+    const cameraMoved = Math.abs(cameraX - lastCameraX) > 0.01 || Math.abs(cameraY - lastCameraY) > 0.01;
+    if (cameraMoved || needsRender) {
+      render();
+      lastCameraX = cameraX;
+      lastCameraY = cameraY;
+      needsRender = false;
+    }
+    
     animationFrameId = requestAnimationFrame(loop);
   }
   
@@ -160,6 +187,33 @@ function updateCamera(timestamp) {
   
   const targetX = gameState.player.x;
   const targetY = gameState.player.y;
+  
+  // Track player facing direction based on movement (8 directions)
+  const moveDx = targetX - lastPlayerX;
+  const moveDy = targetY - lastPlayerY;
+  if (Math.abs(moveDx) > 0.1 || Math.abs(moveDy) > 0.1) {
+    // Determine direction using 8-way compass
+    const absDx = Math.abs(moveDx);
+    const absDy = Math.abs(moveDy);
+    const isDiagonal = absDx > 0.05 && absDy > 0.05 && absDx / absDy < 2 && absDy / absDx < 2;
+    
+    if (isDiagonal) {
+      // Diagonal movement
+      if (moveDx > 0 && moveDy > 0) playerFacing = 1;      // Down-right
+      else if (moveDx < 0 && moveDy > 0) playerFacing = 3; // Down-left
+      else if (moveDx < 0 && moveDy < 0) playerFacing = 5; // Up-left
+      else playerFacing = 7;                                // Up-right
+    } else {
+      // Cardinal movement
+      if (absDx > absDy) {
+        playerFacing = moveDx > 0 ? 0 : 4; // Right or Left
+      } else {
+        playerFacing = moveDy > 0 ? 2 : 6; // Down or Up
+      }
+    }
+    lastPlayerX = targetX;
+    lastPlayerY = targetY;
+  }
   
   // Calculate distance to target
   const dx = targetX - cameraX;
@@ -368,8 +422,12 @@ function getViewport() {
   };
 }
 
+// Cached viewport for current frame (set at start of render)
+let currentVp = null;
+
 function worldToScreen(worldX, worldY) {
-  const vp = getViewport();
+  // Use cached viewport from current render frame
+  const vp = currentVp;
   if (!vp) return null;
   
   const screenX = (worldX - vp.left) * vp.pixelsPerTile;
@@ -469,13 +527,8 @@ function parseColor(colorStr) {
 // RENDERING
 // ============================================
 function scheduleRender() {
-  if (renderScheduled) return;
-  renderScheduled = true;
-  
-  requestAnimationFrame(() => {
-    renderScheduled = false;
-    render();
-  });
+  // Just mark as needing render - the render loop will pick it up
+  needsRender = true;
 }
 
 function render() {
@@ -483,6 +536,9 @@ function render() {
   
   const vp = getViewport();
   if (!vp) return;
+  
+  // Cache viewport for worldToScreen calls this frame
+  currentVp = vp;
   
   // Clear canvas
   ctx.fillStyle = '#0d0f11';
@@ -497,7 +553,7 @@ function render() {
   // Draw regions/POIs
   renderRegions(vp);
   
-  // Draw entities
+  // Draw entities (NPCs only - enemies drawn separately after fog)
   renderEntities(vp);
   
   // Draw path markers (between entities and player)
@@ -505,6 +561,12 @@ function render() {
   
   // Draw player (always on top, always centered)
   renderPlayer(vp);
+  
+  // Draw interactable objects
+  renderObjects(vp);
+  
+  // Draw enemies last, on fog canvas, so they're visible above fog
+  renderEnemies(vp);
 }
 
 function renderTerrain(vp) {
@@ -538,9 +600,6 @@ function renderTerrain(vp) {
 }
 
 function renderFog(vp) {
-  if (!gameState.runtime.revealedTiles) return;
-  
-  const revealed = gameState.runtime.revealedTiles;
   const { left, top, right, bottom, pixelsPerTile, canvasW, canvasH } = vp;
   
   // Clear fog canvas
@@ -560,20 +619,19 @@ function renderFog(vp) {
   const endX = Math.min(gameState.map.meta.width, Math.ceil(right) + 1);
   const endY = Math.min(gameState.map.meta.height, Math.ceil(bottom) + 1);
   
+  // Pre-calculate screen offset for performance
+  const offsetX = -left * pixelsPerTile;
+  const offsetY = -top * pixelsPerTile;
+  const tileDrawSize = pixelsPerTile + 1;
+  
+  // Use fog module's isRevealed (direct array lookup, no string allocation)
   for (let y = startY; y < endY; y++) {
     for (let x = startX; x < endX; x++) {
-      const key = `${x},${y}`;
-      if (revealed.has(key)) {
-        const screenPos = worldToScreen(x, y);
-        if (screenPos) {
-          // Draw slightly larger to avoid gaps
-          fogCtx.fillRect(
-            screenPos.x - 0.5,
-            screenPos.y - 0.5,
-            pixelsPerTile + 1,
-            pixelsPerTile + 1
-          );
-        }
+      if (fogIsRevealed(x, y)) {
+        // Inline screen position calculation (avoid function call overhead)
+        const screenX = x * pixelsPerTile + offsetX - 0.5;
+        const screenY = y * pixelsPerTile + offsetY - 0.5;
+        fogCtx.fillRect(screenX, screenY, tileDrawSize, tileDrawSize);
       }
     }
   }
@@ -582,10 +640,10 @@ function renderFog(vp) {
 }
 
 function renderRegions(vp) {
-  if (!gameState.map.regions) return;
+  if (!gameState.map.regions || !fogCtx) return;
   
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.lineWidth = 1;
+  fogCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  fogCtx.lineWidth = 1;
   
   for (const region of gameState.map.regions) {
     const b = region.bounds;
@@ -599,7 +657,7 @@ function renderRegions(vp) {
     const bottomRight = worldToScreen(b.x1, b.y1);
     
     if (topLeft && bottomRight) {
-      ctx.strokeRect(
+      fogCtx.strokeRect(
         topLeft.x,
         topLeft.y,
         bottomRight.x - topLeft.x,
@@ -610,83 +668,155 @@ function renderRegions(vp) {
 }
 
 function renderEntities(vp) {
-  // Render NPCs with type-based colors
-  if (gameState.entities.npcs) {
-    for (const npc of gameState.entities.npcs) {
-      // Skip hidden NPCs
-      if (npc.flags?.hidden) continue;
-      
-      // Check if in view and revealed
-      if (!isInView(npc.x, npc.y, vp)) continue;
-      if (!isRevealed(npc.x, npc.y)) continue;
-      
-      // Color based on NPC type (matching CSS hue-rotate values)
-      const npcType = npc.type || npc.npcType || '';
-      if (npcType === 'guard') {
-        ctx.fillStyle = CONFIG.npcGuardColor;  // Cyan
-      } else if (npcType === 'medic') {
-        ctx.fillStyle = CONFIG.npcMedicColor;  // Pink
-      } else {
-        ctx.fillStyle = CONFIG.npcColor;       // Green (default)
-      }
-      
-      const pos = worldToScreen(npc.x + 0.5, npc.y + 0.5);
-      if (pos) {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, CONFIG.entitySize / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
+  if (!fogCtx) return;
   
-  // Render active enemies with state-based colors
-  if (gameState.runtime.activeEnemies) {
-    for (const enemy of gameState.runtime.activeEnemies) {
-      if (enemy.hp <= 0) continue;
-      
-      // Check if in view and revealed
-      if (!isInView(enemy.x, enemy.y, vp)) continue;
-      if (!isRevealed(enemy.x, enemy.y)) continue;
-      
-      // Color based on enemy state (matching CSS classes/hue-rotate values)
-      if (enemy.isAlpha) {
-        ctx.fillStyle = CONFIG.enemyAlphaColor;    // Gold (alpha enemies)
-      } else if (enemy.engaged || enemy.combat) {
-        ctx.fillStyle = CONFIG.enemyEngagedColor;  // Red (hostile/in combat)
-      } else if (enemy.passive) {
-        ctx.fillStyle = CONFIG.enemyPassiveColor;  // Yellow (passive)
-      } else {
-        ctx.fillStyle = CONFIG.enemyPassiveColor;  // Default to passive yellow
-      }
-      
-      const pos = worldToScreen(enemy.x + 0.5, enemy.y + 0.5);
-      if (pos) {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, CONFIG.entitySize / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
+  const npcs = gameState.entities?.npcs;
+  if (!npcs || npcs.length === 0) return;
+  
+  // NPC square size
+  const npcSize = 6;
+  const halfSize = npcSize / 2;
+  
+  // Pre-set stroke style (same for all NPCs)
+  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  fogCtx.lineWidth = 1;
+  
+  // Render NPCs with type-based colors on fog canvas
+  for (const npc of npcs) {
+    // Skip hidden NPCs
+    if (npc.flags?.hidden) continue;
+    
+    // Check if in view and revealed
+    if (!isInView(npc.x, npc.y, vp)) continue;
+    if (!isRevealed(npc.x, npc.y)) continue;
+    
+    // Color based on NPC type - use brighter colors
+    if (npc.isGuard || npc.role === 'guard') {
+      fogCtx.fillStyle = '#00DDDD';  // Bright cyan
+    } else if (npc.isMedic || npc.role === 'medic') {
+      fogCtx.fillStyle = '#FF69B4';  // Hot pink
+    } else {
+      fogCtx.fillStyle = '#44FF44';  // Bright green
+    }
+    
+    const pos = worldToScreen(npc.x + 0.5, npc.y + 0.5);
+    if (pos) {
+      // Draw NPC square with dark border (8-bit style)
+      fogCtx.fillRect(pos.x - halfSize, pos.y - halfSize, npcSize, npcSize);
+      fogCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, npcSize, npcSize);
     }
   }
 }
 
-// Path markers cache (updated via dynamic import)
+function renderObjects(vp) {
+  if (!fogCtx) return;
+  
+  // Cache interactable objects once (not every frame)
+  if (!cachedInteractables && gameState.map?.objects) {
+    cachedInteractables = gameState.map.objects.filter(obj => obj.interact);
+  }
+  
+  if (!cachedInteractables || cachedInteractables.length === 0) return;
+  
+  // Object square size
+  const objSize = 6;
+  const halfSize = objSize / 2;
+  
+  // Pre-set stroke style (same for all objects)
+  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  fogCtx.lineWidth = 1;
+  
+  for (const obj of cachedInteractables) {
+    // Skip collected nodes
+    if (gameState.runtime?.collectedNodes?.has(obj.id)) continue;
+    
+    // Check if in view and revealed
+    if (!isInView(obj.x, obj.y, vp)) continue;
+    if (!isRevealed(obj.x, obj.y)) continue;
+    
+    const pos = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    if (!pos) continue;
+    
+    // Color based on interaction type
+    const action = obj.interact.action;
+    if (action === 'collect') {
+      fogCtx.fillStyle = '#AA66FF';  // Purple for collectibles
+    } else if (action === 'read') {
+      fogCtx.fillStyle = '#6699FF';  // Blue for readable/lore
+    } else if (action === 'loot') {
+      fogCtx.fillStyle = '#FFAA44';  // Orange for loot
+    } else {
+      fogCtx.fillStyle = '#BB88FF';  // Light purple default
+    }
+    
+    // Draw object square with dark border (8-bit style)
+    fogCtx.fillRect(pos.x - halfSize, pos.y - halfSize, objSize, objSize);
+    fogCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, objSize, objSize);
+  }
+}
+
+function renderEnemies(vp) {
+  if (!fogCtx) return;
+  
+  const enemies = gameState.runtime?.activeEnemies;
+  if (!enemies || enemies.length === 0) return;
+  
+  // Enemy square size
+  const enemySize = 6;
+  const halfSize = enemySize / 2;
+  
+  // Pre-set stroke style (same for all enemies)
+  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  fogCtx.lineWidth = 1;
+  
+  // Cache bounds for faster comparison
+  const minX = -10;
+  const maxX = vp.canvasW + 10;
+  const minY = -10;
+  const maxY = vp.canvasH + 10;
+  
+  for (const enemy of enemies) {
+    // Skip dead enemies
+    if (enemy.hp <= 0) continue;
+    
+    // Skip enemies in unexplored fog (proper fog of war)
+    if (!isRevealed(enemy.x, enemy.y)) continue;
+    
+    // Get screen position
+    const pos = worldToScreen(enemy.x + 0.5, enemy.y + 0.5);
+    if (!pos) continue;
+    
+    // Skip if outside canvas bounds
+    if (pos.x < minX || pos.x > maxX || pos.y < minY || pos.y > maxY) continue;
+    
+    // Color based on enemy state - use brighter, more saturated colors
+    if (enemy.isAlpha) {
+      fogCtx.fillStyle = '#FFD700';  // Bright gold
+    } else if (enemy.engaged || enemy.combat) {
+      fogCtx.fillStyle = '#FF4444';  // Bright red
+    } else {
+      fogCtx.fillStyle = '#FFAA00';  // Bright orange-yellow
+    }
+    
+    // Draw enemy square with dark border for contrast (8-bit style)
+    fogCtx.fillRect(pos.x - halfSize, pos.y - halfSize, enemySize, enemySize);
+    fogCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, enemySize, enemySize);
+  }
+}
+
+// Path markers cache
 let cachedPath = [];
-let pathUpdateScheduled = false;
 
 function updatePathCache() {
-  if (pathUpdateScheduled) return;
-  pathUpdateScheduled = true;
-  
-  import('./movement.js').then(({ getCurrentPath }) => {
-    cachedPath = getCurrentPath() || [];
-    pathUpdateScheduled = false;
-  }).catch(() => {
-    cachedPath = [];
-    pathUpdateScheduled = false;
-  });
+  // Use pre-loaded module reference (no dynamic import in render loop)
+  if (movementModule?.getCurrentPath) {
+    cachedPath = movementModule.getCurrentPath() || [];
+  }
 }
 
 function renderPath(vp) {
+  if (!fogCtx) return;
+  
   // Update path cache
   updatePathCache();
   
@@ -694,9 +824,15 @@ function renderPath(vp) {
   
   const size = CONFIG.pathMarkerSize;
   const halfSize = size / 2;
+  const pathLen = cachedPath.length;
   
-  // Draw path markers as small squares
-  for (let i = 0; i < cachedPath.length; i++) {
+  // Pre-set styles
+  fogCtx.fillStyle = CONFIG.pathColor;
+  fogCtx.strokeStyle = CONFIG.pathStroke;
+  fogCtx.lineWidth = 0.5;
+  
+  // Draw path markers as small squares on fog canvas (above fog layer)
+  for (let i = 0; i < pathLen; i++) {
     const { x, y } = cachedPath[i];
     
     // Check if in view
@@ -706,42 +842,93 @@ function renderPath(vp) {
     if (!pos) continue;
     
     // Opacity increases along path (more opaque near destination)
-    const opacity = 0.4 + (i / cachedPath.length) * 0.5;
+    fogCtx.globalAlpha = 0.4 + (i / pathLen) * 0.5;
     
     // Draw square marker with stroke
-    ctx.fillStyle = CONFIG.pathColor;
-    ctx.globalAlpha = opacity;
-    ctx.fillRect(pos.x - halfSize, pos.y - halfSize, size, size);
-    
-    // Stroke
-    ctx.strokeStyle = CONFIG.pathStroke;
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(pos.x - halfSize, pos.y - halfSize, size, size);
-    
-    ctx.globalAlpha = 1;
+    fogCtx.fillRect(pos.x - halfSize, pos.y - halfSize, size, size);
+    fogCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, size, size);
   }
+  
+  fogCtx.globalAlpha = 1;
 }
 
 function renderPlayer(_vp) {
-  // Player dot rendered at camera position (always centered, world moves around it)
+  if (!fogCtx) return;
+  
+  // Player square rendered at camera position (always centered, world moves around it)
   const pos = worldToScreen(cameraX + 0.5, cameraY + 0.5);
   if (!pos) return;
   
-  // Subtle glow effect
-  ctx.fillStyle = CONFIG.playerGlow;
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, CONFIG.playerSize + 1.5, 0, Math.PI * 2);
-  ctx.fill();
+  // Player square size (10x10)
+  const playerSize = 10;
+  const halfSize = playerSize / 2;
   
-  // Player dot - square to match path markers
-  ctx.fillStyle = CONFIG.playerColor;
-  const playerHalf = CONFIG.playerSize / 2;
-  ctx.fillRect(pos.x - playerHalf, pos.y - playerHalf, CONFIG.playerSize, CONFIG.playerSize);
+  // Triangle size (6x6)
+  const triSize = 6;
+  const halfTriSize = triSize / 2;
   
-  // Dark border to match sprite outline
-  ctx.strokeStyle = CONFIG.playerStroke;
-  ctx.lineWidth = 0.5;
-  ctx.strokeRect(pos.x - playerHalf, pos.y - playerHalf, CONFIG.playerSize, CONFIG.playerSize);
+  // Player square - white/off-white to stand out from all other colors
+  fogCtx.fillStyle = '#EEEEFF';
+  fogCtx.fillRect(pos.x - halfSize, pos.y - halfSize, playerSize, playerSize);
+  
+  // Dark border
+  fogCtx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  fogCtx.lineWidth = 1;
+  fogCtx.strokeRect(pos.x - halfSize, pos.y - halfSize, playerSize, playerSize);
+  
+  // Direction triangle indicator (6x6, dark color)
+  fogCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  fogCtx.beginPath();
+  
+  // Diagonal offset for corner triangles
+  const diagTriOffset = triSize * 0.707;
+  
+  // 0 = right, 1 = down-right, 2 = down, 3 = down-left, 4 = left, 5 = up-left, 6 = up, 7 = up-right
+  switch (playerFacing) {
+    case 0: // Right
+      fogCtx.moveTo(pos.x + halfSize, pos.y - halfTriSize);
+      fogCtx.lineTo(pos.x + halfSize + triSize, pos.y);
+      fogCtx.lineTo(pos.x + halfSize, pos.y + halfTriSize);
+      break;
+    case 1: // Down-right (diagonal)
+      fogCtx.moveTo(pos.x + halfSize, pos.y + halfSize - halfTriSize);
+      fogCtx.lineTo(pos.x + halfSize + diagTriOffset, pos.y + halfSize + diagTriOffset);
+      fogCtx.lineTo(pos.x + halfSize - halfTriSize, pos.y + halfSize);
+      break;
+    case 2: // Down
+      fogCtx.moveTo(pos.x - halfTriSize, pos.y + halfSize);
+      fogCtx.lineTo(pos.x, pos.y + halfSize + triSize);
+      fogCtx.lineTo(pos.x + halfTriSize, pos.y + halfSize);
+      break;
+    case 3: // Down-left (diagonal)
+      fogCtx.moveTo(pos.x - halfSize + halfTriSize, pos.y + halfSize);
+      fogCtx.lineTo(pos.x - halfSize - diagTriOffset, pos.y + halfSize + diagTriOffset);
+      fogCtx.lineTo(pos.x - halfSize, pos.y + halfSize - halfTriSize);
+      break;
+    case 4: // Left
+      fogCtx.moveTo(pos.x - halfSize, pos.y - halfTriSize);
+      fogCtx.lineTo(pos.x - halfSize - triSize, pos.y);
+      fogCtx.lineTo(pos.x - halfSize, pos.y + halfTriSize);
+      break;
+    case 5: // Up-left (diagonal)
+      fogCtx.moveTo(pos.x - halfSize, pos.y - halfSize + halfTriSize);
+      fogCtx.lineTo(pos.x - halfSize - diagTriOffset, pos.y - halfSize - diagTriOffset);
+      fogCtx.lineTo(pos.x - halfSize + halfTriSize, pos.y - halfSize);
+      break;
+    case 6: // Up
+      fogCtx.moveTo(pos.x - halfTriSize, pos.y - halfSize);
+      fogCtx.lineTo(pos.x, pos.y - halfSize - triSize);
+      fogCtx.lineTo(pos.x + halfTriSize, pos.y - halfSize);
+      break;
+    case 7: // Up-right (diagonal)
+      fogCtx.moveTo(pos.x + halfSize - halfTriSize, pos.y - halfSize);
+      fogCtx.lineTo(pos.x + halfSize + diagTriOffset, pos.y - halfSize - diagTriOffset);
+      fogCtx.lineTo(pos.x + halfSize, pos.y - halfSize + halfTriSize);
+      break;
+  }
+  
+  fogCtx.closePath();
+  fogCtx.fill();
 }
 
 function isInView(x, y, vp) {
@@ -749,8 +936,9 @@ function isInView(x, y, vp) {
 }
 
 function isRevealed(x, y) {
-  if (!gameState.runtime.revealedTiles) return true;
-  return gameState.runtime.revealedTiles.has(`${x},${y}`);
+  // Use fog module's isRevealed for O(1) array lookup (no string allocation)
+  // Floor coordinates since enemies can have fractional positions during movement
+  return fogIsRevealed(Math.floor(x), Math.floor(y));
 }
 
 // ============================================
@@ -789,6 +977,60 @@ export function removeMarker(id) {
 export function clearMarkers() {
   markers.clear();
   scheduleRender();
+}
+
+/**
+ * Debug: Log minimap state for troubleshooting
+ */
+export function debugMinimap() {
+  const vp = getViewport();
+  const enemies = gameState?.runtime?.activeEnemies || [];
+  const npcs = gameState?.entities?.npcs || [];
+  
+  console.log('[Minimap Debug]');
+  console.log('  Viewport:', vp);
+  console.log('  Canvas:', canvas?.width, 'x', canvas?.height);
+  console.log('  Total enemies:', enemies.length);
+  console.log('  Total NPCs:', npcs.length);
+  console.log('  Fog: Using direct array lookup (fogIsRevealed)');
+  
+  // Check each enemy
+  let visibleCount = 0;
+  let inViewCount = 0;
+  let revealedCount = 0;
+  let aliveCount = 0;
+  
+  for (const enemy of enemies) {
+    if (enemy.hp > 0) aliveCount++;
+    if (vp && isInView(enemy.x, enemy.y, vp)) inViewCount++;
+    if (isRevealed(enemy.x, enemy.y)) revealedCount++;
+    if (enemy.hp > 0 && vp && isInView(enemy.x, enemy.y, vp) && isRevealed(enemy.x, enemy.y)) {
+      visibleCount++;
+    }
+  }
+  
+  console.log('  Enemy breakdown:');
+  console.log('    Alive:', aliveCount);
+  console.log('    In view:', inViewCount);
+  console.log('    In revealed area:', revealedCount);
+  console.log('    Should be visible:', visibleCount);
+  
+  // Sample first few enemies
+  if (enemies.length > 0) {
+    console.log('  First 3 enemies:');
+    enemies.slice(0, 3).forEach((e, i) => {
+      const inView = vp && isInView(e.x, e.y, vp);
+      const revealed = isRevealed(e.x, e.y);
+      console.log(`    [${i}] ${e.name} at (${e.x}, ${e.y}) hp=${e.hp} inView=${inView} revealed=${revealed}`);
+    });
+  }
+  
+  return { enemies: enemies.length, visible: visibleCount, viewport: vp };
+}
+
+// Expose to console
+if (typeof window !== 'undefined') {
+  window.VETUU_MINIMAP_DEBUG = debugMinimap;
 }
 
 /**

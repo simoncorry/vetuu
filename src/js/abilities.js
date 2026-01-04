@@ -73,7 +73,7 @@ export const BALANCE = {
   chargedCastMs: 3000,
   
   // Leap dash
-  leapDashSpeed: 3.0,  // 300% movement speed
+  leapDashSpeed: 6.0,  // 600% movement speed - fast airborne woosh
   
   // Sense push/pull distance
   pullDistance: 2,

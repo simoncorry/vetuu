@@ -3315,7 +3315,15 @@ export function checkPendingAttack() {
   } else if (actionType.startsWith('ability_')) {
     // New unified ability system (slots 2-5)
     const slot = parseInt(actionType.split('_')[1], 10);
+    
+    // Block if already casting/channeling (matches useAbility check)
+    if (currentState?.player?.casting || currentState?.player?.channeling) {
+      if (window.VETUU_DEBUG_COMBAT) console.log('[PENDING] Blocked - already casting/channeling');
+      return;
+    }
+    
     if (!isNaN(slot) && actionCooldowns[slot] <= 0 && !isGcdActive()) {
+      if (window.VETUU_DEBUG_COMBAT) console.log('[PENDING] Executing ability', slot, 'via checkPendingAttack');
       // Snapshot swing timer before ability (to restore after)
       const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
       const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
@@ -3775,8 +3783,8 @@ function useAbility(slot) {
   const dist = distCoords(player.x, player.y, currentTarget.x, currentTarget.y);
   const hasLOS = !needsLOS || hasLineOfSight(currentState, player.x, player.y, currentTarget.x, currentTarget.y);
   
-  // If out of range or no LOS, set intent and move (unless it's a gap closer)
-  if ((dist > abilityRange || !hasLOS) && !ability.isGapCloser) {
+  // If out of range or no LOS, set intent and move
+  if (dist > abilityRange || !hasLOS) {
     // Enable combat flags (we're engaging)
     autoAttackEnabled = true;
     inCombat = true;
@@ -3798,12 +3806,6 @@ function useAbility(slot) {
     return;
   }
   
-  // Gap closers (like Leap) can execute from extended range
-  if (ability.isGapCloser && dist > abilityRange) {
-    logCombat(`${ability.name}: Target out of range (${abilityRange} tiles)`);
-    return;
-  }
-  
   // In range and LOS - check target validity
   const check = isInvalidCombatTarget(currentTarget);
   if (check.invalid) {
@@ -3816,6 +3818,10 @@ function useAbility(slot) {
     }
     clearTarget();
     return;
+  }
+  
+  if (window.VETUU_DEBUG_COMBAT && slot === 5) {
+    console.log('[USEABILITY] In range, executing slot 5 directly');
   }
   
   // Execute the ability
@@ -3831,6 +3837,10 @@ function useAbility(slot) {
 function executeAbilityDirect(slot) {
   const ability = getAbility(slot);
   if (!ability) return;
+  
+  if (window.VETUU_DEBUG_COMBAT && slot === 5) {
+    console.log('[ABILITY] executeAbilityDirect slot 5, castTimeMs:', ability.castTimeMs, 'gcdMs:', ability.gcdMs);
+  }
   
   // Trigger GCD - use ability's custom gcdMs if defined, otherwise default 1.5s
   // Cast abilities like Charged Shot use castTime as GCD (3s = "double GCD")
@@ -3968,8 +3978,8 @@ function executeLeap(ability) {
   
   logCombat('Leaping!');
   
-  // Dash to target at 300% speed, deal damage on arrival
-  dashToPosition(destX, destY, 3, () => {
+  // Dash to target at high speed, deal damage on arrival
+  dashToPosition(destX, destY, ability.dashSpeed, () => {
     // Callback: deal damage AFTER dash completes
     
     // Validate target still exists and is the same target
@@ -4206,7 +4216,20 @@ let chargedShotState = null;
 let castIdCounter = 0; // Unique ID for race condition prevention
 
 function executeChargedShot(ability) {
-  if (!currentTarget || currentTarget.hp <= 0) return;
+  const debug = window.VETUU_DEBUG_COMBAT;
+  
+  if (debug) console.log('[CHARGED] executeChargedShot called, castTimeMs:', ability.castTimeMs);
+  
+  // Safety: validate cast time exists and is positive
+  if (!ability.castTimeMs || ability.castTimeMs <= 0) {
+    console.error('[CHARGED] Invalid castTimeMs:', ability.castTimeMs, '- aborting cast');
+    return;
+  }
+  
+  if (!currentTarget || currentTarget.hp <= 0) {
+    if (debug) console.log('[CHARGED] No valid target, aborting');
+    return;
+  }
   
   const player = currentState.player;
   const target = currentTarget;
@@ -4214,6 +4237,7 @@ function executeChargedShot(ability) {
   
   // Cancel any existing charge
   if (chargedShotState) {
+    if (debug) console.log('[CHARGED] Cancelling existing charge');
     cancelChargedShot(false);
   }
   
@@ -4232,6 +4256,8 @@ function executeChargedShot(ability) {
   // Lock movement during cast
   player.casting = true;
   
+  if (debug) console.log('[CHARGED] Cast started, castId:', castId, 'duration:', ability.castTimeMs, 'ms');
+  
   logCombat('Charging shot...');
   
   // Start cast timer UI (3s cast)
@@ -4242,6 +4268,7 @@ function executeChargedShot(ability) {
   
   // Start cast timer
   chargedShotState.timerId = setTimeout(() => {
+    if (debug) console.log('[CHARGED] Timer fired, expectedCastId:', expectedCastId, 'current:', chargedShotState?.castId);
     // Race condition guard: bail if state was cleared or ID mismatches
     if (!chargedShotState || chargedShotState.castId !== expectedCastId) return;
     
@@ -4262,6 +4289,11 @@ function executeChargedShot(ability) {
     
     // Calculate damage (300% ranged basic)
     const damage = calculateAbilityDamage(ability.slot, 'ranged');
+    
+    if (debug) {
+      const castDuration = performance.now() - chargedShotState.startTime;
+      console.log('[CHARGED] Cast complete after', Math.round(castDuration), 'ms, dealing', damage, 'damage');
+    }
     
     // Big projectile
     showProjectile(player.x, player.y, castTarget.x, castTarget.y, getColors().projectileSpecial, true);
@@ -6513,8 +6545,9 @@ function executeAbilityIntent(_now) {
   
   const dist = distCoords(player.x, player.y, target.x, target.y);
   
-  // Out of range - move to attack range (unless gap closer)
-  if (dist > combatIntent.range && !ability.isGapCloser) {
+  // Out of range - move to attack range
+  // Gap closers can execute from their full range, but still need to be within it
+  if (dist > combatIntent.range) {
     if (!pendingAttack) {
       moveToAttackRange(target, combatIntent.range, `ability_${slot}`);
     }
@@ -6536,6 +6569,10 @@ function executeAbilityIntent(_now) {
   const savedNextAttackAt = combatIntent?.nextAttackAt || 0;
   const savedCooldownStartedAt = combatIntent?.cooldownStartedAt || 0;
   clearCombatIntent();
+  
+  if (window.VETUU_DEBUG_COMBAT && intentSlot === 5) {
+    console.log('[INTENT] Executing slot 5 via executeAbilityIntent');
+  }
   
   // Execute the ability
   executeAbilityDirect(intentSlot);

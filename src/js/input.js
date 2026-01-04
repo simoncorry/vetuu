@@ -379,13 +379,21 @@ function onLeftClick(e, forceDoubleClick = false) {
 
 function onRightClick(e) {
   e.preventDefault();
+  e.stopPropagation();
+  
+  const debug = window.VETUU_DEBUG_INPUT;
+  if (debug) console.log('[RIGHT-CLICK] Event fired at', e.clientX, e.clientY, '| target:', e.target.tagName, e.target.id || e.target.className);
 
-  if (e.target.closest('#character-sheet, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #settings-menu')) {
+  // Check if click is on UI element (must match onLeftClick's list)
+  const uiElement = e.target.closest('#character-sheet, #quest-tracker, #action-bar, #player-frame, #target-frame, #minimap-container, #combat-log-container, #settings-menu, #dialogue-panel, #inventory-panel');
+  if (uiElement) {
+    if (debug) console.log('[RIGHT-CLICK] Blocked by UI:', uiElement.id || uiElement.className);
     return;
   }
 
   const worldPos = screenToWorld(e.clientX, e.clientY);
   if (!worldPos) {
+    if (debug) console.log('[RIGHT-CLICK] screenToWorld returned null for', e.clientX, e.clientY);
     cancelPath();
     targetCallback('clear');
     return;
@@ -394,14 +402,24 @@ function onRightClick(e) {
   const { x, y } = worldPos;
   const state = window.__vetuuState;
   if (!state) {
+    if (debug) console.log('[RIGHT-CLICK] No game state');
     cancelPath();
     targetCallback('clear');
     return;
   }
+  
+  if (debug) console.log('[RIGHT-CLICK] World pos:', x, y);
 
   // Check for enemy at right-click location - initiate auto-attack
   const enemy = findEnemyAt(state, x, y);
+  if (debug) {
+    const nearbyEnemies = (state.runtime?.activeEnemies || [])
+      .filter(e => e.hp > 0 && Math.abs(e.x - x) <= 2 && Math.abs(e.y - y) <= 2)
+      .map(e => `${e.name}@(${e.x},${e.y})`);
+    console.log('[RIGHT-CLICK] findEnemyAt result:', enemy?.name || 'none', '| nearby:', nearbyEnemies.join(', ') || 'none');
+  }
   if (enemy && enemy.hp > 0) {
+    if (debug) console.log('[RIGHT-CLICK] → Attack', enemy.name);
     targetCallback('attack', enemy);
     return;
   }
@@ -409,6 +427,7 @@ function onRightClick(e) {
   // Check for NPC at right-click location - move to and interact
   const npc = findNpcAt(state, x, y);
   if (npc) {
+    if (debug) console.log('[RIGHT-CLICK] → Interact NPC', npc.name || npc.id);
     targetCallback('selectNpc', npc);
     targetCallback('interactWith', { type: 'npc', target: npc, x: npc.x, y: npc.y });
     return;
@@ -417,12 +436,14 @@ function onRightClick(e) {
   // Check for interactable object at right-click location - move to and interact
   const obj = findObjectAt(state, x, y);
   if (obj?.interact) {
+    if (debug) console.log('[RIGHT-CLICK] → Interact object', obj.name || obj.type);
     targetCallback('selectObject', obj);
     targetCallback('interactWith', { type: 'object', target: obj, x: obj.x, y: obj.y });
     return;
   }
 
   // Default: cancel path and clear target
+  if (debug) console.log('[RIGHT-CLICK] → Clear (no target found)');
   cancelPath();
   targetCallback('clear');
 }
