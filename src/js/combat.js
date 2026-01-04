@@ -1308,13 +1308,42 @@ function startCombatTick() {
     processRegeneration(now);
 
     // Process each active enemy (only if there are enemies to process)
+    // AI THROTTLING: Distant enemies processed less frequently
     const enemies = currentState.runtime.activeEnemies;
     if (enemies.length > 0) {
       perfStart('combat:enemyAI');
+      const player = currentState.player;
+      const tickNum = Math.floor(now / 100); // Tick counter for throttling
+      
       for (let i = 0; i < enemies.length; i++) {
         const enemy = enemies[i];
-        if (enemy.hp > 0) {
+        if (enemy.hp <= 0) continue;
+        
+        // Calculate distance for throttling
+        const dx = enemy.x - player.x;
+        const dy = enemy.y - player.y;
+        const distSq = dx * dx + dy * dy;
+        
+        // Throttling tiers:
+        // - <40 tiles (1600): Every tick (full AI)
+        // - 40-80 tiles (1600-6400): Every 3rd tick
+        // - >80 tiles (6400+): Every 5th tick
+        // - Engaged/aggro enemies: Always every tick
+        const isEngaged = enemy.isEngaged || enemy.isAggro || enemy.state === 'ENGAGED';
+        
+        if (isEngaged || distSq < 1600) {
+          // Close or engaged - full AI every tick
           processEnemyAI(enemy, now);
+        } else if (distSq < 6400) {
+          // Medium distance - every 3rd tick
+          if (tickNum % 3 === (i % 3)) {
+            processEnemyAI(enemy, now);
+          }
+        } else {
+          // Far distance - every 5th tick
+          if (tickNum % 5 === (i % 5)) {
+            processEnemyAI(enemy, now);
+          }
         }
       }
       perfEnd('combat:enemyAI');

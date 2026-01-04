@@ -57,6 +57,14 @@ const STRAY_RESPAWN_MS = { min: 120000, max: 240000 };   // 2-4 min (was 1.5-3)
 const PACK_RESPAWN_MS = { min: 300000, max: 600000 };    // 5-10 min (was 4-10)
 
 // ============================================
+// CONSTANTS - CULLING (Performance)
+// ============================================
+const CULL_DISTANCE = 120;           // Despawn enemies beyond this distance from player
+const CULL_CHECK_INTERVAL = 2000;    // How often to check for culling (ms)
+const CULL_GRACE_PERIOD = 5000;      // Don't cull recently spawned enemies (ms)
+const NEVER_CULL_IN_COMBAT = true;   // Never cull engaged/aggro enemies
+
+// ============================================
 // CONSTANTS - RING SPAWN WEIGHTS
 // ============================================
 // Controls the balance of solo enemies vs packs per ring
@@ -1469,6 +1477,7 @@ function createEnemyFromSlot(spawner, slot, rosterEntry, t) {
 // Track newly spawned enemies for incremental DOM updates
 let newlySpawnedEnemies = [];
 let cachedPlayerEl = null; // Cached player element for ghost check
+let lastCullCheck = 0;     // Last time we checked for culling
 
 function spawnDirectorTick() {
   if (!currentState) return;
@@ -1524,7 +1533,88 @@ function spawnDirectorTick() {
     }
   }
   
+  // Periodic culling check (every CULL_CHECK_INTERVAL)
+  if (now - lastCullCheck >= CULL_CHECK_INTERVAL) {
+    lastCullCheck = now;
+    cullDistantEnemies(player, now);
+  }
+  
   perfEnd('spawn:tick');
+}
+
+// ============================================
+// CULLING SYSTEM (Performance)
+// ============================================
+/**
+ * Remove enemies that are too far from the player to improve performance.
+ * Culled enemies return to their spawner for future respawn.
+ */
+function cullDistantEnemies(player, now) {
+  const enemies = currentState.runtime.activeEnemies;
+  if (!enemies || enemies.length === 0) return;
+  
+  const cullList = [];
+  
+  for (const enemy of enemies) {
+    // Skip dead enemies (will be cleaned up elsewhere)
+    if (enemy.hp <= 0) continue;
+    
+    // Never cull enemies in combat
+    if (NEVER_CULL_IN_COMBAT && (enemy.isEngaged || enemy.isAggro || enemy.state === 'ENGAGED')) {
+      continue;
+    }
+    
+    // Don't cull recently spawned enemies (grace period)
+    if (enemy.spawnedAt && (now - enemy.spawnedAt) < CULL_GRACE_PERIOD) {
+      continue;
+    }
+    
+    // Check distance from player
+    const dist = distCoords(enemy.x, enemy.y, player.x, player.y);
+    if (dist > CULL_DISTANCE) {
+      cullList.push(enemy);
+    }
+  }
+  
+  // Cull enemies
+  if (cullList.length > 0) {
+    for (const enemy of cullList) {
+      cullEnemy(enemy);
+    }
+    console.log(`[SpawnDirector] Culled ${cullList.length} distant enemies (${enemies.length - cullList.length} remaining)`);
+  }
+}
+
+/**
+ * Cull a single enemy - remove from active list and return to spawner.
+ */
+function cullEnemy(enemy) {
+  // Find the spawner this enemy belongs to
+  const spawner = spawners.find(s => s.id === enemy.spawnerId);
+  
+  if (spawner) {
+    // Find the slot this enemy occupied
+    const slot = spawner.slots.find(s => s.aliveEnemyId === enemy.id);
+    if (slot) {
+      // Reset slot for respawn (with shorter timer since it was culled, not killed)
+      slot.aliveEnemyId = null;
+      slot.nextRespawnAt = nowMs() + randomRange(30000, 60000); // 30-60 sec respawn
+    }
+    spawner.aliveCount = Math.max(0, spawner.aliveCount - 1);
+  }
+  
+  // Remove from active enemies
+  const idx = currentState.runtime.activeEnemies.indexOf(enemy);
+  if (idx !== -1) {
+    currentState.runtime.activeEnemies.splice(idx, 1);
+  }
+  
+  // Remove DOM element
+  import('./combat.js').then(mod => {
+    if (mod.removeEnemyElement) {
+      mod.removeEnemyElement(enemy.id);
+    }
+  }).catch(() => {});
 }
 
 // ============================================
