@@ -692,13 +692,14 @@ function bootstrapSpawns() {
 // - Base walls: 24 tiles from center (232-279 in absolute coords)
 // - SAFE (28-32): Just outside walls, levels 1-3
 // - FRONTIER (35-64): Transition zone, levels 4-12
-// - WILDERNESS (70-128): Danger zone, levels 12-25
-// - DANGER (135-190): Elite zone, levels 25-40
-// - DEEP (200-250): Endgame, levels 40-50
+// - WILDERNESS (70-128): Danger zone, levels 12-25 (3x radius)
+// - DANGER (135-190): Elite zone, levels 25-40 (3x radius)
+// - DEEP (200-256+): Endgame, levels 40-50 (3x radius, includes corners)
 function generateDefaultSpawners() {
   const result = [];
   let id = 0;
   const center = getBaseCenter();
+  const mapSize = mapConfig.expandedWidth; // 512
   
   // Helper to create spawner with common defaults
   function createSpawner(config) {
@@ -719,7 +720,33 @@ function generateDefaultSpawners() {
       const dist = minDist + Math.random() * (maxDist - minDist);
       const rawX = center.x + Math.cos(angle) * dist;
       const rawY = center.y + Math.sin(angle) * dist;
-      positions.push(adjustSpawnerToAvoidRoad(rawX, rawY));
+      // Clamp to map bounds
+      const clampedX = Math.max(10, Math.min(mapSize - 10, rawX));
+      const clampedY = Math.max(10, Math.min(mapSize - 10, rawY));
+      positions.push(adjustSpawnerToAvoidRoad(clampedX, clampedY));
+    }
+    return positions;
+  }
+  
+  // Helper to place spawners in map corners (for deep ring coverage)
+  function placeInCorners() {
+    const positions = [];
+    const cornerOffsets = [
+      { x: 30, y: 30 },     // Top-left
+      { x: mapSize - 30, y: 30 },     // Top-right
+      { x: 30, y: mapSize - 30 },     // Bottom-left
+      { x: mapSize - 30, y: mapSize - 30 },  // Bottom-right
+    ];
+    // Add multiple spawners per corner area
+    for (const corner of cornerOffsets) {
+      for (let i = 0; i < 3; i++) {
+        const offsetX = (Math.random() - 0.5) * 40;
+        const offsetY = (Math.random() - 0.5) * 40;
+        positions.push(adjustSpawnerToAvoidRoad(
+          Math.max(10, Math.min(mapSize - 10, corner.x + offsetX)),
+          Math.max(10, Math.min(mapSize - 10, corner.y + offsetY))
+        ));
+      }
     }
     return positions;
   }
@@ -727,14 +754,10 @@ function generateDefaultSpawners() {
   // ============================================
   // SAFE RING: NOMADS ONLY (Solo, Level 1-3)
   // ============================================
-  // Base walls end at 24 tiles, safe ring is 0-32 tiles
-  // Place nomads at 28-32 tiles (just outside walls)
-  
-  // 12 nomads spread around the base perimeter
   const safePositions = placeInRing(12, 28, 32);
-  safePositions.forEach((pos, i) => {
+  safePositions.forEach((pos) => {
     result.push(createSpawner({
-      id: `sp_nomad_${id++}`,
+      id: `sp_safe_${id++}`,
       kind: 'stray',
       ring: 'safe',
       center: pos,
@@ -753,12 +776,9 @@ function generateDefaultSpawners() {
   // ============================================
   // FRONTIER RING: SCAVS (Mix solo + packs, Level 4-12)
   // ============================================
-  // Frontier is 33-64 tiles from base
-  // Place spawners at 35-60 tiles with good spacing
-  
-  // 8 frontier strays (level 4-8)
+  // 8 frontier strays
   const frontierStrayPos = placeInRing(8, 35, 50);
-  frontierStrayPos.forEach((pos, i) => {
+  frontierStrayPos.forEach((pos) => {
     result.push(createSpawner({
       id: `sp_frontier_stray_${id++}`,
       kind: 'stray',
@@ -775,11 +795,11 @@ function generateDefaultSpawners() {
     }));
   });
   
-  // 6 frontier packs (level 6-12) - outer frontier
+  // 6 frontier packs
   const frontierPackPos = placeInRing(6, 50, 62, Math.PI / 6);
-  frontierPackPos.forEach((pos, i) => {
+  frontierPackPos.forEach((pos) => {
     result.push(createSpawner({
-      id: `sp_pack_frontier_${id++}`,
+      id: `sp_frontier_pack_${id++}`,
       kind: 'pack',
       ring: 'frontier',
       templateId: 'frontier_pack',
@@ -787,7 +807,7 @@ function generateDefaultSpawners() {
       spawnRadius: 8,
       enemyPool: ['scav_ranged', 'scav_melee'],
       levelRange: [6, 12],
-      packSize: { min: 3, max: 5 },
+      packSize: { min: 3, max: 6 },
       alpha: { chance: 0.25, max: 1 },
       aggroType: 'conditional',
       aggroRadius: 10,
@@ -799,113 +819,193 @@ function generateDefaultSpawners() {
   });
   
   // ============================================
-  // WILDERNESS RING: TROGS (Packs, Level 12-25)
+  // WILDERNESS RING: TROGS (Mix, Level 12-25)
+  // 3x spawn radius (30-36 tiles)
   // ============================================
-  // Wilderness is 65-128 tiles from base
-  // More spawners spread across the larger area
-  
-  // 6 inner wilderness packs (level 12-18) - 70-95 tiles
-  const wildInnerPos = placeInRing(6, 70, 95);
-  wildInnerPos.forEach((pos, i) => {
+  // 8 wilderness strays (including solo alphas)
+  const wildStrayPos = placeInRing(8, 70, 100);
+  wildStrayPos.forEach((pos, i) => {
+    const isAlpha = i < 2; // First 2 are solo alphas
     result.push(createSpawner({
-      id: `sp_wild_inner_${id++}`,
+      id: `sp_wild_stray_${id++}`,
+      kind: 'stray',
+      ring: 'wilderness',
+      center: pos,
+      spawnRadius: 30, // 3x
+      enemyPool: ['trog_warrior', 'trog_shaman'],
+      levelRange: isAlpha ? [18, 25] : [12, 18],
+      aggroType: 'aggressive',
+      aggroRadius: 12,
+      leashRadius: 22,
+      deaggroTimeMs: 8000,
+      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+      isAlpha: isAlpha,
+      alphaBonus: isAlpha ? 1.5 : 0
+    }));
+  });
+  
+  // 10 wilderness packs
+  const wildPackPos = placeInRing(10, 85, 125, Math.PI / 10);
+  wildPackPos.forEach((pos) => {
+    result.push(createSpawner({
+      id: `sp_wild_pack_${id++}`,
       kind: 'pack',
       ring: 'wilderness',
       templateId: 'wilderness_pack',
       center: pos,
-      spawnRadius: 10,
+      spawnRadius: 36, // 3x
       enemyPool: ['trog_warrior', 'trog_shaman'],
-      levelRange: [12, 18],
-      packSize: { min: 3, max: 5 },
-      alpha: { chance: 0.35, max: 1 },
+      levelRange: [14, 25],
+      packSize: { min: 3, max: 7 },
+      alpha: { chance: 0.40, max: 1 },
       aggroType: 'aggressive',
-      aggroRadius: 12,
-      leashRadius: 22,
+      aggroRadius: 14,
+      leashRadius: 24,
       deaggroTimeMs: 8000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
       minDistanceToOtherPacks: 30
     }));
   });
   
-  // 6 outer wilderness packs (level 18-25) - 100-125 tiles
-  const wildOuterPos = placeInRing(6, 100, 125, Math.PI / 6);
-  wildOuterPos.forEach((pos, i) => {
+  // ============================================
+  // DANGER RING: KARTH (Mix, Level 25-40)
+  // 3x spawn radius (42 tiles), many more spawners
+  // ============================================
+  // 12 danger strays (including solo alphas)
+  const dangerStrayPos = placeInRing(12, 135, 175);
+  dangerStrayPos.forEach((pos, i) => {
+    const isAlpha = i < 3; // First 3 are solo alphas
     result.push(createSpawner({
-      id: `sp_wild_outer_${id++}`,
-      kind: 'pack',
-      ring: 'wilderness',
-      templateId: 'wilderness_pack',
+      id: `sp_danger_stray_${id++}`,
+      kind: 'stray',
+      ring: 'danger',
       center: pos,
-      spawnRadius: 12,
-      enemyPool: ['trog_warrior', 'trog_shaman'],
-      levelRange: [18, 25],
-      packSize: { min: 4, max: 6 },
-      alpha: { chance: 0.45, max: 1 },
+      spawnRadius: 42, // 3x
+      enemyPool: ['karth_grunt', 'karth_officer'],
+      levelRange: isAlpha ? [32, 40] : [25, 35],
       aggroType: 'aggressive',
       aggroRadius: 14,
-      leashRadius: 24,
-      deaggroTimeMs: 8000,
-      respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
-      minDistanceToOtherPacks: 35
+      leashRadius: 26,
+      deaggroTimeMs: 10000,
+      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+      isAlpha: isAlpha,
+      alphaBonus: isAlpha ? 1.8 : 0
     }));
   });
   
-  // ============================================
-  // DANGER RING: KARTH (Packs, Level 25-40)
-  // ============================================
-  // Danger is 129-192 tiles from base
-  // 8 packs spread across the zone
-  
-  const dangerPos = placeInRing(8, 135, 185);
-  dangerPos.forEach((pos, i) => {
+  // 16 danger packs
+  const dangerPackPos = placeInRing(16, 145, 188, Math.PI / 16);
+  dangerPackPos.forEach((pos) => {
     result.push(createSpawner({
-      id: `sp_danger_${id++}`,
+      id: `sp_danger_pack_${id++}`,
       kind: 'pack',
       ring: 'danger',
       templateId: 'karth_patrol',
       center: pos,
-      spawnRadius: 14,
+      spawnRadius: 42, // 3x
       enemyPool: ['karth_grunt', 'karth_officer'],
       levelRange: [25, 40],
-      packSize: { min: 4, max: 6 },
+      packSize: { min: 4, max: 8 },
       alpha: { chance: 0.50, max: 1 },
       aggroType: 'aggressive',
       aggroRadius: 14,
       leashRadius: 26,
       deaggroTimeMs: 10000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min, PACK_RESPAWN_MS.max),
-      minDistanceToOtherPacks: 40,
-      requires: { flag: 'act3' }
+      minDistanceToOtherPacks: 35
     }));
   });
   
   // ============================================
-  // DEEP RING: ENDGAME (Packs, Level 40-50)
+  // DEEP RING: ENDGAME (Mix, Level 40-50)
+  // 3x spawn radius (48 tiles), extends into corners
   // ============================================
-  // Deep is 193+ tiles from base (to edge at ~256)
-  // 8 packs at map edges
-  
-  const deepPos = placeInRing(8, 200, 245, Math.PI / 8);
-  deepPos.forEach((pos, i) => {
+  // 10 deep strays (including solo alphas)
+  const deepStrayPos = placeInRing(10, 200, 240);
+  deepStrayPos.forEach((pos, i) => {
+    const isAlpha = i < 4; // First 4 are solo alphas
     result.push(createSpawner({
-      id: `sp_deep_${id++}`,
+      id: `sp_deep_stray_${id++}`,
+      kind: 'stray',
+      ring: 'deep',
+      center: pos,
+      spawnRadius: 48, // 3x
+      enemyPool: ['karth_grunt', 'karth_officer'],
+      levelRange: isAlpha ? [45, 50] : [40, 48],
+      aggroType: 'aggressive',
+      aggroRadius: 16,
+      leashRadius: 30,
+      deaggroTimeMs: 12000,
+      respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+      isAlpha: isAlpha,
+      alphaBonus: isAlpha ? 2.0 : 0
+    }));
+  });
+  
+  // 16 deep packs in ring
+  const deepPackPos = placeInRing(16, 205, 248, Math.PI / 16);
+  deepPackPos.forEach((pos) => {
+    result.push(createSpawner({
+      id: `sp_deep_pack_${id++}`,
       kind: 'pack',
       ring: 'deep',
       templateId: 'deep_patrol',
       center: pos,
-      spawnRadius: 16,
+      spawnRadius: 48, // 3x
       enemyPool: ['karth_grunt', 'karth_officer'],
       levelRange: [40, 50],
-      packSize: { min: 5, max: 7 },
+      packSize: { min: 5, max: 9 },
       alpha: { chance: 0.70, max: 2 },
       aggroType: 'aggressive',
       aggroRadius: 16,
       leashRadius: 30,
       deaggroTimeMs: 12000,
       respawnMs: randomRange(PACK_RESPAWN_MS.min * 1.5, PACK_RESPAWN_MS.max * 1.5),
-      minDistanceToOtherPacks: 50,
-      requires: { flag: 'act3' }
+      minDistanceToOtherPacks: 40
     }));
+  });
+  
+  // 12 corner spawners (3 per corner) - fills map corners
+  const cornerPos = placeInCorners();
+  cornerPos.forEach((pos, i) => {
+    const isPack = i % 2 === 0; // Alternate pack/stray
+    if (isPack) {
+      result.push(createSpawner({
+        id: `sp_corner_pack_${id++}`,
+        kind: 'pack',
+        ring: 'deep',
+        templateId: 'deep_patrol',
+        center: pos,
+        spawnRadius: 48,
+        enemyPool: ['karth_grunt', 'karth_officer'],
+        levelRange: [42, 50],
+        packSize: { min: 4, max: 9 },
+        alpha: { chance: 0.80, max: 2 },
+        aggroType: 'aggressive',
+        aggroRadius: 18,
+        leashRadius: 32,
+        deaggroTimeMs: 15000,
+        respawnMs: randomRange(PACK_RESPAWN_MS.min * 1.5, PACK_RESPAWN_MS.max * 1.5),
+        minDistanceToOtherPacks: 30
+      }));
+    } else {
+      result.push(createSpawner({
+        id: `sp_corner_stray_${id++}`,
+        kind: 'stray',
+        ring: 'deep',
+        center: pos,
+        spawnRadius: 48,
+        enemyPool: ['karth_grunt', 'karth_officer'],
+        levelRange: [45, 50],
+        aggroType: 'aggressive',
+        aggroRadius: 18,
+        leashRadius: 32,
+        deaggroTimeMs: 15000,
+        respawnMs: randomRange(STRAY_RESPAWN_MS.min, STRAY_RESPAWN_MS.max),
+        isAlpha: true,
+        alphaBonus: 2.0
+      }));
+    }
   });
   
   console.log(`[SpawnDirector] Generated ${result.length} spawners`);
@@ -940,6 +1040,7 @@ function fillSpawnerSlots(spawner, now, options = {}) {
 
 /**
  * Fill slots for a stray (solo) spawner.
+ * Supports solo alpha spawns via spawner.isAlpha flag.
  */
 function fillStraySlot(spawner, now, immediate) {
   const slot = spawner.slots[0];
@@ -957,9 +1058,20 @@ function fillStraySlot(spawner, now, immediate) {
   const minDist = immediate ? 2 : NO_SPAWN_RADIUS;
   if (distCoords(slot.spawnX, slot.spawnY, player.x, player.y) < minDist) return 0;
   
-  // Spawn enemy
-  const enemy = spawnEnemyInSlot(spawner, slot, now);
+  // Check if this is a solo alpha spawn
+  const isAlpha = spawner.isAlpha || false;
+  
+  // Spawn enemy with alpha flag if applicable
+  const enemy = spawnEnemyInSlot(spawner, slot, now, { isAlpha });
   if (!enemy) return 0;
+  
+  // Apply alpha bonus for solo alphas (stat multiplier)
+  if (isAlpha && spawner.alphaBonus) {
+    enemy.maxHp = Math.round(enemy.maxHp * spawner.alphaBonus);
+    enemy.hp = enemy.maxHp;
+    enemy.atk = Math.round(enemy.atk * spawner.alphaBonus);
+    enemy.def = Math.round(enemy.def * (spawner.alphaBonus * 0.8)); // Slightly less def bonus
+  }
   
   // Update slot state
   slot.aliveEnemyId = enemy.id;
