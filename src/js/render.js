@@ -710,10 +710,10 @@ function drawRingOverlay() {
   ringOverlayCtx.fillText('ORIGINAL MAP (200x140)', originalMap.minX + 10, originalMap.minY - 10);
   
   // Draw BASE WALLS footprint (inner walled area)
-  // Original wall coords: x 71-121, y 49-87
+  // Original wall coords: x 43-93, y 49-87 (after crop)
   const baseWalls = {
-    minX: (71 + offset.x) * TILE_SIZE,
-    maxX: (121 + offset.x) * TILE_SIZE,
+    minX: (43 + offset.x) * TILE_SIZE,
+    maxX: (93 + offset.x) * TILE_SIZE,
     minY: (49 + offset.y) * TILE_SIZE,
     maxY: (87 + offset.y) * TILE_SIZE
   };

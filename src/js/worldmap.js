@@ -1446,9 +1446,9 @@ function renderRings(vp) {
   }
   
   // Draw BASE WALLS footprint (inner walled area)
-  // Original wall coords: x 71-121, y 49-87
-  const baseWallsMin = tileToScreen(71 + offset.x, 49 + offset.y);
-  const baseWallsMax = tileToScreen(121 + offset.x, 87 + offset.y);
+  // Original wall coords: x 43-93, y 49-87 (after crop)
+  const baseWallsMin = tileToScreen(43 + offset.x, 49 + offset.y);
+  const baseWallsMax = tileToScreen(93 + offset.x, 87 + offset.y);
   
   if (baseWallsMin && baseWallsMax) {
     const width = baseWallsMax.x - baseWallsMin.x;

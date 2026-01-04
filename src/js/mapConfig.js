@@ -29,8 +29,8 @@
  */
 export const mapConfig = {
   // Original map dimensions (from map.json, before expansion)
-  originalWidth: 200,
-  originalHeight: 140,
+  originalWidth: 136,
+  originalHeight: 136,
   
   // Expanded map dimensions (after mapGenerator expansion)
   // Default to 400x400 square - actual values set by initMapConfig
@@ -43,8 +43,8 @@ export const mapConfig = {
   
   // Offset where original map is placed within expanded map
   // Calculated to center the BASE at (200, 200)
-  // With originalBaseCenter at (96, 68): offset = (200-96, 200-68) = (104, 132)
-  offset: { x: 104, y: 132 },
+  // With originalBaseCenter at (68, 68): offset = (200-68, 200-68) = (132, 132)
+  offset: { x: 132, y: 132 },
   
   // Base center (Drycross) in expanded coordinates
   // For 400x400 square map, base is at exact center
@@ -95,8 +95,9 @@ export function initMapConfig(originalMapData, options = {}) {
   mapConfig.originalHeight = meta.height;
   
   // Original base center (Drycross) in the original coordinate system
-  // Based on actual wall positions: x 71-121 (center 96), y 49-87 (center 68)
-  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 96, y: 68 };
+  // Based on actual wall positions: x 43-93 (center 68), y 49-87 (center 68)
+  // Map was cropped to 136x136 centered on base
+  mapConfig.originalBaseCenter = options.baseCenter ?? { x: 68, y: 68 };
   
   // Target expansion dimensions - use a SQUARE map for symmetrical rings
   // Default 400x400 gives base at perfect center (200, 200)
@@ -183,10 +184,13 @@ function updateRingBoundaries() {
   // - Danger: 60-85% (late-game)
   // - Deep: 85%+ (endgame, map edges)
   
+  // Ring boundaries designed to align with original map edge (68 tiles from center)
+  // Original map covers: 0-68 tiles (safe + frontier)
+  // Procedural terrain: 69+ tiles (wilderness, danger, deep)
   mapConfig.rings = {
-    safe:       { min: 0,                              max: Math.round(maxReach * 0.15) },
-    frontier:   { min: Math.round(maxReach * 0.15) + 1, max: Math.round(maxReach * 0.35) },
-    wilderness: { min: Math.round(maxReach * 0.35) + 1, max: Math.round(maxReach * 0.60) },
+    safe:       { min: 0,   max: 30 },                    // Close to base
+    frontier:   { min: 31,  max: 68 },                    // Original map edge
+    wilderness: { min: 69,  max: Math.round(maxReach * 0.60) },  // Procedural zone
     danger:     { min: Math.round(maxReach * 0.60) + 1, max: Math.round(maxReach * 0.85) },
     deep:       { min: Math.round(maxReach * 0.85) + 1, max: Infinity }
   };
