@@ -4297,8 +4297,7 @@ function useAbility(slot) {
   
   // Only provoke immediately for instant abilities
   // Cast/channel abilities provoke when damage is dealt (not on cast start)
-  const ability = getAbility(slot);
-  if (ability && ability.castType === 'instant') {
+  if (ability.castType === 'instant') {
     provokeEnemy(currentTarget);
   }
   
